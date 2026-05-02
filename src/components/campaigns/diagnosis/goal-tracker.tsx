@@ -6,13 +6,30 @@ import type {
   GoalProgress,
   FunnelGoal,
 } from "@/lib/types/diagnosis-payload";
+import type { CampaignGoalKind } from "@/lib/campaign-data";
 import { formatINR, formatINRCompact } from "@/lib/diagnosis-data";
 
 interface GoalTrackerProps {
   data: GoalTrackerData;
+  /** Which funnel stage is the campaign's primary KPI. */
+  primaryGoal: CampaignGoalKind;
 }
 
-export function GoalTracker({ data }: GoalTrackerProps) {
+const goalLabels: Record<CampaignGoalKind, string> = {
+  leads: "Leads",
+  verified: "Verified leads",
+  qualified: "Qualified leads",
+};
+
+export function GoalTracker({ data, primaryGoal }: GoalTrackerProps) {
+  const primary: FunnelGoal =
+    primaryGoal === "leads"
+      ? data.leads
+      : primaryGoal === "verified"
+      ? data.verified
+      : data.qualified;
+  const label = goalLabels[primaryGoal];
+
   return (
     <div className="bg-white border border-border rounded-card overflow-hidden">
       <div className="px-5 py-3 border-b border-border-subtle flex items-center justify-between">
@@ -47,10 +64,8 @@ export function GoalTracker({ data }: GoalTrackerProps) {
           </span>
         </div>
       </div>
-      <div className="grid grid-cols-4 divide-x divide-border-subtle">
-        <GoalCard label="Leads" goal={data.leads} />
-        <FunnelGoalCard label="Verified leads" goal={data.verified} />
-        <FunnelGoalCard label="Qualified leads" goal={data.qualified} />
+      <div className="grid grid-cols-2 divide-x divide-border-subtle">
+        <FunnelGoalCard label={label} goal={primary} />
         <BudgetTimeCard
           spent={data.budget.spent}
           total={data.budget.total}

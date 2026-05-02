@@ -49,52 +49,74 @@ const verbLabels: Record<ActionVerb, string> = {
   ADD_CREATIVE: "Add creative",
 };
 
+/** Subtler card: thin colored left rail + faint tinted body keyed on action color. */
+const railByColor: Record<NBAType["color"], string> = {
+  gray: "bg-text-tertiary",
+  green: "bg-[#15803D]",
+  amber: "bg-[#B45309]",
+  red: "bg-[#B91C1C]",
+};
+
+const softBgByColor: Record<NBAType["color"], string> = {
+  gray: "bg-white",
+  green: "bg-[#F6FBF7]",
+  amber: "bg-[#FFFCF2]",
+  red: "bg-[#FDF8F8]",
+};
+
+const softBorderByColor: Record<NBAType["color"], string> = {
+  gray: "border-border",
+  green: "border-[#DCFCE7]",
+  amber: "border-[#FEF3C7]",
+  red: "border-[#FECACA]",
+};
+
 export function NextBestAction({ action, onApply, onSnooze }: NextBestActionProps) {
   const colorStyle = actionColorStyles[action.color];
   const Icon = verbIcons[action.verb] ?? Search;
+  const rail = railByColor[action.color];
+  const softBg = softBgByColor[action.color];
+  const softBorder = softBorderByColor[action.color];
 
   return (
-    <div
-      className={`${colorStyle.cardBg} border ${colorStyle.cardBorder} rounded-card overflow-hidden`}
-    >
-      <div className="px-5 py-4">
-        <div className="flex items-start gap-4">
-          {/* Verb badge */}
-          <div className="shrink-0">
-            <div
-              className={`inline-flex items-center gap-1.5 ${colorStyle.badgeBg} ${colorStyle.badgeText} text-[11px] font-semibold uppercase tracking-[0.5px] px-2.5 py-1 rounded-badge`}
-            >
-              <Icon size={12} strokeWidth={2} />
-              {verbLabels[action.verb]}
-            </div>
-            <div className="mt-1.5 text-[10px] font-semibold text-text-tertiary uppercase tracking-[0.5px]">
+    <div className={`${softBg} border ${softBorder} rounded-card overflow-hidden flex`}>
+      <div className={`w-[3px] shrink-0 ${rail}`} />
+      <div className="flex-1 px-5 py-3.5">
+        <div className="flex items-start gap-3">
+          {/* Verb + label */}
+          <div className="shrink-0 pt-0.5">
+            <div className="text-[9px] font-semibold text-text-tertiary uppercase tracking-[0.5px]">
               Next best action
+            </div>
+            <div
+              className={`mt-1 inline-flex items-center gap-1 ${colorStyle.badgeBg} ${colorStyle.badgeText} text-[10px] font-semibold uppercase tracking-[0.4px] px-1.5 py-0.5 rounded-badge`}
+            >
+              <Icon size={10} strokeWidth={2} />
+              {verbLabels[action.verb]}
             </div>
           </div>
 
           {/* Body */}
           <div className="flex-1 min-w-0">
-            <h3 className="text-[15px] font-semibold text-text-primary leading-snug mb-1">
+            <h3 className="text-[14px] font-semibold text-text-primary leading-snug">
               {action.headline}
             </h3>
-            <p className="text-[12px] text-text-secondary leading-relaxed mb-2">
+            <p className="text-[12px] text-text-secondary leading-relaxed mt-0.5">
               {action.reason}
             </p>
-            <div className="inline-flex items-center gap-1.5 text-[11px] font-medium bg-white border border-border-subtle rounded-badge px-2 py-1 text-text-primary">
-              <span className="text-text-tertiary uppercase tracking-[0.4px] text-[9px] font-semibold">
-                Expected
-              </span>
+            <div className="text-[11px] text-text-tertiary mt-1.5">
+              <span className="font-semibold text-text-secondary">Expected: </span>
               {action.expected_impact}
             </div>
           </div>
 
           {/* Actions */}
-          <div className="shrink-0 flex flex-col items-end gap-1.5">
+          <div className="shrink-0 flex flex-col items-end gap-1">
             {onApply && (
               <button
                 type="button"
                 onClick={onApply}
-                className={`h-9 px-4 text-[12px] font-medium text-white rounded-button transition-colors duration-150 ${colorStyle.ctaBg} ${colorStyle.ctaHover}`}
+                className="h-8 px-3.5 text-[12px] font-medium text-text-primary border border-border bg-white rounded-button hover:bg-surface-page transition-colors duration-150"
               >
                 {action.cta_label}
               </button>
@@ -103,7 +125,7 @@ export function NextBestAction({ action, onApply, onSnooze }: NextBestActionProp
               <button
                 type="button"
                 onClick={onSnooze}
-                className="text-[10px] font-medium text-text-tertiary hover:text-text-primary transition-colors px-2 py-0.5"
+                className="text-[10px] font-medium text-text-tertiary hover:text-text-primary transition-colors px-1"
               >
                 Snooze 24h
               </button>

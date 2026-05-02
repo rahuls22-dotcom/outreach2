@@ -13,6 +13,7 @@ import {
   AlertTriangle,
   Pause,
   Play,
+  X,
 } from "lucide-react";
 import { campaignDetail, leadDistributionData } from "@/lib/campaign-data";
 import { campaignDiagnosisPayload } from "@/lib/diagnosis-data";
@@ -24,6 +25,9 @@ import { LeadInsights } from "@/components/campaigns/lead-insights";
 import { CampaignBriefTab } from "@/components/campaigns/campaign-brief-tab";
 import { StatusStrip } from "@/components/campaigns/diagnosis/status-strip";
 import { NextBestAction } from "@/components/campaigns/diagnosis/next-best-action";
+import { ActionFlowModal } from "@/components/campaigns/actions/action-flow-modal";
+import { useActionFlow, fromNBA, type RenderableAction } from "@/components/campaigns/actions/use-action-flow";
+import { getActionLabel } from "@/components/campaigns/actions/action-labels";
 
 const fadeUp: Variants = {
   hidden: { opacity: 0, y: 4 },
@@ -41,6 +45,8 @@ export default function CampaignDetailPage() {
   const [statusConfirm, setStatusConfirm] = useState<"pause" | "enable" | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [nbaSnoozed, setNbaSnoozed] = useState(false);
+  const [agentNudgeDismissed, setAgentNudgeDismissed] = useState(false);
+  const actionFlow = useActionFlow();
 
   useEffect(() => {
     if (!toast) return;
@@ -65,15 +71,25 @@ export default function CampaignDetailPage() {
   const diagnosis = campaignDiagnosisPayload;
 
   const handleApplyNba = () => {
-    // Visual nudge → take user to the Diagnosis tab where the full context lives.
-    setActiveTab("diagnosis");
+    actionFlow.open(fromNBA(diagnosis.next_best_action));
+  };
+
+  const handleApplyAction = (action: RenderableAction, params?: Record<string, unknown>) => {
+    const label = getActionLabel(action.verb, action.target_entity, campaign.budgetMode);
+    if (params && typeof params === "object" && "newBudget" in params) {
+      const newBudget = params.newBudget as number;
+      setToast(`${label} · new daily budget ₹${newBudget.toLocaleString("en-IN")}`);
+    } else {
+      setToast(`${label} · applied`);
+    }
+    actionFlow.close();
   };
 
   const tabs: { key: Tab; label: string; count?: number }[] = [
     { key: "analysis", label: "Analysis" },
-    { key: "leads", label: "Leads", count: 186 },
-    { key: "insights", label: "Insights" },
     { key: "diagnosis", label: "Diagnosis" },
+    { key: "insights", label: "Insights" },
+    { key: "leads", label: "Leads", count: 186 },
     { key: "brief", label: "Campaign setup" },
     { key: "settings", label: "Settings" },
   ];
@@ -119,41 +135,64 @@ export default function CampaignDetailPage() {
           </div>
         </div>
 
-        {/* Top-right CTA */}
-        <button
-          type="button"
-          onClick={() => setStatusConfirm(isEnabled ? "pause" : "enable")}
-          className={`inline-flex items-center gap-1.5 h-9 px-3.5 text-[13px] font-medium rounded-button border transition-colors duration-150 shrink-0 ${
-            isEnabled
-              ? "text-text-secondary border-border bg-white hover:bg-surface-page hover:text-text-primary"
-              : "text-white bg-[#15803D] border-[#15803D] hover:bg-[#166534]"
-          }`}
-        >
-          {isEnabled ? <Pause size={14} strokeWidth={2} /> : <Play size={14} strokeWidth={2} />}
-          {isEnabled ? "Pause Campaign" : "Enable Campaign"}
-        </button>
+        {/* Top-right CTAs */}
+        <div className="flex items-center gap-2 shrink-0">
+          {!campaign.agentConnected && agentNudgeDismissed && (
+            <button
+              type="button"
+              onClick={() => router.push("/agents")}
+              title="Qualification metrics need an agent — connect one to enable CPQL and Qualified Leads."
+              className="inline-flex items-center gap-1.5 h-9 px-3 text-[12px] font-medium text-[#92400E] bg-[#FEF3C7] border border-[#FDE68A] rounded-button hover:bg-[#FDE68A] transition-colors"
+            >
+              <Bot size={13} strokeWidth={1.5} /> Connect agent
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setStatusConfirm(isEnabled ? "pause" : "enable")}
+            className={`inline-flex items-center gap-1.5 h-9 px-3.5 text-[13px] font-medium rounded-button border transition-colors duration-150 ${
+              isEnabled
+                ? "text-text-secondary border-border bg-white hover:bg-surface-page hover:text-text-primary"
+                : "text-white bg-[#15803D] border-[#15803D] hover:bg-[#166534]"
+            }`}
+          >
+            {isEnabled ? <Pause size={14} strokeWidth={2} /> : <Play size={14} strokeWidth={2} />}
+            {isEnabled ? "Pause Campaign" : "Enable Campaign"}
+          </button>
+        </div>
       </div>
 
-      {/* No Agent Connected Banner */}
-      {!campaign.agentConnected && (
-        <div className="mb-4 flex items-start gap-3 bg-[#FEF3C7] border border-[#F59E0B]/20 rounded-card px-5 py-4">
-          <AlertTriangle size={16} strokeWidth={1.5} className="text-[#92400E] mt-0.5 shrink-0" />
-          <div className="flex-1">
-            <h4 className="text-[13px] font-semibold text-[#92400E]">No Agent Connected</h4>
-            <p className="text-[12px] text-[#92400E]/80 mt-0.5 leading-relaxed">
-              Qualification metrics (Qualified Leads, CPQL, Qualification Rate) are unavailable. Connect an agent to start qualifying leads from this campaign.
-            </p>
-          </div>
-          <button onClick={() => router.push("/agents")}
-            className="inline-flex items-center gap-1.5 h-8 px-3.5 text-[12px] font-medium bg-[#92400E] text-white rounded-button hover:bg-[#78350F] transition-colors shrink-0">
-            <Bot size={13} strokeWidth={1.5} /> Connect Agent
+      {/* No Agent Connected — slim, dismissable */}
+      {!campaign.agentConnected && !agentNudgeDismissed && (
+        <div className="mb-3 flex items-center gap-2.5 bg-[#FEF3C7] border border-[#FDE68A] rounded-card pl-3 pr-2 py-2">
+          <AlertTriangle size={13} strokeWidth={1.75} className="text-[#92400E] shrink-0" />
+          <p className="text-[12px] text-[#92400E] flex-1 min-w-0 truncate">
+            <span className="font-semibold">No agent connected.</span>{" "}
+            <span className="text-[#92400E]/85">Qualified Leads, CPQL & Qualification Rate stay blank until one is linked.</span>
+          </p>
+          <button
+            onClick={() => router.push("/agents")}
+            className="inline-flex items-center gap-1.5 h-7 px-2.5 text-[11px] font-medium bg-[#92400E] text-white rounded-button hover:bg-[#78350F] transition-colors shrink-0"
+          >
+            <Bot size={11} strokeWidth={1.75} /> Connect agent
+          </button>
+          <button
+            type="button"
+            onClick={() => setAgentNudgeDismissed(true)}
+            aria-label="Dismiss"
+            className="p-1 rounded-button text-[#92400E]/70 hover:text-[#92400E] hover:bg-[#FDE68A]/60 transition-colors shrink-0"
+          >
+            <X size={13} strokeWidth={1.75} />
           </button>
         </div>
       )}
 
       {/* Status strip — compact verdict + headline + primary metric */}
       <div className="mb-3">
-        <StatusStrip data={diagnosis.status_strip} />
+        <StatusStrip
+          data={diagnosis.status_strip}
+          onOpenDiagnosis={() => setActiveTab("diagnosis")}
+        />
       </div>
 
       {/* Next Best Action — prescriptive card */}
@@ -196,7 +235,7 @@ export default function CampaignDetailPage() {
             distributions={leadDistributionData}
           />
         )}
-        {activeTab === "diagnosis" && <DiagnosisTab />}
+        {activeTab === "diagnosis" && <DiagnosisTab onOpenAction={actionFlow.open} />}
         {activeTab === "brief" && <CampaignBriefTab />}
         {activeTab === "settings" && <SettingsTab />}
       </div>
@@ -265,6 +304,15 @@ export default function CampaignDetailPage() {
           </div>
         </>
       )}
+
+      {/* Action flow modal — central modal that opens for verb-specific actions */}
+      <ActionFlowModal
+        action={actionFlow.active}
+        budgetMode={campaign.budgetMode}
+        campaignDailyBudget={campaign.dailyBudget}
+        onClose={actionFlow.close}
+        onApply={handleApplyAction}
+      />
 
       {/* Toast */}
       {toast && (

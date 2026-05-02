@@ -131,6 +131,11 @@ export const campaignsList: CampaignListItem[] = [
 
 // ── Campaign Detail (Godrej Air Phase 3) ───────────────────
 
+export type CampaignGoalKind = "leads" | "verified" | "qualified";
+
+/** CBO = Campaign Budget Optimization (Meta distributes); ABO = Ad Set Budget Optimization (manual). */
+export type BudgetMode = "CBO" | "ABO";
+
 export interface CampaignDetail {
   id: string;
   name: string;
@@ -145,6 +150,8 @@ export interface CampaignDetail {
   dailyBudget: number;
   createdAt: string;
   agentConnected: boolean;
+  primaryGoal: CampaignGoalKind;
+  budgetMode: BudgetMode;
 }
 
 export const campaignDetail: CampaignDetail = {
@@ -161,6 +168,8 @@ export const campaignDetail: CampaignDetail = {
   dailyBudget: 8000,
   createdAt: "2025-11-20",
   agentConnected: false,
+  primaryGoal: "leads",
+  budgetMode: "CBO",
 };
 
 // ── Leads Tab Data ──────────────────────────────────────────

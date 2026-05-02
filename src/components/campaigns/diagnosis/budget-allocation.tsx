@@ -1,52 +1,22 @@
 "use client";
 
-import { ArrowLeftRight } from "lucide-react";
 import type { BudgetAllocationData } from "@/lib/types/diagnosis-payload";
 import { stanceStyles, formatINR } from "@/lib/diagnosis-data";
 
 interface BudgetAllocationProps {
   data: BudgetAllocationData;
-  onApplyTopMove?: () => void;
 }
 
-export function BudgetAllocation({ data, onApplyTopMove }: BudgetAllocationProps) {
+export function BudgetAllocation({ data }: BudgetAllocationProps) {
   return (
     <div className="bg-white border border-border rounded-card overflow-hidden">
       <div className="px-5 py-3 border-b border-border-subtle">
         <h3 className="text-section-header text-text-primary">Budget allocation</h3>
         <p className="text-[11px] text-text-tertiary mt-0.5">
-          Each adset's share of spend vs share of qualified leads — shows where money is
-          working harder than its weight.
+          Each adset's share of spend vs share of leads — shows where money is working
+          harder than its budget weight.
         </p>
       </div>
-
-      {/* Top move */}
-      {data.top_move && (
-        <div className="px-5 py-3 bg-[#FFFBEB] border-b border-[#FDE68A]/60">
-          <div className="flex items-center gap-3">
-            <div className="w-7 h-7 rounded-[6px] bg-[#FEF3C7] flex items-center justify-center shrink-0">
-              <ArrowLeftRight size={13} strokeWidth={1.5} className="text-[#92400E]" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.5px] text-[#92400E] mb-0.5">
-                Top reallocation
-              </div>
-              <p className="text-[13px] font-medium text-text-primary leading-snug">
-                {data.top_move.headline}
-              </p>
-            </div>
-            {onApplyTopMove && (
-              <button
-                type="button"
-                onClick={onApplyTopMove}
-                className="h-8 px-3.5 text-[12px] font-medium bg-[#B45309] text-white rounded-button hover:bg-[#92400E] transition-colors duration-150 shrink-0"
-              >
-                Apply move
-              </button>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* Adset table */}
       <div className="overflow-x-auto">
@@ -54,16 +24,23 @@ export function BudgetAllocation({ data, onApplyTopMove }: BudgetAllocationProps
           <thead>
             <tr className="border-b border-border-subtle">
               {[
-                { label: "Adset", align: "left" },
-                { label: "Spend share", align: "right" },
-                { label: "Lead share", align: "right" },
-                { label: "Qualified share", align: "right" },
-                { label: "Efficiency", align: "right" },
-                { label: "Stance", align: "center" },
+                { label: "Adset", align: "left", tip: undefined },
+                { label: "Spend share", align: "right", tip: undefined },
+                { label: "Lead share", align: "right", tip: undefined },
+                { label: "Qualified share", align: "right", tip: undefined },
+                {
+                  label: "Efficiency",
+                  align: "right",
+                  tip: "Lead share ÷ spend share. Above 1× means the adset delivers more leads than its budget weight; below 1× means it lags.",
+                },
+                { label: "Stance", align: "center", tip: undefined },
               ].map((h) => (
                 <th
                   key={h.label}
-                  className={`px-4 py-2.5 text-[10px] font-medium text-text-tertiary uppercase tracking-[0.5px] text-${h.align} whitespace-nowrap`}
+                  title={h.tip}
+                  className={`px-4 py-2.5 text-[10px] font-medium text-text-tertiary uppercase tracking-[0.5px] text-${h.align} whitespace-nowrap ${
+                    h.tip ? "cursor-help underline decoration-dotted decoration-text-tertiary/40 underline-offset-2" : ""
+                  }`}
                 >
                   {h.label}
                 </th>

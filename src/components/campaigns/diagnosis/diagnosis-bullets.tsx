@@ -2,21 +2,30 @@
 
 import { Sparkles, ArrowRight } from "lucide-react";
 import type { DiagnosisBullet } from "@/lib/types/diagnosis-payload";
+import type { RenderableAction } from "../actions/use-action-flow";
+import { getActionLabel } from "../actions/action-labels";
+import { campaignDetail } from "@/lib/campaign-data";
 
 interface DiagnosisBulletsProps {
   bullets: DiagnosisBullet[];
   /** Map from action_id → action headline, used to show what each bullet drives. */
   actionHeadlines?: Record<string, string>;
+  /** Map from action_id → renderable action — used to launch the action flow. */
+  actionsById?: Record<string, RenderableAction>;
   /** Highlight bullets whose drives_action_id matches. */
   highlightActionId?: string | null;
   onSelectAction?: (actionId: string) => void;
+  /** When provided, the action chip opens the action flow modal directly. */
+  onOpenAction?: (action: RenderableAction) => void;
 }
 
 export function DiagnosisBullets({
   bullets,
   actionHeadlines,
+  actionsById,
   highlightActionId,
   onSelectAction,
+  onOpenAction,
 }: DiagnosisBulletsProps) {
   return (
     <div className="bg-white border border-border rounded-card overflow-hidden">
@@ -51,20 +60,33 @@ export function DiagnosisBullets({
                     {b.tof && <FunnelChip stage="TOF" text={b.tof} />}
                     {b.mof && <FunnelChip stage="MOF" text={b.mof} />}
                     {b.bof && <FunnelChip stage="BOF" text={b.bof} />}
-                    {actionTitle && (
-                      <button
-                        type="button"
-                        onClick={() => onSelectAction?.(b.drives_action_id!)}
-                        className={`inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-badge border transition-colors ${
-                          isHighlighted
-                            ? "bg-accent text-white border-accent"
-                            : "bg-white text-text-secondary border-border hover:border-border-hover hover:text-text-primary"
-                        }`}
-                      >
-                        Drives action
-                        <ArrowRight size={9} strokeWidth={1.5} />
-                      </button>
-                    )}
+                    {actionTitle && b.drives_action_id && (() => {
+                      const linked = actionsById?.[b.drives_action_id];
+                      const label = linked
+                        ? getActionLabel(linked.verb, linked.target_entity, campaignDetail.budgetMode)
+                        : "Drives action";
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (linked && onOpenAction) {
+                              onOpenAction(linked);
+                            } else {
+                              onSelectAction?.(b.drives_action_id!);
+                            }
+                          }}
+                          onMouseEnter={() => onSelectAction?.(b.drives_action_id!)}
+                          className={`inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-badge border transition-colors ${
+                            isHighlighted
+                              ? "bg-accent text-white border-accent"
+                              : "bg-white text-text-secondary border-border hover:border-border-hover hover:text-text-primary"
+                          }`}
+                        >
+                          {label}
+                          <ArrowRight size={9} strokeWidth={1.5} />
+                        </button>
+                      );
+                    })()}
                   </div>
                 </div>
               </div>

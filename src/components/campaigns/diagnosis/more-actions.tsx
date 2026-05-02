@@ -10,10 +10,13 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { SecondaryAction, ActionVerb } from "@/lib/types/diagnosis-payload";
+import type { RenderableAction } from "../actions/use-action-flow";
+import { fromSecondary } from "../actions/use-action-flow";
 
 interface MoreActionsProps {
   actions: SecondaryAction[];
-  onApply?: (actionId: string) => void;
+  /** Open the action flow modal for a given secondary action. */
+  onOpenAction?: (action: RenderableAction) => void;
   onDismiss?: (actionId: string) => void;
   /** Optional hover handler used by the diagnosis-action linkage. */
   onHover?: (actionId: string | null) => void;
@@ -29,14 +32,14 @@ const verbIcons: Partial<Record<ActionVerb, LucideIcon>> = {
   OPTIMIZE: Wand2,
 };
 
-export function MoreActions({ actions, onApply, onDismiss, onHover }: MoreActionsProps) {
+export function MoreActions({ actions, onOpenAction, onDismiss, onHover }: MoreActionsProps) {
   if (actions.length === 0) return null;
   return (
     <div className="bg-white border border-border rounded-card overflow-hidden">
       <div className="px-5 py-3 border-b border-border-subtle">
-        <h3 className="text-section-header text-text-primary">More actions</h3>
+        <h3 className="text-section-header text-text-primary">More actions to close your shortfall</h3>
         <p className="text-[11px] text-text-tertiary mt-0.5">
-          Secondary recommendations — apply alongside the next best action.
+          Apply alongside the next best action above to recover lost ground on goals.
         </p>
       </div>
       <div className="divide-y divide-border-subtle">
@@ -65,10 +68,10 @@ export function MoreActions({ actions, onApply, onDismiss, onHover }: MoreAction
                 </div>
               </div>
               <div className="shrink-0 flex flex-col items-end gap-1">
-                {onApply && (
+                {onOpenAction && (
                   <button
                     type="button"
-                    onClick={() => onApply(a.id)}
+                    onClick={() => onOpenAction(fromSecondary(a))}
                     className="h-7 px-3 text-[11px] font-medium bg-accent text-white rounded-button hover:bg-accent-hover transition-colors duration-150"
                   >
                     {a.cta_label}

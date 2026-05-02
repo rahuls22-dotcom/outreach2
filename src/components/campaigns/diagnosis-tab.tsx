@@ -11,7 +11,7 @@ import {
   Plus,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { adSetsData } from "@/lib/campaign-data";
+import { adSetsData, campaignDetail } from "@/lib/campaign-data";
 import type { AdSetRow } from "@/lib/campaign-data";
 import { campaignDiagnosisPayload } from "@/lib/diagnosis-data";
 import { CreativeGeneratorModal } from "@/components/shared/creative-generator-modal";
@@ -20,6 +20,11 @@ import { GoalTracker } from "./diagnosis/goal-tracker";
 import { BudgetAllocation } from "./diagnosis/budget-allocation";
 import { DiagnosisBullets } from "./diagnosis/diagnosis-bullets";
 import { MoreActions } from "./diagnosis/more-actions";
+import { CreativeSignals } from "./diagnosis/creative-signals";
+import { AdSetInsights } from "./diagnosis/ad-set-insights";
+import { PersonaScorecard } from "./diagnosis/persona-scorecard";
+import type { RenderableAction } from "./actions/use-action-flow";
+import { fromSecondary, fromNBA } from "./actions/use-action-flow";
 
 function formatCurrency(amount: number) {
   if (amount >= 100000) return `₹${(amount / 100000).toFixed(1)}L`;
@@ -40,27 +45,83 @@ function DiagnosisBadge({ diagnosis }: { diagnosis: AdSetRow["diagnosis"] }) {
   );
 }
 
-// Mock creatives per ad set — kept for the tactical AdSet Breakdown section.
-const adSetCreatives: Record<
-  string,
-  { id: string; name: string; format: string; ctr: number; status: "active" | "paused" }[]
-> = {
+// ── Personas defined during campaign setup ────────────────────────
+export interface CampaignPersona {
+  id: string;
+  name: string;
+  age: number;
+  role: string;
+}
+
+export const campaignPersonas: CampaignPersona[] = [
+  { id: "p-rajesh", name: "Rajesh", age: 38, role: "Tech executive" },
+  { id: "p-sneha", name: "Sneha", age: 34, role: "Senior lawyer" },
+  { id: "p-vikram", name: "Vikram", age: 42, role: "IT director" },
+  { id: "p-amit", name: "Amit", age: 45, role: "Business owner" },
+];
+
+// ── Creative metrics per ad set ──────────────────────────────────
+// Same persona-ad can run in multiple adsets with placement-specific metrics.
+// Used by both the AdSet Breakdown drill-in and the Persona Scorecard rollup.
+export interface CreativeMetric {
+  id: string;
+  name: string;
+  /** Foreign key to CampaignPersona — links the ad to its persona. */
+  personaId: string;
+  format: string;
+  /** Click-through rate, %. */
+  ctr: number;
+  status: "active" | "paused";
+  /** Average frequency over the last 7 days. */
+  frequency: number;
+  /** Percent change in CTR over the last 7 days. */
+  ctrDelta7d: number;
+  spend: number;
+  leads: number;
+  /** Video-only — % of impressions where the first frame fully renders. 0–1. */
+  firstFrameRetention?: number;
+  /** Video-only — % retained at 3 seconds. 0–1. */
+  hookRate?: number;
+  /** Video-only — % retained between 3s and 75% completion. 0–1. */
+  holdRate?: number;
+  /** Video-only — % completing 95% of the video. 0–1. */
+  playRate95?: number;
+  /** Video-only — 7d delta on hookRate, in percentage points. */
+  hookRateDelta7d?: number;
+  /** Video-only — 7d delta on holdRate, in percentage points. */
+  holdRateDelta7d?: number;
+}
+
+const adSetCreatives: Record<string, CreativeMetric[]> = {
+  // Whitefield HNI 30-45 — HNI-fit personas only (Rajesh, Sneha).
   "adset-1": [
-    { id: "cr-1", name: "Godrej Air 3BHK Carousel v2", format: "Carousel", ctr: 2.8, status: "active" },
-    { id: "cr-2", name: "Godrej Air Lifestyle Video", format: "Video", ctr: 3.4, status: "active" },
-    { id: "cr-3", name: "Godrej Air Floor Plan Static", format: "Image", ctr: 0.8, status: "paused" },
+    { id: "cr-rajesh-1", name: "Ad — Rajesh", personaId: "p-rajesh", format: "Video", ctr: 3.4, status: "active", frequency: 1.6, ctrDelta7d: 5, spend: 28000, leads: 22,
+      firstFrameRetention: 0.92, hookRate: 0.34, holdRate: 0.61, playRate95: 0.22, hookRateDelta7d: 2, holdRateDelta7d: -1 },
+    { id: "cr-sneha-1", name: "Ad — Sneha", personaId: "p-sneha", format: "Carousel", ctr: 2.8, status: "active", frequency: 3.18, ctrDelta7d: -14, spend: 35000, leads: 28 },
   ],
+  // Sarjapur IT Corridor — IT-skewed personas (Sneha, Vikram).
   "adset-2": [
-    { id: "cr-4", name: "Godrej Air Amenities Carousel", format: "Carousel", ctr: 2.1, status: "active" },
-    { id: "cr-5", name: "Godrej Air NRI Investment Static", format: "Image", ctr: 1.9, status: "active" },
+    { id: "cr-sneha-2", name: "Ad — Sneha", personaId: "p-sneha", format: "Carousel", ctr: 2.1, status: "active", frequency: 1.9, ctrDelta7d: -3, spend: 22000, leads: 18 },
+    { id: "cr-vikram-1", name: "Ad — Vikram", personaId: "p-vikram", format: "Video", ctr: 1.9, status: "active", frequency: 1.9, ctrDelta7d: -3, spend: 22000, leads: 14,
+      firstFrameRetention: 0.81, hookRate: 0.20, holdRate: 0.55, playRate95: 0.18, hookRateDelta7d: -3, holdRateDelta7d: 1 },
   ],
+  // Broad Bangalore 25-55 — broad reach, all 4 personas running.
   "adset-3": [
-    { id: "cr-6", name: "Godrej Air Family Lifestyle", format: "Video", ctr: 1.2, status: "active" },
-    { id: "cr-7", name: "Godrej Air 3BHK Carousel v2", format: "Carousel", ctr: 0.9, status: "active" },
+    { id: "cr-rajesh-3", name: "Ad — Rajesh", personaId: "p-rajesh", format: "Video", ctr: 1.4, status: "active", frequency: 2.1, ctrDelta7d: -8, spend: 18000, leads: 5,
+      firstFrameRetention: 0.85, hookRate: 0.21, holdRate: 0.42, playRate95: 0.11, hookRateDelta7d: -7, holdRateDelta7d: -5 },
+    { id: "cr-sneha-3", name: "Ad — Sneha", personaId: "p-sneha", format: "Carousel", ctr: 0.9, status: "active", frequency: 2.5, ctrDelta7d: -18, spend: 16000, leads: 0 },
+    { id: "cr-vikram-3", name: "Ad — Vikram", personaId: "p-vikram", format: "Video", ctr: 1.2, status: "active", frequency: 2.8, ctrDelta7d: -22, spend: 17000, leads: 3,
+      firstFrameRetention: 0.77, hookRate: 0.18, holdRate: 0.45, playRate95: 0.12, hookRateDelta7d: -6, holdRateDelta7d: -8 },
+    { id: "cr-amit-3", name: "Ad — Amit", personaId: "p-amit", format: "Video", ctr: 0.7, status: "active", frequency: 1.4, ctrDelta7d: -30, spend: 12000, leads: 1,
+      firstFrameRetention: 0.72, hookRate: 0.18, holdRate: 0.38, playRate95: 0.08, hookRateDelta7d: -10, holdRateDelta7d: -8 },
   ],
 };
 
-export function DiagnosisTab() {
+interface DiagnosisTabProps {
+  onOpenAction?: (action: RenderableAction) => void;
+}
+
+export function DiagnosisTab({ onOpenAction }: DiagnosisTabProps = {}) {
   const [expandedAdSet, setExpandedAdSet] = useState<string | null>(null);
   const [generatorOpen, setGeneratorOpen] = useState(false);
   const [generatorAdSet, setGeneratorAdSet] = useState<string | null>(null);
@@ -77,6 +138,15 @@ export function DiagnosisTab() {
     return map;
   }, [payload]);
 
+  // Map of action_id → renderable action — used to launch the action flow.
+  const actionsById = useMemo(() => {
+    const map: Record<string, RenderableAction> = {
+      [payload.next_best_action.id]: fromNBA(payload.next_best_action),
+    };
+    for (const a of payload.more_actions) map[a.id] = fromSecondary(a);
+    return map;
+  }, [payload]);
+
   const toggleAdSet = (id: string) => setExpandedAdSet((prev) => (prev === id ? null : id));
   const openGenerator = (adSetId: string) => {
     setGeneratorAdSet(adSetId);
@@ -87,7 +157,7 @@ export function DiagnosisTab() {
   return (
     <div className="space-y-5">
       {/* Goal tracker */}
-      <GoalTracker data={payload.goal_tracker} />
+      <GoalTracker data={payload.goal_tracker} primaryGoal={campaignDetail.primaryGoal} />
 
       {/* Budget allocation + top move */}
       <BudgetAllocation data={payload.budget_allocation} />
@@ -96,16 +166,27 @@ export function DiagnosisTab() {
       <DiagnosisBullets
         bullets={payload.diagnosis}
         actionHeadlines={actionHeadlines}
+        actionsById={actionsById}
         highlightActionId={hoveredActionId ?? payload.next_best_action.id}
         onSelectAction={(id) => setHoveredActionId(id)}
+        onOpenAction={onOpenAction}
+      />
+
+      {/* Ad set insights — adset-level rollup of creative signals & qualifier rates */}
+      <AdSetInsights adsets={adSetsData} creatives={adSetCreatives} />
+
+      {/* Persona scorecard — each persona-ad rolled up across the adsets it runs in */}
+      <PersonaScorecard
+        personas={campaignPersonas}
+        adsets={adSetsData}
+        creatives={adSetCreatives}
+        onOpenAction={onOpenAction}
       />
 
       {/* More actions */}
       <MoreActions
         actions={payload.more_actions}
-        onApply={() => {
-          /* mock: mark applied — not wired to real backend */
-        }}
+        onOpenAction={onOpenAction}
         onDismiss={() => {
           /* mock: dismiss locally — not wired */
         }}
@@ -227,6 +308,14 @@ export function DiagnosisTab() {
                                     <Plus size={11} strokeWidth={2} /> Add Creative
                                   </button>
                                 </div>
+
+                                <CreativeSignals
+                                  creatives={creatives}
+                                  actions={payload.more_actions}
+                                  onSelectAction={setHoveredActionId}
+                                  onOpenAction={onOpenAction}
+                                  actionsById={actionsById}
+                                />
 
                                 {creatives.length > 0 ? (
                                   <div className="grid grid-cols-3 gap-3">
