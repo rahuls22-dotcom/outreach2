@@ -11,24 +11,25 @@ interface CreativeChatPanelProps {
   isGenerating: boolean;
   /** Called when user sends a refinement message. */
   onSend: (text: string) => void;
-  /** When AI bubble has a version_id, clicking the inline link calls this. */
-  onFocusVersion?: (versionId: string) => void;
-  /** The version id currently shown in the right pane. Used to highlight bubbles. */
-  activeVersionId: string | null;
   /** Composer placeholder. */
   placeholder?: string;
   /** Empty-state message shown when messages array is empty. */
   emptyMessage?: string;
+  /**
+   * When true the user is still in picker mode (no active concept). The composer
+   * is rendered visually disabled with a "pick a concept first" hint, and Enter
+   * is a no-op.
+   */
+  isPickerMode?: boolean;
 }
 
 export function CreativeChatPanel({
   messages,
   isGenerating,
   onSend,
-  onFocusVersion,
-  activeVersionId,
   placeholder = "Refine the concept… e.g., make the headline more urgent",
   emptyMessage = "Send a message to refine this concept.",
+  isPickerMode = false,
 }: CreativeChatPanelProps) {
   const [draft, setDraft] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -40,9 +41,11 @@ export function CreativeChatPanel({
     node.scrollTo({ top: node.scrollHeight, behavior: "smooth" });
   }, [messages.length]);
 
+  const locked = isGenerating || isPickerMode;
+
   const submit = () => {
     const text = draft.trim();
-    if (!text || isGenerating) return;
+    if (!text || locked) return;
     onSend(text);
     setDraft("");
   };
@@ -54,6 +57,10 @@ export function CreativeChatPanel({
     }
   };
 
+  const composerPlaceholder = isPickerMode
+    ? "Pick a concept on the right to start refining"
+    : placeholder;
+
   return (
     <div className="flex flex-col h-full bg-surface-page">
       {/* Message list */}
@@ -64,12 +71,7 @@ export function CreativeChatPanel({
           </div>
         )}
         {messages.map((m) => (
-          <MessageBubble
-            key={m.id}
-            message={m}
-            activeVersionId={activeVersionId}
-            onFocusVersion={onFocusVersion}
-          />
+          <MessageBubble key={m.id} message={m} />
         ))}
       </div>
 
@@ -80,15 +82,15 @@ export function CreativeChatPanel({
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={handleKey}
-            placeholder={placeholder}
+            placeholder={composerPlaceholder}
             rows={2}
-            disabled={isGenerating}
+            disabled={locked}
             className="flex-1 px-3 py-2 text-[13px] border border-border rounded-input bg-white text-text-primary focus:outline-none focus:border-accent transition-colors duration-150 placeholder:text-text-tertiary resize-none leading-relaxed disabled:bg-surface-page disabled:cursor-not-allowed"
           />
           <button
             type="button"
             onClick={submit}
-            disabled={!draft.trim() || isGenerating}
+            disabled={!draft.trim() || locked}
             className="h-9 w-9 inline-flex items-center justify-center bg-accent text-white rounded-button hover:bg-accent-hover transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
             aria-label="Send"
           >
@@ -109,11 +111,9 @@ export function CreativeChatPanel({
 
 interface MessageBubbleProps {
   message: ChatMessage;
-  activeVersionId: string | null;
-  onFocusVersion?: (versionId: string) => void;
 }
 
-function MessageBubble({ message, activeVersionId, onFocusVersion }: MessageBubbleProps) {
+function MessageBubble({ message }: MessageBubbleProps) {
   const isUser = message.role === "user";
 
   if (isUser) {
@@ -145,60 +145,22 @@ function MessageBubble({ message, activeVersionId, onFocusVersion }: MessageBubb
       className="flex"
     >
       <div className="flex items-start gap-2 max-w-[92%]">
-        <div className="w-6 h-6 rounded-full bg-accent flex items-center justify-center shrink-0 mt-0.5">
+        <div className="w-6 h-6 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center shrink-0 mt-0.5 shadow-sm">
           <Sparkles size={12} strokeWidth={1.5} className="text-white" />
         </div>
         <div className="flex-1 min-w-0 space-y-2">
           <div className="bg-white border border-border text-[13px] leading-relaxed text-text-primary rounded-card px-3 py-2">
             {message.pending ? (
               <div className="flex items-center gap-2 text-text-tertiary">
-                <span className="h-3 w-3 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+                <span className="h-3 w-3 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
                 Thinking…
               </div>
             ) : (
               message.text
             )}
           </div>
-
-          {/* Single-version thumbnail link to focus this version on the right */}
-          {message.version_id && (
-            <SingleVersionThumb
-              versionId={message.version_id}
-              isActive={message.version_id === activeVersionId}
-              onClick={() => onFocusVersion?.(message.version_id!)}
-            />
-          )}
         </div>
       </div>
     </motion.div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  Single-version thumbnail link                                      */
-/* ------------------------------------------------------------------ */
-
-// Renders a small "View this version →" anchor in the AI bubble.
-// The parent renders the actual preview in the right pane via activeVersionId.
-interface SingleVersionThumbProps {
-  versionId: string;
-  isActive: boolean;
-  onClick: () => void;
-}
-
-function SingleVersionThumb({ isActive, onClick }: SingleVersionThumbProps) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-1 rounded-badge transition-colors ${
-        isActive
-          ? "bg-accent/10 text-accent"
-          : "bg-surface-secondary text-text-secondary hover:bg-white"
-      }`}
-    >
-      <Sparkles size={10} strokeWidth={1.5} />
-      {isActive ? "Showing this version →" : "View this version →"}
-    </button>
   );
 }

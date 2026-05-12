@@ -595,14 +595,20 @@ export function Step2BusinessProfile({ onNext, onBack }: Step2Props) {
                       {persona.name}, {persona.age}
                     </h4>
                     <p className="text-[11px] text-text-tertiary mb-3">{persona.role}</p>
-                    <ul className="space-y-2 flex-1">
-                      {persona.bullets.map((bullet, j) => (
-                        <li key={j} className="flex items-start gap-2 text-[12px] text-text-secondary leading-relaxed">
-                          <span className="text-text-tertiary mt-[3px] shrink-0">•</span>
-                          <span>{bullet}</span>
-                        </li>
-                      ))}
-                    </ul>
+                    <div className="space-y-3 flex-1">
+                      {["Want", "Pain point", "Solution"].map((title, j) =>
+                        persona.bullets[j] ? (
+                          <div key={j}>
+                            <div className="text-[10px] font-semibold text-text-tertiary uppercase tracking-[0.5px] mb-0.5">
+                              {title}
+                            </div>
+                            <p className="text-[12px] text-text-secondary leading-relaxed">
+                              {persona.bullets[j]}
+                            </p>
+                          </div>
+                        ) : null
+                      )}
+                    </div>
                     <div className="flex gap-2 pt-3 mt-4 border-t border-border">
                       <button
                         onClick={() => startManualEdit(persona)}

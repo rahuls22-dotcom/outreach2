@@ -5,24 +5,27 @@ import { X, ChevronRight, Sparkles } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 import type {
+  AttachedImage,
   ChatMessage,
   ConceptVersion,
   CreativePhase,
+  CreativeStrategy,
   CreativeWorkspace,
   GeneratedCreative,
+  MockupCopy,
+  MockupField,
 } from "./creative/types";
 import {
   emptyWorkspace,
   getSize,
+  makeInlineEditedVersion,
   makeMockReply,
   makeMockVersion,
   mkId,
-  pickFreshVariant,
 } from "./creative/types";
 import { CreativeSetupPanel } from "./creative/creative-setup-panel";
 import { CreativeConceptEditor } from "./creative/creative-concept-editor";
 import { CreativeResizeEditor } from "./creative/creative-resize-editor";
-import { StrategyStrip } from "./creative/strategy-strip";
 
 /* ------------------------------------------------------------------ */
 /*  Public types — preserved so consumers don't change                 */
@@ -67,6 +70,9 @@ const PHASES: { id: CreativePhase; label: string }[] = [
 ];
 
 const MOCK_LATENCY_MS = 1400;
+const INITIAL_CONCEPT_COUNT = 4;
+/** Stagger delays (ms) for the 4 initial concept reveals. */
+const INITIAL_REVEAL_DELAYS = [600, 950, 1300, 1650] as const;
 
 /* ------------------------------------------------------------------ */
 /*  Component                                                          */
@@ -85,27 +91,59 @@ export function CreativeGeneratorModal({
   cta,
 }: CreativeGeneratorModalProps) {
   const [phase, setPhase] = useState<CreativePhase>("setup");
-  const [workspace, setWorkspace] = useState<CreativeWorkspace>(emptyWorkspace);
+  const [workspace, setWorkspace] = useState<CreativeWorkspace>(() =>
+    emptyWorkspace({
+      angleName,
+      personaName,
+      personaRole,
+      painPoint: painPoint ?? "",
+      usp: usp ?? "",
+      hook,
+      cta,
+    })
+  );
   const [isGenerating, setIsGenerating] = useState(false);
 
-  // Reset state whenever the modal is opened.
+  // Reset state whenever the modal is opened — re-seed the strategy from props.
   useEffect(() => {
     if (!open) return;
     setPhase("setup");
-    setWorkspace(emptyWorkspace());
+    setWorkspace(
+      emptyWorkspace({
+        angleName,
+        personaName,
+        personaRole,
+        painPoint: painPoint ?? "",
+        usp: usp ?? "",
+        hook,
+        cta,
+      })
+    );
     setIsGenerating(false);
-  }, [open]);
+  }, [open, angleName, personaName, personaRole, painPoint, usp, hook, cta]);
 
   /* ---------- Phase A handlers ---------- */
 
   const handlePromptChange = (text: string) =>
     setWorkspace((w) => ({ ...w, prompt: text }));
 
-  const handleStyleRef = (file: { name: string } | null) =>
-    setWorkspace((w) => ({ ...w, style_reference: file }));
+  const handleAttachStyleRef = (image: AttachedImage | null) =>
+    setWorkspace((w) => ({ ...w, style_reference: image }));
 
-  const handleProductImage = (file: { name: string } | null) =>
-    setWorkspace((w) => ({ ...w, product_image: file }));
+  const handleAttachProjectImage = (image: AttachedImage | null) =>
+    setWorkspace((w) => ({ ...w, project_image: image }));
+
+  const handleAttachBrandLogo = (image: AttachedImage | null) =>
+    setWorkspace((w) => ({ ...w, brand_logo: image }));
+
+  const handleToggleBrandGuidelines = () =>
+    setWorkspace((w) => ({ ...w, brand_guidelines_attached: !w.brand_guidelines_attached }));
+
+  const handleToggleCreativeStrategy = () =>
+    setWorkspace((w) => ({ ...w, creative_strategy_attached: !w.creative_strategy_attached }));
+
+  const handleUpdateStrategy = (next: CreativeStrategy) =>
+    setWorkspace((w) => ({ ...w, strategy: next }));
 
   const handleGenerateInitialConcepts = () => {
     if (isGenerating) return;
@@ -120,116 +158,175 @@ export function CreativeGeneratorModal({
     const pendingMessage: ChatMessage = {
       id: mkId("msg"),
       role: "ai",
-      text: "Generating concept…",
+      text: "Generating 4 options…",
       pending: true,
       created_at: Date.now(),
     };
     setWorkspace((w) => ({
       ...w,
       concept_messages: [userMessage, pendingMessage],
+      // Clear any prior state so re-entering Setup → Generate starts cleanly.
+      concept_versions: [],
+      active_concept_version_id: null,
     }));
     setPhase("concept");
 
-    window.setTimeout(() => {
-      const firstVer = makeMockVersion({ parent_id: null, labelPrefix: "Option 1" });
-      const aiReply: ChatMessage = {
-        id: mkId("msg"),
-        role: "ai",
-        text: "Here's a concept based on your prompt. Refine it via chat, or click 'Generate new option' on the right for a fresh take.",
-        version_id: firstVer.id,
-        created_at: Date.now(),
-      };
-      setWorkspace((w) => ({
-        ...w,
-        concept_messages: [userMessage, aiReply],
-        concept_versions: [firstVer],
-        active_concept_version_id: firstVer.id,
-      }));
-      setIsGenerating(false);
-    }, MOCK_LATENCY_MS);
+    // Stagger 4 root-level concepts, each using a different variant so the grid
+    // shows visual variety. Active version stays null until the user picks one.
+    for (let i = 0; i < INITIAL_CONCEPT_COUNT; i++) {
+      const variant = ((i + 1) as 1 | 2 | 3 | 4);
+      const isLast = i === INITIAL_CONCEPT_COUNT - 1;
+      window.setTimeout(() => {
+        const newVer = makeMockVersion({
+          parent_id: null,
+          preferVariant: variant,
+          labelPrefix: `Option ${i + 1}`,
+        });
+        setWorkspace((w) => ({
+          ...w,
+          concept_versions: [...w.concept_versions, newVer],
+        }));
+        if (isLast) {
+          const aiReply: ChatMessage = {
+            id: mkId("msg"),
+            role: "ai",
+            text: "Here are 4 options — click one to refine it, or generate more.",
+            created_at: Date.now(),
+          };
+          setWorkspace((w) => {
+            const messagesWithoutPending = w.concept_messages.filter((m) => !m.pending);
+            return {
+              ...w,
+              concept_messages: [...messagesWithoutPending, aiReply],
+            };
+          });
+          setIsGenerating(false);
+        }
+      }, INITIAL_REVEAL_DELAYS[i]);
+    }
   };
 
   /* ---------- Phase B handlers ---------- */
 
+  /**
+   * Pick a concept. When the user is in picker mode (no active version yet),
+   * we prune any unpicked root-level options — they were exploration candidates
+   * and the user has now committed to one. Root versions that already have
+   * descendants (e.g., a prior chain after "Start fresh") are preserved.
+   */
   const handleSelectConceptVersion = (versionId: string) => {
-    setWorkspace((w) => ({ ...w, active_concept_version_id: versionId }));
+    setWorkspace((w) => {
+      const wasPickerMode = w.active_concept_version_id === null;
+      let nextVersions = w.concept_versions;
+      let nextMessages = w.concept_messages;
+      if (wasPickerMode) {
+        const hasDescendants = new Set<string>();
+        for (const v of w.concept_versions) {
+          if (v.parent_id) hasDescendants.add(v.parent_id);
+        }
+        nextVersions = w.concept_versions.filter(
+          (v) =>
+            v.id === versionId ||
+            v.parent_id !== null ||
+            hasDescendants.has(v.id)
+        );
+        // Acknowledge the pick in the chat. Drop the picker prompt
+        // ("Here are 4 options…") since the user has now picked one.
+        const picked = w.concept_versions.find((v) => v.id === versionId);
+        const pickName = picked?.label ?? "that one";
+        const filtered = w.concept_messages.filter(
+          (m) =>
+            !(
+              m.role === "ai" &&
+              (m.text.startsWith("Here are 4 options") ||
+                m.text.startsWith("Fresh batch"))
+            )
+        );
+        nextMessages = [
+          ...filtered,
+          {
+            id: mkId("msg"),
+            role: "ai",
+            text: `Great choice — let's refine ${pickName} further. Tell me what to tweak, or use Edit on the preview.`,
+            created_at: Date.now(),
+          },
+        ];
+      }
+      return {
+        ...w,
+        concept_versions: nextVersions,
+        active_concept_version_id: versionId,
+        concept_messages: nextMessages,
+      };
+    });
   };
 
   /**
-   * Generate a fresh "new option" — a sibling concept rooted at the original
-   * prompt rather than a refinement of the active version. We pick a variant
-   * that isn't already in use to keep the visual variety high.
+   * Start fresh — re-enter picker mode with 4 newly-generated concepts. The
+   * user's prior chain stays in history (its root has descendants, so it
+   * survives the next pick's pruning step).
    */
-  const handleGenerateNewOption = () => {
+  const handleStartFresh = () => {
     if (isGenerating) return;
     setIsGenerating(true);
 
-    // Find which "Option N" we're up to — count root-level (parent_id null)
-    // versions in the chain so the label increments.
-    const optionCount = workspace.concept_versions.filter((v) => v.parent_id === null).length + 1;
-    const usedVariants = workspace.concept_versions.map((v) => v.variant);
-    const variant = pickFreshVariant(usedVariants);
+    // How many "starts" have happened — count root-level versions w/ descendants.
+    const previousChains = workspace.concept_versions.filter((v) => {
+      if (v.parent_id !== null) return false;
+      return workspace.concept_versions.some((c) => c.parent_id === v.id);
+    }).length;
+    const round = previousChains + 1;
 
-    const userMessage: ChatMessage = {
-      id: mkId("msg"),
-      role: "user",
-      text: "Generate another option.",
-      created_at: Date.now(),
-    };
-    const pendingMessage: ChatMessage = {
-      id: mkId("msg"),
-      role: "ai",
-      text: "Generating a new option…",
-      pending: true,
-      created_at: Date.now(),
-    };
-    setWorkspace((w) => ({
-      ...w,
-      concept_messages: [...w.concept_messages, userMessage, pendingMessage],
-    }));
+    setWorkspace((w) => ({ ...w, active_concept_version_id: null }));
 
-    window.setTimeout(() => {
-      const newVer = makeMockVersion({
-        parent_id: null,
-        preferVariant: variant,
-        labelPrefix: `Option ${optionCount}`,
-      });
-      const aiReply: ChatMessage = {
-        id: mkId("msg"),
-        role: "ai",
-        text: `Here's option ${optionCount}. Pick whichever feels right — you can keep generating more.`,
-        version_id: newVer.id,
-        created_at: Date.now(),
-      };
-      setWorkspace((w) => {
-        const messagesWithoutPending = w.concept_messages.filter((m) => !m.pending);
-        return {
+    // Stagger 4 fresh root concepts, all four variants.
+    for (let i = 0; i < INITIAL_CONCEPT_COUNT; i++) {
+      const variant = ((i + 1) as 1 | 2 | 3 | 4);
+      const isLast = i === INITIAL_CONCEPT_COUNT - 1;
+      window.setTimeout(() => {
+        const newVer = makeMockVersion({
+          parent_id: null,
+          preferVariant: variant,
+          labelPrefix: `Option ${i + 1} · round ${round}`,
+        });
+        setWorkspace((w) => ({
           ...w,
-          concept_messages: [...messagesWithoutPending, aiReply],
           concept_versions: [...w.concept_versions, newVer],
-          active_concept_version_id: newVer.id,
-        };
-      });
-      setIsGenerating(false);
-    }, MOCK_LATENCY_MS);
+        }));
+        if (isLast) {
+          const aiReply: ChatMessage = {
+            id: mkId("msg"),
+            role: "ai",
+            text: "Fresh batch — pick one to refine.",
+            created_at: Date.now(),
+          };
+          setWorkspace((w) => ({
+            ...w,
+            concept_messages: [...w.concept_messages, aiReply],
+          }));
+          setIsGenerating(false);
+        }
+      }, INITIAL_REVEAL_DELAYS[i]);
+    }
   };
 
-  const handleBranchFromVersion = (versionId: string) => {
-    // Branching just means: set this version as the new active, so the next
-    // refinement message uses it as the parent. Adds an AI note in the chat
-    // so the user sees their branch was acknowledged.
-    const branchNote: ChatMessage = {
-      id: mkId("msg"),
-      role: "ai",
-      text: "Branching from this version. Send your next refinement and I'll continue from here.",
-      version_id: versionId,
-      created_at: Date.now(),
-    };
-    setWorkspace((w) => ({
-      ...w,
-      active_concept_version_id: versionId,
-      concept_messages: [...w.concept_messages, branchNote],
-    }));
+  /**
+   * Inline text edit on the AdMockup (Canva-style). Each commit creates a new
+   * "Edited" version branching from the current active one and becomes active.
+   */
+  const handleInlineEdit = (field: MockupField, value: string) => {
+    setWorkspace((w) => {
+      const activeId = w.active_concept_version_id;
+      if (!activeId) return w;
+      const activeVer = w.concept_versions.find((v) => v.id === activeId);
+      if (!activeVer) return w;
+      const edited = makeInlineEditedVersion(activeVer, field, value);
+      return {
+        ...w,
+        concept_versions: [...w.concept_versions, edited],
+        active_concept_version_id: edited.id,
+      };
+    });
   };
 
   const handleSendConceptMessage = (text: string) => {
@@ -266,7 +363,6 @@ export function CreativeGeneratorModal({
         id: mkId("msg"),
         role: "ai",
         text: makeMockReply(text),
-        version_id: newVer.id,
         created_at: Date.now(),
       };
       setWorkspace((w) => {
@@ -289,13 +385,13 @@ export function CreativeGeneratorModal({
     if (!activeVer) return;
 
     // Seed every currently-selected size with a fresh version cloned from
-    // the finalized concept.
+    // the finalized concept. Clear any leftover undo history.
     setWorkspace((w) => {
-      const nextSizeVersions: Record<string, ConceptVersion> = { ...w.size_versions };
+      const nextSizeVersions: Record<string, ConceptVersion> = {};
       for (const sizeId of w.selected_sizes) {
         nextSizeVersions[sizeId] = makeSizeVersion(sizeId, activeVer);
       }
-      return { ...w, size_versions: nextSizeVersions };
+      return { ...w, size_versions: nextSizeVersions, size_previous: {} };
     });
     setPhase("resize");
   };
@@ -310,8 +406,15 @@ export function CreativeGeneratorModal({
         if (w.selected_sizes.length === 1) return w;
         const nextSizeVersions = { ...w.size_versions };
         delete nextSizeVersions[sizeId];
+        const nextSizePrevious = { ...w.size_previous };
+        delete nextSizePrevious[sizeId];
         const nextSelected = w.selected_sizes.filter((id) => id !== sizeId);
-        return { ...w, selected_sizes: nextSelected, size_versions: nextSizeVersions };
+        return {
+          ...w,
+          selected_sizes: nextSelected,
+          size_versions: nextSizeVersions,
+          size_previous: nextSizePrevious,
+        };
       }
 
       // Adding a new size — seed it from the finalized concept.
@@ -353,10 +456,94 @@ export function CreativeGeneratorModal({
         return {
           ...w,
           size_versions: { ...w.size_versions, [sizeId]: replacement },
+          // Capture the version that was just displaced into one-deep history.
+          size_previous: { ...w.size_previous, [sizeId]: cur },
         };
       });
       setIsGenerating(false);
     }, MOCK_LATENCY_MS);
+  };
+
+  const handleUndoSize = (sizeId: string) => {
+    setWorkspace((w) => {
+      const prev = w.size_previous[sizeId];
+      if (!prev) return w;
+      const nextPrevious = { ...w.size_previous };
+      delete nextPrevious[sizeId];
+      return {
+        ...w,
+        size_versions: { ...w.size_versions, [sizeId]: prev },
+        size_previous: nextPrevious,
+      };
+    });
+  };
+
+  /**
+   * Apply a batch of edits (headline + mockup fields) to a size's current
+   * version. Replaces the size version in-place and captures the prior version
+   * into `size_previous` for one-deep undo.
+   */
+  /** Register a user-defined custom size and select it. */
+  const handleAddCustomSize = (label: string, width: number, height: number) => {
+    const sizeId = mkId("size-custom");
+    const sizeOption = {
+      id: sizeId,
+      label: label || "Custom",
+      dimensions: `${width}×${height}`,
+      aspectW: width,
+      aspectH: height,
+    };
+    setWorkspace((w) => {
+      // Seed the new size with a fresh version cloned from the active concept
+      // so the preview renders something immediately.
+      const activeId = w.active_concept_version_id;
+      const activeVer = activeId ? w.concept_versions.find((v) => v.id === activeId) : undefined;
+      const nextSizeVersions = { ...w.size_versions };
+      if (activeVer) {
+        nextSizeVersions[sizeId] = makeSizeVersion(sizeId, activeVer);
+      }
+      return {
+        ...w,
+        custom_sizes: { ...w.custom_sizes, [sizeId]: sizeOption },
+        selected_sizes: [...w.selected_sizes, sizeId],
+        size_versions: nextSizeVersions,
+      };
+    });
+  };
+
+  /** Inline Canva-style edit on a single size's AdMockup (one field per call). */
+  const handleInlineEditSize = (sizeId: string, field: MockupField, value: string) => {
+    setWorkspace((w) => {
+      const cur = w.size_versions[sizeId];
+      if (!cur) return w;
+      const next = makeInlineEditedVersion(cur, field, value);
+      return {
+        ...w,
+        size_versions: { ...w.size_versions, [sizeId]: next },
+        size_previous: { ...w.size_previous, [sizeId]: cur },
+      };
+    });
+  };
+
+  /** Inline edit of a single size's post text (primary_text). */
+  const handleEditSizePostText = (sizeId: string, postText: string) => {
+    setWorkspace((w) => {
+      const cur = w.size_versions[sizeId];
+      if (!cur || cur.primary_text === postText) return w;
+      const next: ConceptVersion = {
+        ...cur,
+        id: mkId("ver"),
+        parent_id: cur.id,
+        primary_text: postText,
+        label: "Edited",
+        created_at: Date.now(),
+      };
+      return {
+        ...w,
+        size_versions: { ...w.size_versions, [sizeId]: next },
+        size_previous: { ...w.size_previous, [sizeId]: cur },
+      };
+    });
   };
 
   const handleConfirm = () => {
@@ -413,10 +600,10 @@ export function CreativeGeneratorModal({
           onClick={(e) => e.stopPropagation()}
           className="bg-white rounded-card border border-border shadow-2xl w-full max-w-[1120px] h-[88vh] max-h-[820px] overflow-hidden flex flex-col"
         >
-          {/* Header */}
-          <div className="flex items-center justify-between px-5 py-3 border-b border-border bg-white">
+          {/* Header — subtle creative tint via a thin gradient backdrop */}
+          <div className="flex items-center justify-between px-5 py-3 border-b border-border bg-gradient-to-r from-[#F5F3FF] via-white to-[#FAE8FF] relative">
             <div className="flex items-center gap-3 min-w-0">
-              <div className="w-8 h-8 rounded-[8px] bg-accent flex items-center justify-center shrink-0">
+              <div className="w-8 h-8 rounded-[8px] bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center shrink-0 shadow-sm">
                 <Sparkles size={14} strokeWidth={1.5} className="text-white" />
               </div>
               <div className="min-w-0">
@@ -441,7 +628,7 @@ export function CreativeGeneratorModal({
                         disabled={!isClickable}
                         className={`text-[11px] font-medium px-2 py-1 rounded-button transition-colors ${
                           isActive
-                            ? "bg-accent text-white"
+                            ? "bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white shadow-sm"
                             : isPast
                             ? "text-text-secondary hover:text-text-primary hover:bg-surface-page"
                             : "text-text-tertiary cursor-default"
@@ -467,29 +654,20 @@ export function CreativeGeneratorModal({
             </button>
           </div>
 
-          {/* Strategy strip — always visible (collapsible) so the user can
-              refer back to pain point / USP / hook / CTA while iterating. */}
-          <StrategyStrip
-            angleName={angleName}
-            personaName={personaName}
-            personaRole={personaRole}
-            painPoint={painPoint}
-            usp={usp}
-            hook={hook}
-            cta={cta}
-          />
-
           {/* Body — switches between phases */}
           <div className="flex-1 min-h-0 overflow-hidden">
             {phase === "setup" && (
-              <div className="overflow-y-auto h-full">
+              <div className="h-full">
                 <CreativeSetupPanel
                   workspace={workspace}
                   onPromptChange={handlePromptChange}
-                  onUploadStyleRef={handleStyleRef}
-                  onUploadProductImage={handleProductImage}
+                  onAttachStyleRef={handleAttachStyleRef}
+                  onAttachProjectImage={handleAttachProjectImage}
+                  onAttachBrandLogo={handleAttachBrandLogo}
+                  onToggleBrandGuidelines={handleToggleBrandGuidelines}
+                  onToggleCreativeStrategy={handleToggleCreativeStrategy}
+                  onUpdateStrategy={handleUpdateStrategy}
                   onGenerate={handleGenerateInitialConcepts}
-                  contextHint={`${hook} · CTA: ${cta}`}
                   isGenerating={isGenerating}
                 />
               </div>
@@ -501,10 +679,11 @@ export function CreativeGeneratorModal({
                 versions={workspace.concept_versions}
                 activeVersionId={workspace.active_concept_version_id}
                 isGenerating={isGenerating}
+                pickerSlots={INITIAL_CONCEPT_COUNT}
                 onSendMessage={handleSendConceptMessage}
                 onSelectVersion={handleSelectConceptVersion}
-                onBranchFromVersion={handleBranchFromVersion}
-                onGenerateNewOption={handleGenerateNewOption}
+                onStartFresh={handleStartFresh}
+                onInlineEdit={handleInlineEdit}
                 onFinalize={handleFinalizeConcept}
               />
             )}
@@ -515,13 +694,55 @@ export function CreativeGeneratorModal({
                 isGenerating={isGenerating}
                 onToggleSize={handleToggleSize}
                 onRegenerateSize={handleRegenerateSize}
-                onConfirm={handleConfirm}
+                onUndoSize={handleUndoSize}
+                onInlineEditSize={handleInlineEditSize}
+                onEditSizePostText={handleEditSizePostText}
+                onAddCustomSize={handleAddCustomSize}
               />
             )}
           </div>
+
+          {/* Global modal footer — only rendered in Resize phase.
+              Setup has its Go button inside the chatbox.
+              Concept moves Finalize into the right-pane header. */}
+          {phase === "resize" && (
+            <ModalFooter
+              selectedSizesCount={workspace.selected_sizes.length}
+              isGenerating={isGenerating}
+              onConfirm={handleConfirm}
+            />
+          )}
         </motion.div>
       </motion.div>
     </AnimatePresence>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Modal footer — phase-specific primary CTA                          */
+/* ------------------------------------------------------------------ */
+
+interface ModalFooterProps {
+  selectedSizesCount: number;
+  isGenerating: boolean;
+  onConfirm: () => void;
+}
+
+function ModalFooter({ selectedSizesCount, isGenerating, onConfirm }: ModalFooterProps) {
+  return (
+    <div className="border-t border-border bg-white px-5 py-3 flex items-center justify-between">
+      <div className="text-[11px] text-text-tertiary">
+        {selectedSizesCount} size{selectedSizesCount !== 1 ? "s" : ""} ready to confirm
+      </div>
+      <button
+        type="button"
+        onClick={onConfirm}
+        disabled={selectedSizesCount === 0 || isGenerating}
+        className="inline-flex items-center gap-1.5 h-9 px-4 bg-accent text-white text-[13px] font-medium rounded-button hover:bg-accent-hover transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+      >
+        Confirm &amp; add to campaign
+      </button>
+    </div>
   );
 }
 

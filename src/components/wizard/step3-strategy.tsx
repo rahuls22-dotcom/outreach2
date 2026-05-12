@@ -207,14 +207,20 @@ export function Step3Strategy({ onNext, onBack }: Step3Props) {
                     <span className="text-[13px] font-medium text-text-primary">{persona.name}, {persona.age}</span>
                     <span className="text-[11px] text-text-secondary">({persona.role})</span>
                   </div>
-                  <ul className="mt-1.5 space-y-1">
-                    {persona.bullets.map((bullet: string, i: number) => (
-                      <li key={i} className="text-[12px] text-text-secondary flex items-start gap-1.5">
-                        <span className="text-text-tertiary mt-[2px]">•</span>
-                        <span>{bullet}</span>
-                      </li>
-                    ))}
-                  </ul>
+                  <div className="mt-1.5 space-y-2">
+                    {["Want", "Pain point", "Solution"].map((title, i) =>
+                      persona.bullets[i] ? (
+                        <div key={i}>
+                          <div className="text-[9px] font-semibold text-text-tertiary uppercase tracking-[0.5px] mb-0.5">
+                            {title}
+                          </div>
+                          <p className="text-[12px] text-text-secondary leading-snug">
+                            {persona.bullets[i]}
+                          </p>
+                        </div>
+                      ) : null
+                    )}
+                  </div>
                 </div>
               ))}
             </div>

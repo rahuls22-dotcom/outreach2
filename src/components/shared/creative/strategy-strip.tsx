@@ -28,7 +28,7 @@ export function StrategyStrip({
   hook,
   cta,
 }: StrategyStripProps) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
 
   const fields: { label: string; value?: string }[] = [
     { label: "Pain point", value: painPoint },

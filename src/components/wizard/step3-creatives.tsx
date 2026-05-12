@@ -35,11 +35,18 @@ export function Step3Creatives({ onNext, onBack }: Step3Props) {
   const [generatorModalAngle, setGeneratorModalAngle] = useState<string | null>(null);
   const [uploadModalAngle, setUploadModalAngle] = useState<string | null>(null);
   const [selectedPage, setSelectedPage] = useState("");
+  const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => {
     const timer = setTimeout(() => setIsLoading(false), 2000);
     return () => clearTimeout(timer);
   }, []);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 3000);
+    return () => clearTimeout(t);
+  }, [toast]);
 
   const hasAnyCreative = Object.keys(cardCreatives).length > 0;
   const activeGeneratorAngle = angleData.find((a) => a.id === generatorModalAngle);
@@ -107,16 +114,13 @@ export function Step3Creatives({ onNext, onBack }: Step3Props) {
                 variants={fadeUp}
                 className="bg-white border border-border rounded-card p-5 flex flex-col"
               >
-                {/* Angle Header */}
+                {/* Persona header (angle name moves below as the highlight) */}
                 <div className="mb-3">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-[10px] font-medium px-2 py-0.5 rounded-badge bg-accent/10 text-accent">{angle.angleName}</span>
-                  </div>
                   <h4 className="text-[13px] font-semibold text-text-primary">{angle.personaName}</h4>
                 </div>
 
                 {/* Angle Details */}
-                <div className="space-y-2 mb-4 flex-1">
+                <div className="space-y-2 mb-3 flex-1">
                   <div>
                     <span className="text-[10px] font-medium text-text-tertiary uppercase tracking-[0.3px]">Pain Point</span>
                     <p className="text-[11px] text-text-secondary leading-relaxed line-clamp-2 mt-0.5">{angle.painPoint}</p>
@@ -132,6 +136,16 @@ export function Step3Creatives({ onNext, onBack }: Step3Props) {
                   <div>
                     <span className="text-[10px] font-medium text-text-tertiary uppercase tracking-[0.3px]">CTA</span>
                     <p className="text-[11px] text-accent font-medium mt-0.5">{angle.cta}</p>
+                  </div>
+                </div>
+
+                {/* Angle highlight — the direction the creative will take */}
+                <div className="mb-3 rounded-[8px] bg-gradient-to-r from-violet-50 to-fuchsia-50 border border-violet-200/70 px-3 py-2">
+                  <div className="text-[9px] font-semibold uppercase tracking-[0.5px] bg-gradient-to-r from-violet-600 to-fuchsia-600 bg-clip-text text-transparent mb-0.5">
+                    Angle
+                  </div>
+                  <div className="text-[12px] font-semibold text-text-primary leading-tight">
+                    {angle.angleName}
                   </div>
                 </div>
 
@@ -216,6 +230,9 @@ export function Step3Creatives({ onNext, onBack }: Step3Props) {
               },
             }));
             setGeneratorModalAngle(null);
+            setToast(
+              `${creatives.length} creative${creatives.length !== 1 ? "s" : ""} added to ${activeGeneratorAngle.angleName}`
+            );
           }}
           angleName={activeGeneratorAngle.angleName}
           personaName={activeGeneratorAngle.personaName}
@@ -260,6 +277,15 @@ export function Step3Creatives({ onNext, onBack }: Step3Props) {
           Continue to Forms <ArrowRight size={15} strokeWidth={2} />
         </button>
       </div>
+
+      {/* Toast */}
+      {toast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[80] pointer-events-none">
+          <div className="inline-flex items-center gap-2 bg-text-primary text-white text-[13px] font-medium px-4 py-2.5 rounded-[8px] shadow-lg">
+            {toast}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

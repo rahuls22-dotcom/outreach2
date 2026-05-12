@@ -34,6 +34,47 @@ export interface ChatMessage {
   created_at: number;
 }
 
+/**
+ * Per-variant copy displayed on the AdMockup. All fields populated regardless
+ * of variant so inline editing has predictable targets.
+ */
+export interface MockupCopy {
+  // Variant 1 — bold lifestyle
+  eyebrow: string;          // e.g., "Phase 3 · Now Open"
+  // Variant 2 — price anchor
+  priceMain: string;        // e.g., "₹1.8"
+  priceUnit: string;        // e.g., "Cr"
+  priceLabel: string;       // e.g., "Starting Price"
+  priceSubtext: string;     // e.g., "RERA approved · Phase 3"
+  brandCorner: string;      // e.g., "GODREJ"
+  // Variant 3 — social proof
+  quote: string;            // e.g., "Changed our lives."
+  attribution: string;      // e.g., "— Rajesh & Priya"
+  subAttribution: string;   // e.g., "3BHK owners · 1200+ families"
+  // Variant 4 — premium dark
+  brandHeader: string;      // e.g., "Godrej Air"
+  titleLineA: string;       // e.g., "Luxury"
+  titleLineB: string;       // e.g., "Redefined"
+}
+
+/** Default mockup copy used when seeding a new variant. */
+export function defaultMockupCopy(): MockupCopy {
+  return {
+    eyebrow: "Phase 3 · Now Open",
+    priceMain: "₹1.8",
+    priceUnit: "Cr",
+    priceLabel: "Starting Price",
+    priceSubtext: "RERA approved · Phase 3",
+    brandCorner: "GODREJ",
+    quote: "Changed our lives.",
+    attribution: "— Rajesh & Priya",
+    subAttribution: "3BHK owners · 1200+ families",
+    brandHeader: "Godrej Air",
+    titleLineA: "Luxury",
+    titleLineB: "Redefined",
+  };
+}
+
 /** A single creative version. Lives in either concept_versions (Phase B) or per-size versions (Phase C). */
 export interface ConceptVersion {
   id: string;
@@ -41,20 +82,54 @@ export interface ConceptVersion {
   parent_id: string | null;
   /** Variant style id, drives the AdMockup variant prop (1-4). */
   variant: 1 | 2 | 3 | 4;
-  primary_text: string;
+  /** Top-level headline — surfaced in labels/tooltips and rendered on variant 1. */
   headline: string;
+  /** Post text shown in the resize phase under each size preview. */
+  primary_text: string;
+  /** Meta description carried through to GeneratedCreative output. */
   description: string;
+  /** Per-variant text rendered on the mockup. */
+  mockup: MockupCopy;
   /** Short label shown on the timeline thumbnail (e.g., "v1", "Bold"). */
   label: string;
   created_at: number;
 }
 
+/** Editable text fields on the AdMockup. "headline" is the top-level field; all others live in `mockup`. */
+export type MockupField = "headline" | keyof MockupCopy;
+
+/** Editable creative strategy values — seeded from the campaign angle on open. */
+export interface CreativeStrategy {
+  angleName: string;
+  personaName: string;
+  personaRole?: string;
+  painPoint: string;
+  usp: string;
+  hook: string;
+  cta: string;
+}
+
+/** An attached image (mock upload — picked from a small built-in gallery). */
+export interface AttachedImage {
+  /** Stable id of the gallery sample. */
+  sampleId: string;
+  /** Display name shown in the pill. */
+  name: string;
+}
+
 /** The whole modal's state, threaded through the orchestrator. */
 export interface CreativeWorkspace {
-  // Phase A inputs
+  // Phase A inputs (chatbox)
   prompt: string;
-  style_reference: { name: string } | null;
-  product_image: { name: string } | null;
+  style_reference: AttachedImage | null;
+  project_image: AttachedImage | null;
+  brand_logo: AttachedImage | null;
+  /** Boolean toggle — when on, the AI is instructed to follow brand guidelines. */
+  brand_guidelines_attached: boolean;
+  /** Boolean toggle — when on, the campaign strategy is attached to the prompt. */
+  creative_strategy_attached: boolean;
+  /** Editable strategy — seeded from the campaign angle, mutable by the user. */
+  strategy: CreativeStrategy;
 
   // Phase B (concept editor — chat + version history)
   concept_messages: ChatMessage[];
@@ -64,6 +139,10 @@ export interface CreativeWorkspace {
   // Phase C (resize editor — single current version per size, no chat)
   selected_sizes: string[];
   size_versions: Record<string, ConceptVersion>;
+  /** One-deep undo history per size. Captured before regen / manual edit. */
+  size_previous: Record<string, ConceptVersion>;
+  /** User-defined custom sizes, keyed by their generated id. */
+  custom_sizes: Record<string, SizeOption>;
 }
 
 /* ------------------------------------------------------------------ */
@@ -83,8 +162,16 @@ export const SIZE_OPTIONS: SizeOption[] = [
   { id: "story", dimensions: "1080×1920", label: "Story / Reel", aspectW: 9, aspectH: 16 },
   { id: "landscape", dimensions: "1200×628", label: "Landscape — Feed", aspectW: 1200, aspectH: 628 },
   { id: "portrait", dimensions: "1080×1350", label: "Portrait — Feed", aspectW: 4, aspectH: 5 },
-  { id: "sq-carousel", dimensions: "1080×1080", label: "Square — Carousel", aspectW: 1, aspectH: 1 },
 ];
+
+/** Visual orientation groups used to lay out the resize grid. */
+export type SizeOrientation = "square" | "tall" | "wide";
+
+export function orientationFor(sizeId: string): SizeOrientation {
+  if (sizeId === "story" || sizeId === "portrait") return "tall";
+  if (sizeId === "landscape") return "wide";
+  return "square";
+}
 
 export function getSize(sizeId: string): SizeOption | undefined {
   return SIZE_OPTIONS.find((s) => s.id === sizeId);
@@ -219,9 +306,53 @@ export function makeMockVersion(opts: {
     primary_text: base.primary_text,
     headline,
     description: base.description,
+    mockup: mockupCopyForBase(base, headline, opts.refinementText),
     label: opts.labelPrefix ?? base.label,
     created_at: Date.now(),
   };
+}
+
+/**
+ * Seed variant-specific mockup copy. The default values match what the AdMockup
+ * historically rendered for each variant; refinement hints get appended to the
+ * variant's most prominent visible text element so the mock visibly reacts.
+ */
+function mockupCopyForBase(
+  base: ConceptCopy,
+  effectiveHeadline: string,
+  refinementText: string | undefined
+): MockupCopy {
+  const hint = refinementText ? summariseRefinement(refinementText) : "";
+  const copy = defaultMockupCopy();
+  // Variant-specific defaults derived from the pool entry.
+  switch (base.variant) {
+    case 1:
+      // Variant 1 renders the headline directly — no mockup-specific main text.
+      copy.eyebrow = "Phase 3 · Now Open";
+      break;
+    case 2:
+      copy.priceMain = "₹1.8";
+      copy.priceUnit = "Cr";
+      copy.priceLabel = "Starting Price";
+      copy.priceSubtext = "RERA approved · Phase 3";
+      copy.brandCorner = "GODREJ";
+      break;
+    case 3:
+      copy.quote = "Changed our lives.";
+      copy.attribution = "— Rajesh & Priya";
+      copy.subAttribution = "3BHK owners · 1200+ families";
+      if (hint) copy.quote = `${copy.quote} · ${hint}`;
+      break;
+    case 4:
+      copy.brandHeader = "Godrej Air";
+      copy.titleLineA = "Luxury";
+      copy.titleLineB = "Redefined";
+      if (hint) copy.titleLineB = `${copy.titleLineB} · ${hint}`;
+      break;
+  }
+  // Silence unused-var warning when no refinement is applied for v1/v2.
+  void effectiveHeadline;
+  return copy;
 }
 
 /**
@@ -237,6 +368,53 @@ export function pickFreshVariant(
     return ((Math.floor(Math.random() * 4) + 1) as 1 | 2 | 3 | 4);
   }
   return candidates[Math.floor(Math.random() * candidates.length)] as 1 | 2 | 3 | 4;
+}
+
+/**
+ * Build a new ConceptVersion from a manual edit. Keeps the same visual variant
+ * as the source and labels the result "Edited" so it shows up in the timeline.
+ */
+export function makeEditedVersion(
+  source: ConceptVersion,
+  edits: { headline: string; primary_text: string; description: string }
+): ConceptVersion {
+  return {
+    id: mkId("ver"),
+    parent_id: source.id,
+    variant: source.variant,
+    primary_text: edits.primary_text,
+    headline: edits.headline,
+    description: edits.description,
+    mockup: { ...source.mockup },
+    label: "Edited",
+    created_at: Date.now(),
+  };
+}
+
+/**
+ * Build a new ConceptVersion from a single inline-text edit on the mockup.
+ * Mutates one mockup field (or the top-level headline) and labels it "Edited".
+ */
+export function makeInlineEditedVersion(
+  source: ConceptVersion,
+  field: MockupField,
+  value: string
+): ConceptVersion {
+  const trimmed = value.trim();
+  const next: ConceptVersion = {
+    ...source,
+    id: mkId("ver"),
+    parent_id: source.id,
+    mockup: { ...source.mockup },
+    label: "Edited",
+    created_at: Date.now(),
+  };
+  if (field === "headline") {
+    next.headline = trimmed || source.headline;
+  } else {
+    next.mockup[field] = trimmed || source.mockup[field];
+  }
+  return next;
 }
 
 /** Compose a short AI summary line for the chat reply. */
@@ -257,44 +435,31 @@ function summariseRefinement(text: string): string {
 /*  Workspace defaults                                                 */
 /* ------------------------------------------------------------------ */
 
-export const DEFAULT_SIZES: string[] = ["sq-feed"];
+export const DEFAULT_SIZES: string[] = ["sq-feed", "story", "landscape"];
 
-export function emptyWorkspace(): CreativeWorkspace {
+export function emptyWorkspace(strategy?: CreativeStrategy): CreativeWorkspace {
   return {
     prompt: "",
     style_reference: null,
-    product_image: null,
+    project_image: null,
+    brand_logo: null,
+    brand_guidelines_attached: false,
+    creative_strategy_attached: false,
+    strategy: strategy ?? {
+      angleName: "",
+      personaName: "",
+      painPoint: "",
+      usp: "",
+      hook: "",
+      cta: "",
+    },
     concept_messages: [],
     concept_versions: [],
     active_concept_version_id: null,
     selected_sizes: [...DEFAULT_SIZES],
     size_versions: {},
+    size_previous: {},
+    custom_sizes: {},
   };
 }
 
-/* ------------------------------------------------------------------ */
-/*  Setup helper — what will the AI do based on inputs?                */
-/* ------------------------------------------------------------------ */
-
-export function describeSetupMode(workspace: Pick<
-  CreativeWorkspace,
-  "prompt" | "style_reference" | "product_image"
->): string {
-  const hasRef = !!workspace.style_reference;
-  const hasProd = !!workspace.product_image;
-  const promptOk = workspace.prompt.trim().length > 0;
-
-  if (!promptOk && !hasRef && !hasProd) {
-    return "Add a prompt to get started. References and a product image are both optional.";
-  }
-  if (hasRef && hasProd) {
-    return `Will match the style of ${workspace.style_reference!.name} and feature ${workspace.product_image!.name}.`;
-  }
-  if (hasRef) {
-    return `Will match the visual style of ${workspace.style_reference!.name}.`;
-  }
-  if (hasProd) {
-    return `Will feature ${workspace.product_image!.name} in AI-designed layouts.`;
-  }
-  return "Will generate fully AI-designed visuals from your prompt.";
-}
