@@ -124,98 +124,112 @@ export default function ProjectsPage() {
         </div>
       </div>
 
-      {/* Portfolio table — wrapped in a horizontal-scroll container so
-          columns never collapse when the Spot panel is open. */}
-      <div className="card-base overflow-x-auto">
-        <div style={{ minWidth: 920 }}>
-        {/* Table header */}
-        <div
-          className="grid items-center px-5 py-2.5 border-b border-border bg-surface-page text-[10px] uppercase tracking-[0.04em] font-semibold text-text-tertiary"
-          style={{ gridTemplateColumns: "minmax(220px, 1.7fr) 90px 80px 80px 80px 90px minmax(160px, 1fr) 100px 24px" }}
-        >
-          <span>Project</span>
-          <span className="text-right">Spend</span>
-          <span className="text-right">Leads</span>
-          <span className="text-right">Verif rate</span>
-          <span className="text-right">QL rate</span>
-          <span className="text-right">CPVL</span>
-          <span>Goal progress</span>
-          <span className="text-right">Health</span>
-          <span />
-        </div>
-
-        {rows.map(({ p, d, rollup }, i) => {
-          const last = i === rows.length - 1;
-          const cpvl =
-            rollup.verifiedLeads && d
-              ? d.mediaPlan.rows.reduce((s, r) => s + (r.cpvl || 0), 0) /
-                Math.max(1, d.mediaPlan.rows.length)
-              : null;
-          return (
-            <button
-              key={p.id}
-              onClick={() => router.push(`/projects/${p.id}`)}
-              className={`hover-row text-left w-full grid items-center px-5 py-3.5 ${
-                last ? "" : "border-b border-border-subtle"
-              }`}
-              style={{ gridTemplateColumns: "minmax(220px, 1.7fr) 90px 80px 80px 80px 90px minmax(160px, 1fr) 100px 24px" }}
-            >
-              <div className="flex items-center gap-3 min-w-0">
-                <div
-                  className="flex-shrink-0 flex items-center justify-center"
-                  style={{
-                    width: 34,
-                    height: 34,
-                    borderRadius: 7,
-                    background: `linear-gradient(135deg, oklch(0.92 0.04 ${(p.id.length * 47) % 360}) 0%, oklch(0.78 0.06 ${
-                      (p.id.length * 47 + 40) % 360
-                    }) 100%)`,
-                    color: "rgba(0,0,0,0.5)",
-                  }}
-                >
-                  <Folder size={14} />
-                </div>
-                <div className="min-w-0">
-                  <div className="text-[14px] font-semibold truncate">{p.name.split(" · ")[0]}</div>
-                  <div className="text-[11px] text-text-tertiary truncate">
-                    {p.category}
-                    {d?.micromarket ? ` · ${d.micromarket.split(" · ")[0]}` : ""}
-                  </div>
-                </div>
+      {/* Portfolio table — compact column widths so it fits at common
+          laptop viewports (~700px content area) even when the Spot panel
+          is open. Wrapped in a horizontal-scroll fallback for narrower
+          cases. */}
+      {(() => {
+        const COLS =
+          "minmax(180px, 2.2fr) 70px 60px 70px 60px minmax(140px, 1.4fr) 90px 20px";
+        return (
+          <div className="card-base overflow-x-auto">
+            <div style={{ minWidth: 690 }}>
+              {/* Table header */}
+              <div
+                className="grid items-center px-4 py-2.5 border-b border-border bg-surface-page text-[10px] uppercase tracking-[0.04em] font-semibold text-text-tertiary"
+                style={{ gridTemplateColumns: COLS }}
+              >
+                <span>Project</span>
+                <span className="text-right">Spend</span>
+                <span className="text-right">Leads</span>
+                <span className="text-right">Verif</span>
+                <span className="text-right">QL</span>
+                <span>Goal progress</span>
+                <span className="text-right">Health</span>
+                <span />
               </div>
-              <span className="tabular-nums text-right text-[13px] font-medium">{rollup.spend}</span>
-              <span className="tabular-nums text-right text-[13px]">{rollup.totalLeads.toLocaleString()}</span>
-              <span className="tabular-nums text-right text-[13px]">{fmtRate(rollup.verifRate)}</span>
-              <span className="tabular-nums text-right text-[13px]">{fmtRate(rollup.qualRate)}</span>
-              <span className="tabular-nums text-right text-[13px]">
-                {cpvl ? `₹${Math.round(cpvl).toLocaleString()}` : "—"}
-              </span>
-              <GoalProgress goal={rollup.goal} />
-              <div className="flex justify-end">
-                <HealthPill health={p.health} />
-              </div>
-              <ChevronRight size={14} className="text-text-tertiary" />
-            </button>
-          );
-        })}
 
-        {/* Footer totals */}
-        <div
-          className="grid items-center px-5 py-2.5 border-t border-border bg-surface-page text-[12px] font-medium"
-          style={{ gridTemplateColumns: "minmax(220px, 1.7fr) 90px 80px 80px 80px 90px minmax(160px, 1fr) 100px 24px" }}
-        >
-          <span>Portfolio total</span>
-          <span className="tabular-nums text-right">₹{totalSpend.toFixed(1)}L</span>
-          <span className="tabular-nums text-right">{totalLeads.toLocaleString()}</span>
-          <span className="tabular-nums text-right">{totalVerifRate ? `${totalVerifRate.toFixed(1)}%` : "—"}</span>
-          <span className="tabular-nums text-right">{totalQualRate ? `${totalQualRate.toFixed(1)}%` : "—"}</span>
-          <span className="text-right text-text-tertiary">—</span>
-          <span className="text-[11px] text-text-tertiary font-normal">across {rows.length} projects</span>
-          <span />
-          <span />
-        </div>
-        </div>
-      </div>
+              {rows.map(({ p, d, rollup }, i) => {
+                const last = i === rows.length - 1;
+                return (
+                  <button
+                    key={p.id}
+                    onClick={() => router.push(`/projects/${p.id}`)}
+                    className={`hover-row text-left w-full grid items-center px-4 py-3.5 ${
+                      last ? "" : "border-b border-border-subtle"
+                    }`}
+                    style={{ gridTemplateColumns: COLS }}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div
+                        className="flex-shrink-0 flex items-center justify-center"
+                        style={{
+                          width: 32,
+                          height: 32,
+                          borderRadius: 7,
+                          background: `linear-gradient(135deg, oklch(0.92 0.04 ${(p.id.length * 47) % 360}) 0%, oklch(0.78 0.06 ${
+                            (p.id.length * 47 + 40) % 360
+                          }) 100%)`,
+                          color: "rgba(0,0,0,0.5)",
+                        }}
+                      >
+                        <Folder size={13} />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-[13.5px] font-semibold truncate leading-tight">
+                          {p.name.split(" · ")[0]}
+                        </div>
+                        <div className="text-[10.5px] text-text-tertiary truncate">
+                          {p.category}
+                          {d?.micromarket ? ` · ${d.micromarket.split(" · ")[0]}` : ""}
+                        </div>
+                      </div>
+                    </div>
+                    <span className="tabular-nums text-right text-[12.5px] font-medium">
+                      {rollup.spend}
+                    </span>
+                    <span className="tabular-nums text-right text-[12.5px]">
+                      {rollup.totalLeads.toLocaleString()}
+                    </span>
+                    <span className="tabular-nums text-right text-[12.5px]">
+                      {fmtRate(rollup.verifRate)}
+                    </span>
+                    <span className="tabular-nums text-right text-[12.5px]">
+                      {fmtRate(rollup.qualRate)}
+                    </span>
+                    <GoalProgress goal={rollup.goal} />
+                    <div className="flex justify-end">
+                      <HealthPill health={p.health} />
+                    </div>
+                    <ChevronRight size={14} className="text-text-tertiary" />
+                  </button>
+                );
+              })}
+
+              {/* Footer totals */}
+              <div
+                className="grid items-center px-4 py-2.5 border-t border-border bg-surface-page text-[12px] font-medium"
+                style={{ gridTemplateColumns: COLS }}
+              >
+                <span>Portfolio total</span>
+                <span className="tabular-nums text-right">₹{totalSpend.toFixed(1)}L</span>
+                <span className="tabular-nums text-right">{totalLeads.toLocaleString()}</span>
+                <span className="tabular-nums text-right">
+                  {totalVerifRate ? `${totalVerifRate.toFixed(1)}%` : "—"}
+                </span>
+                <span className="tabular-nums text-right">
+                  {totalQualRate ? `${totalQualRate.toFixed(1)}%` : "—"}
+                </span>
+                <span className="text-[11px] text-text-tertiary font-normal">
+                  across {rows.length} projects
+                </span>
+                <span />
+                <span />
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Spot ambient strip (workspace) */}
       <div className="spot-reply mt-6 p-4 flex items-start gap-3">
