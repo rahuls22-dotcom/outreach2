@@ -14,8 +14,13 @@ import {
   Settings,
   Eye,
   EyeOff,
+  Sparkles,
 } from "lucide-react";
 import { useDemoMode } from "@/lib/demo-mode";
+import { useSpotStore } from "@/lib/spot/store";
+import { SpotMark } from "@/components/spot/spot-mark";
+import { WorkspaceSwitcher, UserRolePill } from "@/components/layout/workspace-switcher";
+import { useCurrentUser } from "@/lib/workspace-store";
 
 const dashboardItem = { name: "Dashboard", href: "/dashboard", icon: LayoutGrid };
 
@@ -42,30 +47,20 @@ const navSections = [
       { name: "Integrations", href: "/integrations", icon: Plug, comingSoon: true },
     ],
   },
+  {
+    label: "Workspace",
+    items: [
+      { name: "Brand", href: "/brand", icon: Sparkles },
+    ],
+  },
 ];
-
-function RevspotLogo() {
-  return (
-    <svg width="30" height="30" viewBox="0 0 30 30" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect width="30" height="30" rx="6" fill="#1A1A1A" />
-      <defs>
-        <linearGradient id="r-gradient" x1="9" y1="6" x2="21" y2="24" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor="#E0E0E0" />
-          <stop offset="40%" stopColor="#B0B0B0" />
-          <stop offset="100%" stopColor="#808080" />
-        </linearGradient>
-      </defs>
-      <path
-        d="M10 22V8h5.5c1.2 0 2.2.35 2.95 1.05.75.7 1.05 1.6 1.05 2.7 0 .85-.2 1.55-.6 2.15-.4.55-.95.95-1.65 1.2L20.5 22h-2.8l-3-6.2h-2.2V22H10zm2.5-8.5h3c.6 0 1.05-.2 1.4-.5.35-.35.5-.8.5-1.3 0-.5-.15-.95-.5-1.25-.35-.35-.8-.5-1.4-.5h-3v3.55z"
-        fill="url(#r-gradient)"
-      />
-    </svg>
-  );
-}
 
 export function Sidebar() {
   const pathname = usePathname();
   const { isEmpty, toggle } = useDemoMode();
+  const askSpot = useSpotStore((s) => s.askSpot);
+  const spotOpen = useSpotStore((s) => s.open);
+  const user = useCurrentUser();
 
   const isActive = (href: string) => {
     if (href === "/dashboard") return pathname === "/dashboard" || pathname === "/";
@@ -81,20 +76,41 @@ export function Sidebar() {
 
   return (
     <aside className="fixed left-0 top-0 h-screen w-sidebar bg-white border-r border-border flex flex-col z-50">
-      {/* Logo */}
-      <div className="px-4 py-4 flex items-center gap-2.5">
-        <RevspotLogo />
-        <span className="text-[15px] font-semibold text-text-primary">Revspot</span>
+      {/* Workspace switcher — sits in the brand row; the workspace mark IS
+          the brand mark in this product (Revspot is implicit). */}
+      <div className="px-2 pt-3 pb-2 border-b border-border-subtle">
+        <WorkspaceSwitcher />
       </div>
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto px-3 py-1 pb-2">
-        {/* Dashboard — standalone at top */}
-        <div className="mb-3">
+        {/* Dashboard + Spot — standalone at top */}
+        <div className="mb-3 space-y-0.5">
           <Link href={dashboardItem.href} className={navLinkClass(dashboardItem.href)} style={{ fontSize: "13.5px" }}>
             <dashboardItem.icon size={16} strokeWidth={1.5} />
             <span>{dashboardItem.name}</span>
           </Link>
+          <button
+            type="button"
+            onClick={() => askSpot("")}
+            className={`relative flex items-center gap-2.5 px-2 h-8 rounded-[6px] transition-colors duration-150 w-full text-left ${
+              spotOpen
+                ? "bg-surface-secondary text-text-primary font-medium"
+                : "text-text-secondary hover:bg-surface-secondary/60"
+            }`}
+            style={{ fontSize: "13.5px" }}
+          >
+            <span className="inline-flex items-center justify-center" style={{ width: 16, height: 16 }}>
+              <SpotMark size={14} />
+            </span>
+            <span>Spot</span>
+            <span
+              className="ml-auto"
+              style={{ width: 6, height: 6, borderRadius: "50%", background: "#1A1A1A" }}
+              aria-hidden
+              title="New from Spot"
+            />
+          </button>
         </div>
 
         {/* Sections */}
@@ -149,11 +165,16 @@ export function Sidebar() {
       <div className="border-t border-border px-3 py-2">
         <div className="flex items-center gap-2">
           <div className="w-[26px] h-[26px] rounded-full bg-surface-secondary flex items-center justify-center flex-shrink-0">
-            <span className="text-[10px] font-medium text-text-secondary">GP</span>
+            <span className="text-[10px] font-medium text-text-secondary">
+              {user.name.split(" ").map((w) => w[0]).join("").slice(0, 2)}
+            </span>
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-[12px] font-medium text-text-primary leading-tight">Godrej Properties</div>
-            <div className="text-[10px] text-text-tertiary truncate">demo@godrejproperties.com</div>
+            <div className="text-[12px] font-medium text-text-primary leading-tight flex items-center gap-1.5">
+              <span className="truncate">{user.name}</span>
+              <UserRolePill />
+            </div>
+            <div className="text-[10px] text-text-tertiary truncate">{user.email}</div>
           </div>
           <button className="p-1 text-text-tertiary hover:text-text-secondary transition-colors">
             <Settings size={14} strokeWidth={1.5} />

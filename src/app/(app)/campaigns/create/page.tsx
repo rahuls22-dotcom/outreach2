@@ -19,6 +19,8 @@ import { Step3Creatives } from "@/components/wizard/step3-creatives";
 import { Step4Forms } from "@/components/wizard/step4-forms";
 import { Step5Structure } from "@/components/wizard/step5-structure";
 import { CampaignResult } from "@/components/wizard/campaign-result";
+import { SpotMark } from "@/components/spot/spot-mark";
+import { useSpotStore } from "@/lib/spot/store";
 
 const fadeUp: Variants = {
   hidden: { opacity: 0, y: 6 },
@@ -39,6 +41,8 @@ const RESULT_INDEX = steps.length;
 export default function CreateCampaignPage() {
   const router = useRouter();
   const [currentStep, setCurrentStep] = useState(0);
+  const askSpot = useSpotStore((s) => s.askSpot);
+  const openGuided = useSpotStore((s) => s.openGuided);
 
   // Debug helper — ?start=N jumps to that step index (N = RESULT_INDEX previews the result state)
   useEffect(() => {
@@ -57,17 +61,50 @@ export default function CreateCampaignPage() {
   return (
     <motion.div initial="hidden" animate="show" variants={fadeUp}>
       {/* Breadcrumb */}
-      <div className="flex items-center gap-2 mb-6">
+      <div className="flex items-center justify-between gap-2 mb-4">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => router.push("/campaigns")}
+            className="p-1 rounded-button text-text-secondary hover:bg-surface-secondary hover:text-text-primary transition-colors duration-150"
+          >
+            <ArrowLeft size={16} strokeWidth={1.5} />
+          </button>
+          <span className="text-meta text-text-secondary">
+            Lead Generation › Campaigns › Create
+          </span>
+        </div>
         <button
-          onClick={() => router.push("/campaigns")}
-          className="p-1 rounded-button text-text-secondary hover:bg-surface-secondary hover:text-text-primary transition-colors duration-150"
+          type="button"
+          onClick={() =>
+            askSpot("Help me set up this campaign — what should I optimize for?")
+          }
+          className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-button border border-border bg-white hover:border-border-hover hover:bg-surface-page text-[11.5px]"
         >
-          <ArrowLeft size={16} strokeWidth={1.5} />
+          <SpotMark size={11} /> Ask Spot
         </button>
-        <span className="text-meta text-text-secondary">
-          Lead Generation › Campaigns › Create
-        </span>
       </div>
+
+      {/* Spot ambient strip — only on step 0 */}
+      {currentStep === 0 && (
+        <div className="spot-reply mb-6 p-3.5 flex items-start gap-3">
+          <SpotMark size={18} />
+          <div className="flex-1">
+            <div className="uplabel mb-0.5">Spot</div>
+            <div className="text-[13px] leading-[1.5]">
+              You can walk the wizard yourself, or skip ahead and let me draft a starting
+              campaign — type, name, objective, and budget. You'll confirm every step.
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => openGuided({ kind: "new-campaign" })}
+            className="apply-btn flex-shrink-0"
+            style={{ background: "linear-gradient(135deg, #7C3AED 0%, #C026D3 100%)" }}
+          >
+            <Sparkles size={11} /> Let Spot draft this
+          </button>
+        </div>
+      )}
 
       {/* Progress Bar */}
       <div className="flex items-center justify-center mb-10">

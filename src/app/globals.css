@@ -21,9 +21,36 @@
     --destructive: #E53E3E;
     --destructive-foreground: #FFFFFF;
     --border: #E5E5E5;
+    --border-hover: #D4D4D4;
+    --border-subtle: #F0F0F0;
     --input: #E5E5E5;
     --ring: #1A1A1A;
     --radius: 0.5rem;
+
+    /* Chat-Mode additions: warm-tinted Spot surface */
+    --chat-bg: #F8F7F4;
+    --chat-bubble-bg: #FFFFFF;
+    --chat-user-bg: #111111;
+    --chat-user-fg: #FAFAF8;
+    --spot-tint: #FAF8F2;
+    --spot-stroke: #E8E3D5;
+
+    /* Semantic status pairs */
+    --ok-bg: #F0FDF4;   --ok-fg: #15803D;
+    --info-bg: #EFF6FF; --info-fg: #1D4ED8;
+    --warn-bg: #FEF3C7; --warn-fg: #92400E;
+    --err-bg: #FEF2F2;  --err-fg: #DC2626;
+
+    /* Text scale aliases (match design tokens) */
+    --text-1: #0A0A0A;
+    --text-2: #6B6B6B;
+    --text-3: #9B9B9B;
+
+    /* Surfaces (aliases) */
+    --bg-page: #FAFAFA;
+    --bg-card: #FFFFFF;
+    --bg-secondary: #F5F5F5;
+    --accent-hover: #333333;
   }
 
   * {
@@ -79,3 +106,126 @@
   animation: skeleton 1.5s ease-in-out infinite;
   border-radius: 4px;
 }
+
+/* ─── Chat Mode design system ────────────────────────────────────────── */
+
+.tabular { font-variant-numeric: tabular-nums; }
+.mono { font-family: ui-monospace, "JetBrains Mono", SFMono-Regular, Menlo, monospace; }
+
+::selection { background: #1A1A1A; color: #FAFAF8; }
+
+/* Uppercase eyebrow label */
+.uplabel {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
+/* Pill / badge family */
+.pill {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 8px; border-radius: 6px;
+  font-size: 11px; font-weight: 500;
+  background: var(--bg-secondary); color: var(--text-2);
+  line-height: 1.5;
+  white-space: nowrap;
+}
+.pill-ok   { background: var(--ok-bg);   color: var(--ok-fg); }
+.pill-info { background: var(--info-bg); color: var(--info-fg); }
+.pill-warn { background: var(--warn-bg); color: var(--warn-fg); }
+.pill-err  { background: var(--err-bg);  color: var(--err-fg); }
+.pill-dark { background: #111; color: #FAFAF8; }
+
+/* Hover row */
+.hover-row { transition: background 120ms ease; }
+.hover-row:hover { background: var(--bg-page); }
+
+/* Spot mark — radial-gradient brand glyph */
+.spot-mark {
+  width: 22px; height: 22px; border-radius: 5px;
+  background:
+    radial-gradient(circle at 30% 30%, #FFFCEC 0%, #E8E0C8 30%, #2A2620 80%);
+  box-shadow: inset 0 0 0 0.5px rgba(255,255,255,0.4);
+  display: inline-flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  position: relative;
+}
+.spot-mark::after {
+  content: ""; width: 5px; height: 5px; border-radius: 50%;
+  background: #FFFCEC; box-shadow: 0 0 6px rgba(255,252,236,0.6);
+}
+
+/* Spot reply container (warm tint) */
+.spot-reply {
+  background: var(--spot-tint);
+  border: 1px solid var(--spot-stroke);
+  border-radius: 10px;
+}
+
+/* Composer — focus ring matches chat-mode spec */
+.composer {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #FFF;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+.composer:focus-within {
+  border-color: #1A1A1A;
+  box-shadow: 0 0 0 4px rgba(26,26,26,0.06);
+}
+.composer textarea {
+  width: 100%; border: 0; outline: 0; resize: none;
+  background: transparent; padding: 12px 14px 0 14px;
+  font: inherit; color: var(--text-1);
+  min-height: 44px; max-height: 200px;
+}
+.composer textarea::placeholder { color: var(--text-3); }
+
+/* Apply / hero AI primary button (smaller than .btn-primary) */
+.apply-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  height: 26px; padding: 0 10px;
+  font-size: 11.5px; font-weight: 600;
+  border-radius: 6px;
+  background: #111; color: #FAFAF8; border: 0;
+  cursor: pointer; transition: background 120ms ease;
+}
+.apply-btn:hover { background: #000; }
+.apply-btn[disabled] { opacity: 0.55; cursor: default; }
+
+/* Scrim (modal backdrop) */
+.scrim {
+  position: fixed; inset: 0; background: rgba(20,20,20,0.32);
+  backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px);
+  z-index: 90;
+}
+
+/* Panel shadow (slide-over) */
+.panel-shadow {
+  box-shadow: -8px 0 24px -8px rgba(0,0,0,0.08);
+}
+
+/* Card primitive */
+.card-base {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+/* Scrollbar polish */
+.scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+.scroll::-webkit-scrollbar-thumb { background: #D4D4D4; border-radius: 4px; }
+.scroll::-webkit-scrollbar-thumb:hover { background: #A0A0A0; }
+.scroll::-webkit-scrollbar-track { background: transparent; }
+
+/* Chat-mode animation primitives */
+@keyframes fadeUp { from { transform: translateY(6px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes fadeInScale { from { transform: scale(0.995); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes slideInRight { from { transform: translateX(20px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes spotPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+.fadeUp { animation: fadeUp 240ms ease-out forwards; }
+.fadeInScale { animation: fadeInScale 160ms ease-out forwards; }
+.slideInRight { animation: slideInRight 240ms ease-out forwards; }
+.spot-pulse { animation: spotPulse 1.6s ease-in-out infinite; }
