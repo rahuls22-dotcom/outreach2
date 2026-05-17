@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   X,
   Check,
@@ -11,9 +11,16 @@ import {
   Users,
   Monitor,
   Play,
+  ChevronDown,
 } from "lucide-react";
 import { SpotMark } from "@/components/spot/spot-mark";
 import { useSpotStore } from "@/lib/spot/store";
+import {
+  CAMPAIGN_TYPE_BY_ID,
+  CAMPAIGN_TYPE_ORDER,
+  type CampaignTypeId,
+  type PlannedAdSet,
+} from "@/lib/campaign-types";
 
 type Stage = "intent" | "brief" | "goal" | "personas" | "plan";
 
@@ -465,17 +472,54 @@ function ProgressivePersonas({
   );
 }
 
-// ─── Media plan summary card ─────────────────────────────────────────
+// ─── Media plan accordion ───────────────────────────────────────────
+//
+// Every draft media plan has the same four canonical campaigns in this
+// order: Experiment → Scaling → Cost / Bid Cap → Advantage+. Each card
+// is collapsible and shows the ad sets Spot has planned underneath it.
 
-function MediaPlanSummary({ draft }: { draft: Draft }) {
+type PlanCampaign = {
+  id: string;
+  typeId: CampaignTypeId;
+  name: string;
+  adSets: PlannedAdSet[];
+};
+
+function deriveCampaigns(draft: Draft): PlanCampaign[] {
   const approved = draft.personas.filter((p) => p.approved);
-  // Mock-derive a plan: 1-2 ad sets per approved persona, balanced spend.
-  const weeklyBudget = 35000 * approved.length;
-  const adSetsPerPersona = 2;
-  const adsPerSet = 3;
-  const totalCreativesNeeded = approved.length * adSetsPerPersona * adsPerSet;
+  const slim = approved.map((p) => ({ id: p.id, name: p.name }));
+  const projectShort = draft.name.split(" · ")[0] || draft.name;
+  return CAMPAIGN_TYPE_ORDER.map((typeId, i) => {
+    const type = CAMPAIGN_TYPE_BY_ID[typeId];
+    return {
+      id: `pc-${typeId}-${i}`,
+      typeId,
+      name: `${projectShort} · ${type.short}`,
+      adSets: type.defaultAdSets(slim),
+    };
+  });
+}
+
+function MediaPlanAccordion({ draft }: { draft: Draft }) {
+  const campaigns = useMemo(() => deriveCampaigns(draft), [draft]);
+  const approvedCount = draft.personas.filter((p) => p.approved).length;
+  // Default: Experiment expanded, others collapsed. The user reviews the
+  // most important campaign first.
+  const [expanded, setExpanded] = useState<Record<string, boolean>>(() => ({
+    [campaigns[0]?.id || ""]: true,
+  }));
+
+  const adSetsTotal = campaigns.reduce((s, c) => s + c.adSets.length, 0);
+  const dailyBudget = campaigns.reduce(
+    (s, c) => s + c.adSets.reduce((a, ad) => a + ad.budgetDaily, 0),
+    0,
+  );
+  const weeklyBudget = dailyBudget * 7;
+  const creativesTotal = adSetsTotal * 3;
+
   return (
     <div className="card-base overflow-hidden">
+      {/* Header */}
       <div
         className="px-4 py-2.5"
         style={{
@@ -485,48 +529,32 @@ function MediaPlanSummary({ draft }: { draft: Draft }) {
       >
         <div className="text-[12px] uppercase tracking-wide font-semibold">Draft media plan</div>
       </div>
+
       <div className="p-4">
-        <div
-          className="grid mb-4"
-          style={{ gridTemplateColumns: "repeat(4, 1fr)", gap: 14 }}
-        >
-          <div>
-            <div className="uplabel" style={{ fontSize: 10 }}>Personas live</div>
-            <div className="tabular-nums" style={{ fontSize: 22, fontWeight: 600 }}>{approved.length}</div>
-          </div>
-          <div>
-            <div className="uplabel" style={{ fontSize: 10 }}>Ad sets</div>
-            <div className="tabular-nums" style={{ fontSize: 22, fontWeight: 600 }}>{approved.length * adSetsPerPersona}</div>
-          </div>
-          <div>
-            <div className="uplabel" style={{ fontSize: 10 }}>Creatives to make</div>
-            <div className="tabular-nums" style={{ fontSize: 22, fontWeight: 600 }}>{totalCreativesNeeded}</div>
-          </div>
-          <div>
-            <div className="uplabel" style={{ fontSize: 10 }}>Weekly spend</div>
-            <div className="tabular-nums" style={{ fontSize: 22, fontWeight: 600 }}>
-              ₹{(weeklyBudget / 1000).toFixed(0)}K
-            </div>
-          </div>
+        {/* KPI strip */}
+        <div className="grid mb-4" style={{ gridTemplateColumns: "repeat(4, 1fr)", gap: 14 }}>
+          <KpiTile label="Personas live" value={String(approvedCount)} />
+          <KpiTile label="Ad sets" value={String(adSetsTotal)} />
+          <KpiTile label="Creatives to make" value={String(creativesTotal)} />
+          <KpiTile label="Weekly spend" value={`₹${(weeklyBudget / 1000).toFixed(0)}K`} />
         </div>
+
+        {/* 4 collapsible campaign cards */}
         <div className="space-y-2">
-          {approved.map((p) => (
-            <div
-              key={p.id}
-              className="flex items-center gap-3 px-3 py-2 rounded-[7px]"
-              style={{ background: "var(--bg-page)" }}
-            >
-              <PersonaAvatar id={p.id} size={26} />
-              <div className="flex-1 min-w-0">
-                <div className="text-[12.5px] font-medium truncate">{p.name}</div>
-                <div className="text-[10.5px] text-text-tertiary truncate">
-                  {adSetsPerPersona} ad sets · {adsPerSet} ads each · ₹{((weeklyBudget / approved.length) / 1000).toFixed(0)}K/wk
-                </div>
-              </div>
-              <span className="pill" style={{ fontSize: 10 }}>To create</span>
-            </div>
+          {campaigns.map((c) => (
+            <CampaignAccordionCard
+              key={c.id}
+              campaign={c}
+              personas={draft.personas}
+              expanded={!!expanded[c.id]}
+              onToggle={() =>
+                setExpanded((prev) => ({ ...prev, [c.id]: !prev[c.id] }))
+              }
+            />
           ))}
         </div>
+
+        {/* Spot bubble */}
         <div
           className="mt-4 px-3.5 py-2.5 rounded-[8px] flex items-start gap-2.5"
           style={{ background: "var(--spot-tint)", border: "1px solid var(--spot-stroke)" }}
@@ -539,6 +567,154 @@ function MediaPlanSummary({ draft }: { draft: Draft }) {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function KpiTile({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <div className="uplabel" style={{ fontSize: 10 }}>{label}</div>
+      <div className="tabular-nums" style={{ fontSize: 22, fontWeight: 600 }}>
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function CampaignAccordionCard({
+  campaign,
+  personas,
+  expanded,
+  onToggle,
+}: {
+  campaign: PlanCampaign;
+  personas: PersonaDraft[];
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const type = CAMPAIGN_TYPE_BY_ID[campaign.typeId];
+  const weekly = campaign.adSets.reduce((s, a) => s + a.budgetDaily, 0) * 7;
+  return (
+    <div
+      className="rounded-[10px] overflow-hidden"
+      style={{
+        background: "#FFF",
+        border: `1px solid ${expanded ? type.accent + "55" : "var(--border)"}`,
+        transition: "border-color 120ms ease",
+      }}
+    >
+      <button
+        type="button"
+        onClick={onToggle}
+        className="w-full flex items-center gap-3 px-3.5 py-2.5 text-left hover-row"
+      >
+        <span
+          className="inline-flex items-center justify-center flex-shrink-0"
+          style={{
+            width: 26,
+            height: 26,
+            borderRadius: 6,
+            background: type.accent,
+            color: "#FFF",
+            fontSize: 10,
+            fontWeight: 700,
+            letterSpacing: "-0.02em",
+          }}
+        >
+          {type.short.slice(0, 2).toUpperCase()}
+        </span>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[13px] font-semibold truncate">{type.short}</span>
+            <span className="pill" style={{ fontSize: 10 }}>
+              {campaign.adSets.length} ad set{campaign.adSets.length === 1 ? "" : "s"}
+            </span>
+          </div>
+          <div className="text-[11px] text-text-tertiary truncate">{type.tagline}</div>
+        </div>
+        <div className="text-right flex-shrink-0">
+          <div className="text-[12.5px] font-medium tabular-nums">
+            ₹{(weekly / 1000).toFixed(0)}K/wk
+          </div>
+          <div className="text-[10px] text-text-tertiary">
+            {type.bidStrategy.split(" · ")[0]}
+          </div>
+        </div>
+        <ChevronDown
+          size={14}
+          className="text-text-tertiary flex-shrink-0"
+          style={{
+            transform: expanded ? "rotate(180deg)" : "rotate(0deg)",
+            transition: "transform 160ms ease",
+          }}
+        />
+      </button>
+
+      {expanded && (
+        <div
+          className="border-t border-border-subtle"
+          style={{ background: "var(--bg-page)" }}
+        >
+          {campaign.adSets.length === 0 ? (
+            <div className="px-4 py-3 text-[12px] text-text-tertiary italic">
+              No ad sets planned yet.
+            </div>
+          ) : (
+            <div className="divide-y divide-border-subtle">
+              {campaign.adSets.map((ad) => {
+                const persona = ad.personaId
+                  ? personas.find((p) => p.id === ad.personaId)
+                  : null;
+                return (
+                  <div
+                    key={ad.id}
+                    className="grid items-start gap-3 px-4 py-3"
+                    style={{ gridTemplateColumns: "1fr 90px" }}
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <span className="text-[12.5px] font-medium truncate">{ad.name}</span>
+                        {persona && (
+                          <span
+                            className="pill"
+                            style={{
+                              fontSize: 10,
+                              background: "#FFF",
+                              border: "1px solid var(--border)",
+                            }}
+                          >
+                            <Users size={9} /> {persona.name}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[11px] text-text-secondary leading-[1.5] mb-1">
+                        {ad.audience}
+                      </div>
+                      <div className="text-[10.5px] text-text-tertiary">
+                        Optimize for: {ad.optimization}
+                      </div>
+                    </div>
+                    <div className="text-right tabular-nums">
+                      <div className="text-[12.5px] font-medium">
+                        ₹{(ad.budgetDaily / 1000).toFixed(0)}K
+                      </div>
+                      <div className="text-[10px] text-text-tertiary">/ day</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          <div
+            className="px-4 py-2 text-[10.5px] text-text-tertiary leading-[1.5] border-t border-border-subtle"
+            style={{ background: "#FFF" }}
+          >
+            <strong className="text-text-secondary font-semibold">{type.name}</strong> ·{" "}
+            {type.when}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -800,7 +976,7 @@ export function CreateProjectFlow({
                 yet — open the plan to create ads per persona, review ad-set targeting, set up the
                 lead form, and deploy.
               </SpotBubble>
-              <MediaPlanSummary draft={draft} />
+              <MediaPlanAccordion draft={draft} />
               <div className="flex justify-between mt-4">
                 <button type="button" className="inline-flex items-center h-8 px-3 rounded-button border border-border bg-white text-[12.5px]" onClick={prev}>
                   Back

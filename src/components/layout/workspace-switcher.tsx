@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, ChevronsUpDown, Settings as SettingsIcon, UserPlus } from "lucide-react";
+import { Check, ChevronsUpDown, UserPlus } from "lucide-react";
 import { InviteUserModal } from "@/components/invite/invite-user-modal";
 import { RevspotLogo } from "@/components/layout/revspot-logo";
 import {
@@ -94,9 +94,13 @@ export function WorkspaceSwitcher() {
         ref={triggerRef}
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-[8px] hover:bg-surface-secondary transition-colors text-left"
+        className="w-full flex items-center gap-2 px-2 py-2 rounded-[8px] hover:bg-surface-secondary transition-colors text-left"
       >
-        {isAll ? <AllMark size={28} /> : currentWs ? <WorkspaceMark ws={currentWs} size={28} /> : null}
+        {/* Revspot R is always present — brand mark for the product. */}
+        <RevspotLogo size={22} />
+        {/* When scoped to a specific workspace, show its color tile too;
+            when scoped to "all", the R is the only mark (no double R). */}
+        {!isAll && currentWs && <WorkspaceMark ws={currentWs} size={22} />}
         <div className="flex-1 min-w-0">
           <div className="text-[13.5px] font-semibold text-text-primary leading-tight truncate">
             {isAll ? "All workspaces" : currentWs?.name}
@@ -193,13 +197,6 @@ export function WorkspaceSwitcher() {
           >
             <UserPlus size={12} />
             Invite teammates
-          </button>
-          <button
-            type="button"
-            className="w-full flex items-center gap-2 px-2 py-1.5 rounded-[6px] hover:bg-surface-page text-[11.5px] text-text-secondary"
-          >
-            <SettingsIcon size={12} />
-            Workspace settings
           </button>
         </div>
       )}
