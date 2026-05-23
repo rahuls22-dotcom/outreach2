@@ -15,6 +15,7 @@ import {
   Eye,
   EyeOff,
   Sparkles,
+  UserSearch,
 } from "lucide-react";
 import { useDemoMode } from "@/lib/demo-mode";
 import { useSpotStore } from "@/lib/spot/store";
@@ -41,6 +42,7 @@ const navSections = [
   {
     label: "Tools",
     items: [
+      { name: "Enrichment", href: "/enrichment", icon: UserSearch },
       { name: "Creatives", href: "/creatives", icon: ImageIcon },
       { name: "Agents", href: "/agents-mvp", icon: Zap },
       { name: "Audiences", href: "/audiences", icon: Globe, comingSoon: true },
