@@ -7,6 +7,7 @@ import {
   Check,
   Sparkles,
   Upload,
+  UploadCloud,
   ArrowRight,
   Plus,
   Trash2,
@@ -15,10 +16,11 @@ import {
   Target,
   Info,
   Images,
+  Brain,
 } from "lucide-react";
 import { SpotMark } from "@/components/spot/spot-mark";
 import { useSpotStore } from "@/lib/spot/store";
-import { useCurrentScope, useCurrentWorkspaceLabel } from "@/lib/workspace-store";
+import { useCurrentScope } from "@/lib/workspace-store";
 import { addRuntimeProject } from "@/lib/project-data";
 import { buildProjectFromDraft } from "@/lib/build-project";
 import { PersonaAvatar } from "@/components/project/deploy-steps";
@@ -238,6 +240,13 @@ function FileDropArea({
     onChange([...files, ...additions]);
   };
 
+  const openPicker = () => {
+    if (disabled) return;
+    fileRef.current?.click();
+  };
+
+  const isEmpty = files.length === 0;
+
   return (
     <div>
       <div
@@ -246,6 +255,9 @@ function FileDropArea({
       >
         Attach anything <span className="text-text-tertiary normal-case">(optional)</span>
       </div>
+
+      {/* The whole zone is the dropzone — empty state is a tall, obvious target;
+          once files are added it shrinks to a compact list with a footer rail. */}
       <div
         onDragOver={(e) => {
           e.preventDefault();
@@ -257,54 +269,113 @@ function FileDropArea({
           setDragOver(false);
           ingest(e.dataTransfer.files);
         }}
-        className="rounded-[8px] p-2.5 flex flex-col gap-1.5"
+        role={isEmpty ? "button" : undefined}
+        tabIndex={isEmpty ? 0 : undefined}
+        onClick={isEmpty ? openPicker : undefined}
+        onKeyDown={
+          isEmpty
+            ? (e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  openPicker();
+                }
+              }
+            : undefined
+        }
+        className="rounded-[10px] transition-all"
         style={{
-          border: `1px ${dragOver ? "solid" : "dashed"} ${dragOver ? "#7C3AED" : "#E0CC95"}`,
-          background: dragOver ? "#FAF5FF" : "#FFF",
-          minHeight: 76,
-          transition: "border-color 120ms, background 120ms",
+          border: `${dragOver ? 2 : 1.5}px dashed ${
+            dragOver ? "#7C3AED" : isEmpty ? "#D4B870" : "#E0CC95"
+          }`,
+          background: dragOver
+            ? "#FAF5FF"
+            : isEmpty
+              ? "#FFFCF2"
+              : "#FFFDF6",
           opacity: disabled ? 0.6 : 1,
+          cursor: isEmpty && !disabled ? "pointer" : "default",
         }}
       >
-        {files.length > 0 && (
-          <div className="space-y-1.5">
-            {files.map((f) => (
-              <div
-                key={f.id}
-                className="flex items-center gap-2 px-2 py-1.5 rounded-[6px] group"
-                style={{ background: "#FFFDF6", border: "1px solid #EFE3C2" }}
+        {isEmpty ? (
+          <div
+            className="flex flex-col items-center justify-center text-center px-4 py-7"
+            style={{ minHeight: 132 }}
+          >
+            <span
+              className="inline-flex items-center justify-center mb-2.5"
+              style={{
+                width: 38,
+                height: 38,
+                borderRadius: 10,
+                background: dragOver
+                  ? "linear-gradient(135deg, #EDE0FF 0%, #FBEFFF 100%)"
+                  : "#FFF6D9",
+                color: dragOver ? "#7C3AED" : "#9C6D00",
+                boxShadow: dragOver
+                  ? "0 4px 14px rgba(124,58,237,0.18)"
+                  : "0 1px 2px rgba(156,109,0,0.08)",
+                transition: "background 120ms, color 120ms, box-shadow 120ms",
+              }}
+            >
+              <UploadCloud size={20} strokeWidth={2} />
+            </span>
+            <div className="text-[13px] font-semibold leading-tight mb-1">
+              {dragOver ? "Release to attach" : "Drop files here"}
+            </div>
+            <div className="text-[11.5px] text-text-tertiary leading-[1.5] max-w-[320px]">
+              Brand book, brochure deck, site plan, listing PDF — anything you
+              have. Or{" "}
+              <span
+                className="font-medium"
+                style={{ color: "#7C3AED", textDecoration: "underline" }}
               >
-                <FileKindIcon kind={f.kind} />
-                <div className="flex-1 min-w-0">
-                  <div className="text-[12px] font-medium truncate">{f.name}</div>
-                  <div className="text-[10px] text-text-tertiary">
-                    <span className="uppercase">{f.kind}</span> · {f.size}
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  disabled={disabled}
-                  onClick={() => onChange(files.filter((x) => x.id !== f.id))}
-                  className="inline-flex items-center justify-center h-5 w-5 rounded-button text-text-tertiary opacity-0 group-hover:opacity-100 hover:text-text-secondary"
-                  title="Remove"
+                click to browse
+              </span>
+              .
+            </div>
+          </div>
+        ) : (
+          <div className="p-2.5">
+            <div className="space-y-1.5">
+              {files.map((f) => (
+                <div
+                  key={f.id}
+                  className="flex items-center gap-2 px-2 py-1.5 rounded-[6px] group"
+                  style={{ background: "#FFF", border: "1px solid #EFE3C2" }}
                 >
-                  <X size={11} />
-                </button>
-              </div>
-            ))}
+                  <FileKindIcon kind={f.kind} />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[12px] font-medium truncate">{f.name}</div>
+                    <div className="text-[10px] text-text-tertiary">
+                      <span className="uppercase">{f.kind}</span> · {f.size}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => onChange(files.filter((x) => x.id !== f.id))}
+                    className="inline-flex items-center justify-center h-5 w-5 rounded-button text-text-tertiary opacity-0 group-hover:opacity-100 hover:text-text-secondary"
+                    title="Remove"
+                  >
+                    <X size={11} />
+                  </button>
+                </div>
+              ))}
+            </div>
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={openPicker}
+              className="mt-2 w-full inline-flex items-center justify-center gap-1.5 text-[11.5px] text-text-secondary hover:text-text-primary py-1.5 rounded-[6px]"
+              style={{
+                border: "1px dashed #E0CC95",
+                background: "transparent",
+              }}
+            >
+              <Plus size={12} /> Drop more or click to add
+            </button>
           </div>
         )}
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={() => fileRef.current?.click()}
-          className="inline-flex items-center gap-1.5 self-start text-[11.5px] text-text-secondary hover:text-text-primary px-2 py-1 rounded-button"
-        >
-          <Plus size={12} /> {files.length === 0 ? "Add a file" : "Add another"}
-          {files.length === 0 && (
-            <span className="text-text-tertiary">— or drop one here</span>
-          )}
-        </button>
         <input
           ref={fileRef}
           type="file"
@@ -1195,7 +1266,6 @@ export function CreateProjectFlow({
   const [projectImages, setProjectImages] = useState<ProjectImage[]>([]);
   const showToast = useSpotStore((s) => s.showToast);
   const scope = useCurrentScope();
-  const workspaceLabel = useCurrentWorkspaceLabel();
   const scrollRef = useRef<HTMLDivElement>(null);
 
   /**
@@ -1571,7 +1641,52 @@ export function CreateProjectFlow({
                   memory and shape every persona and creative from now on.
                 </SpotBubble>
 
-                <DraftCard label="Spot's project memory">
+                {/* Knowledge-base section header — frames the two cards below as
+                    the agent's persistent memory for this project. */}
+                <div
+                  className="rounded-[12px] mb-4 fadeUp"
+                  style={{
+                    background:
+                      "linear-gradient(135deg, #F4ECFF 0%, #FFFCF2 100%)",
+                    border: "1px solid #DCC8FF",
+                    padding: "14px 16px",
+                  }}
+                >
+                  <div className="flex items-start gap-2.5">
+                    <span
+                      className="inline-flex items-center justify-center flex-shrink-0"
+                      style={{
+                        width: 30,
+                        height: 30,
+                        borderRadius: 8,
+                        background:
+                          "linear-gradient(135deg, #7C3AED 0%, #C026D3 100%)",
+                        color: "#FFF",
+                        boxShadow: "0 4px 10px rgba(124,58,237,0.22)",
+                      }}
+                    >
+                      <Brain size={15} />
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div
+                        className="uplabel"
+                        style={{ fontSize: 9.5, color: "#7C3AED", letterSpacing: "0.5px" }}
+                      >
+                        Knowledge base
+                      </div>
+                      <div className="text-[13.5px] font-semibold leading-tight mt-0.5 mb-1">
+                        Spot&apos;s memory for this project
+                      </div>
+                      <div className="text-[11.5px] text-text-secondary leading-[1.55]">
+                        Project facts (below) and visual references (further below)
+                        are what Spot remembers. Edit anything that&apos;s wrong — every
+                        persona, ad and recommendation downstream uses this.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <DraftCard label="Knowledge base · Project facts">
                   <div className="text-[11px] text-text-tertiary leading-[1.5] mb-4">
                     {synthesisLine} Tap any value to edit.
                   </div>
@@ -1691,7 +1806,7 @@ export function CreateProjectFlow({
                   </div>
                 </DraftCard>
 
-                <DraftCard label="Spot's visual memory">
+                <DraftCard label="Knowledge base · Visual references">
                   <div className="flex items-center gap-2 mb-3">
                     <Images size={14} style={{ color: "#B98A14" }} />
                     <span className="text-[12.5px] font-semibold">
@@ -1767,7 +1882,6 @@ export function CreateProjectFlow({
             return (
               <ReadyCelebration
                 projectShort={projectShort}
-                workspaceLabel={workspaceLabel}
                 personaCount={personaCount}
                 personaSummary={personaSummary}
                 imageCount={projectImages.length}
@@ -1798,7 +1912,6 @@ export function CreateProjectFlow({
 
 function ReadyCelebration({
   projectShort,
-  workspaceLabel,
   personaCount,
   personaSummary,
   imageCount,
@@ -1808,7 +1921,6 @@ function ReadyCelebration({
   onContinue,
 }: {
   projectShort: string;
-  workspaceLabel: string;
   personaCount: number;
   personaSummary: string;
   imageCount: number;
@@ -1824,13 +1936,13 @@ function ReadyCelebration({
         background:
           "radial-gradient(circle at 50% 0%, #FBF7FF 0%, #FFFDF6 55%, #FFFFFF 100%)",
         border: "1px solid #C8A8FF",
-        padding: "40px 32px 32px",
+        padding: "36px 32px 28px",
       }}
     >
       {/* Animated stamp */}
       <div
-        className="mx-auto mb-5 relative"
-        style={{ width: 72, height: 72 }}
+        className="mx-auto mb-4 relative"
+        style={{ width: 64, height: 64 }}
       >
         <span
           className="absolute inset-0 rounded-full"
@@ -1845,10 +1957,10 @@ function ReadyCelebration({
         <span
           className="absolute rounded-full"
           style={{
-            top: 8,
-            left: 8,
-            width: 56,
-            height: 56,
+            top: 6,
+            left: 6,
+            width: 52,
+            height: 52,
             background:
               "linear-gradient(135deg, #7C3AED 0%, #C026D3 100%)",
             display: "flex",
@@ -1859,7 +1971,7 @@ function ReadyCelebration({
             animation: "ready-stamp-in 480ms cubic-bezier(0.34, 1.56, 0.64, 1) both",
           }}
         >
-          <Check size={26} strokeWidth={3} />
+          <Check size={22} strokeWidth={3} />
         </span>
       </div>
 
@@ -1870,96 +1982,85 @@ function ReadyCelebration({
         </div>
       </div>
       <div
-        className="text-center text-[22px] font-semibold tracking-[-0.01em] mb-1"
+        className="text-center text-[20px] font-semibold tracking-[-0.01em] mb-1"
         style={{ letterSpacing: "-0.01em" }}
       >
         Your project is set up
       </div>
-      <div className="text-center text-[13px] text-text-secondary mb-1">{projectShort}</div>
-      <div className="text-center text-[11.5px] text-text-tertiary mb-6">
-        Saved to {workspaceLabel}
-      </div>
+      <div className="text-center text-[13px] text-text-secondary mb-6">{projectShort}</div>
 
-      {/* Summary chips */}
+      {/* Summary — flat, info-only (no card chrome that hints at clickability) */}
       <div
-        className="grid gap-3 mx-auto mb-7"
-        style={{
-          gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-          maxWidth: 520,
-        }}
+        className="mx-auto mb-5"
+        style={{ maxWidth: 460 }}
       >
-        <SummaryChip
-          icon={<BookOpen size={14} />}
-          label="Brief"
-          value={`${uspCount} USPs`}
-          sub={`${proximityCount} proximity points${imageCount > 0 ? ` · ${imageCount} image${imageCount === 1 ? "" : "s"}` : ""}`}
-        />
-        <SummaryChip
-          icon={<Users size={14} />}
-          label="Personas"
-          value={`${personaCount} persona${personaCount === 1 ? "" : "s"}`}
-          sub={personaSummary}
-        />
+        <div
+          className="flex items-stretch"
+          style={{
+            background: "rgba(255,255,255,0.55)",
+            border: "1px solid var(--border-subtle)",
+            borderRadius: 10,
+          }}
+        >
+          <ReadyStat
+            icon={<BookOpen size={12} />}
+            label="Brief"
+            value={`${uspCount} USPs · ${proximityCount} proximity${imageCount > 0 ? ` · ${imageCount} image${imageCount === 1 ? "" : "s"}` : ""}`}
+          />
+          <div style={{ width: 1, background: "var(--border-subtle)" }} />
+          <ReadyStat
+            icon={<Users size={12} />}
+            label="Personas"
+            value={`${personaCount} · ${personaSummary}`}
+          />
+        </div>
+
+        {/* Goal hint inline below */}
+        <div className="text-center text-[11px] text-text-tertiary mt-3">
+          <Target size={10} style={{ display: "inline", marginRight: 4, verticalAlign: -1 }} />
+          No goal set yet — add one later from the project page.
+        </div>
       </div>
 
-      {/* Goal hint */}
-      <div className="text-center text-[11.5px] text-text-tertiary mb-6">
-        <Target size={11} style={{ display: "inline", marginRight: 4, verticalAlign: -1 }} />
-        No goal set yet — you can add one later from the project page.
-      </div>
-
-      {/* What's next */}
-      <div className="text-center text-[11px] uppercase tracking-[0.5px] text-text-tertiary font-semibold mb-3">
+      {/* What's next — proper buttons, not big cards */}
+      <div className="text-center text-[11px] uppercase tracking-[0.5px] text-text-tertiary font-semibold mb-2.5">
         What&apos;s next?
       </div>
-      <div
-        className="grid gap-3 mx-auto"
-        style={{
-          gridTemplateColumns: "1fr 1fr",
-          maxWidth: 620,
-        }}
-      >
+      <div className="flex items-center justify-center gap-2 flex-wrap">
         <button
           type="button"
           onClick={onView}
-          className="text-left rounded-[10px] p-4 transition-colors"
+          className="inline-flex items-center gap-1.5 h-9 px-4 rounded-button transition-colors hover:bg-surface-secondary"
           style={{
             background: "#FFF",
             border: "1px solid var(--border)",
+            fontSize: 12.5,
+            fontWeight: 500,
           }}
         >
-          <div className="text-[13px] font-semibold mb-0.5">Open project page</div>
-          <div className="text-[11.5px] text-text-tertiary leading-[1.5]">
-            Look around first — review the brief, personas, goal.
-          </div>
-          <div className="mt-3 inline-flex items-center gap-1 text-[11.5px] text-text-secondary">
-            Go to project <ArrowRight size={11} />
-          </div>
+          Open project page
+          <ArrowRight size={12} />
         </button>
         <button
           type="button"
           onClick={onContinue}
-          className="text-left rounded-[10px] p-4 transition-shadow"
+          className="inline-flex items-center gap-1.5 h-9 px-4 rounded-button transition-shadow hover:shadow-lg"
           style={{
             background: "linear-gradient(135deg, #7C3AED 0%, #C026D3 100%)",
             border: "1px solid transparent",
             color: "#FFF",
-            boxShadow: "0 8px 24px rgba(124,58,237,0.25)",
+            boxShadow: "0 6px 18px rgba(124,58,237,0.28)",
+            fontSize: 12.5,
+            fontWeight: 600,
           }}
         >
-          <div className="text-[13px] font-semibold mb-0.5 flex items-center gap-1.5">
-            <Sparkles size={13} /> Build creative angles
-          </div>
-          <div
-            className="text-[11.5px] leading-[1.5]"
-            style={{ color: "rgba(255,255,255,0.85)" }}
-          >
-            Spot drafts 2 angles per persona · recommended next step.
-          </div>
-          <div className="mt-3 inline-flex items-center gap-1 text-[11.5px]">
-            Continue <ArrowRight size={11} />
-          </div>
+          <Sparkles size={12} />
+          Build creative angles
+          <ArrowRight size={12} />
         </button>
+      </div>
+      <div className="text-center text-[10.5px] text-text-tertiary mt-2">
+        Spot drafts 2 angles per persona · recommended next.
       </div>
 
       <style jsx>{`
@@ -1988,35 +2089,19 @@ function ReadyCelebration({
   );
 }
 
-function SummaryChip({
+function ReadyStat({
   icon,
   label,
   value,
-  sub,
 }: {
   icon: React.ReactNode;
   label: string;
   value: string;
-  sub: string;
 }) {
   return (
-    <div
-      className="rounded-[10px] p-3"
-      style={{ background: "#FFF", border: "1px solid var(--border-subtle)" }}
-    >
-      <div className="flex items-center gap-1.5 mb-1.5">
-        <span
-          className="inline-flex items-center justify-center"
-          style={{
-            width: 22,
-            height: 22,
-            borderRadius: 6,
-            background: "linear-gradient(135deg, #F4ECFF 0%, #FDF2FF 100%)",
-            color: "#7C3AED",
-          }}
-        >
-          {icon}
-        </span>
+    <div className="flex-1 px-3.5 py-2.5 text-center">
+      <div className="inline-flex items-center gap-1 mb-0.5" style={{ color: "var(--text-tertiary)" }}>
+        {icon}
         <span
           className="uplabel"
           style={{ fontSize: 9.5, color: "var(--text-tertiary)" }}
@@ -2024,8 +2109,9 @@ function SummaryChip({
           {label}
         </span>
       </div>
-      <div className="text-[13px] font-semibold tabular-nums leading-tight mb-0.5">{value}</div>
-      <div className="text-[10.5px] text-text-tertiary leading-[1.4] truncate">{sub}</div>
+      <div className="text-[12px] text-text-secondary leading-tight truncate">
+        {value}
+      </div>
     </div>
   );
 }
