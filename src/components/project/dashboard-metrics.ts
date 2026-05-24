@@ -23,12 +23,9 @@ export type MetricKey =
   | "leads"
   | "cpl"
   | "verifRate"
-  | "qualRate"
-  | "spend"
-  | "dailyBurn"
-  | "daysToGoal";
+  | "qualRate";
 
-export type MetricCategory = "outcome" | "pipeline" | "spend";
+export type MetricCategory = "outcome" | "pipeline";
 
 export type MetricDef = {
   key: MetricKey;
@@ -109,33 +106,15 @@ export const METRIC_DEFS: MetricDef[] = [
     higherIsBetter: true,
     hint: "% of verified leads that passed sales qualification.",
   },
-
-  // Spend & pacing — financial discipline + goal forecast
-  {
-    key: "spend",
-    label: "Spend to date",
-    unit: "currency",
-    category: "spend",
-    higherIsBetter: true,
-    hint: "Total media spend across all live campaigns this project.",
-  },
-  {
-    key: "dailyBurn",
-    label: "Daily burn",
-    unit: "currency",
-    category: "spend",
-    higherIsBetter: true,
-    hint: "Average daily media spend over the project window so far.",
-  },
-  {
-    key: "daysToGoal",
-    label: "Days to goal",
-    unit: "days",
-    category: "spend",
-    higherIsBetter: false,
-    hint: "Days remaining to hit goal at current verified-lead velocity. Lower is better — but only when below the window's days remaining.",
-  },
 ];
+
+/**
+ * Total spend isn't a tile any more — it lives on the pacing strip at the
+ * top of the Dashboard. Exposed as a separate helper for that strip.
+ */
+export function computeTotalSpend(project: ProjectDetail): number {
+  return estimateSpend(project);
+}
 
 export const METRICS_BY_KEY = new Map(METRIC_DEFS.map((m) => [m.key, m]));
 
@@ -164,9 +143,6 @@ export function computeMetrics(project: ProjectDetail): MetricSnapshot[] {
   const cpql = totalQualified > 0 ? Math.round(totalSpend / totalQualified) : null;
   const verifRate = totalLeads > 0 ? (totalVerified / totalLeads) * 100 : null;
   const qualRate = totalVerified > 0 ? (totalQualified / totalVerified) * 100 : null;
-  const daysElapsed = Math.max(1, project.goal.daysElapsed || 1);
-  const dailyBurn = totalSpend > 0 ? Math.round(totalSpend / daysElapsed) : null;
-  const daysToGoal = computeDaysToGoal(project);
 
   const currents: Record<MetricKey, number | null> = {
     verified: totalVerified,
@@ -177,9 +153,6 @@ export function computeMetrics(project: ProjectDetail): MetricSnapshot[] {
     cpql,
     verifRate,
     qualRate,
-    spend: totalSpend || null,
-    dailyBurn,
-    daysToGoal,
   };
 
   return METRIC_DEFS.map((def) => {
@@ -188,18 +161,6 @@ export function computeMetrics(project: ProjectDetail): MetricSnapshot[] {
     const delta = computeDelta(series);
     return { def, current, delta, series };
   });
-}
-
-function computeDaysToGoal(project: ProjectDetail): number | null {
-  const goal = project.goal;
-  if (goal.target === 0) return null;
-  if (goal.achieved >= goal.target) return 0;
-  if (goal.daysElapsed === 0) return goal.daysTotal;
-  // Verified leads per day so far → linear projection to goal.
-  const rate = goal.achieved / goal.daysElapsed;
-  if (rate <= 0) return null;
-  const remaining = goal.target - goal.achieved;
-  return Math.ceil(remaining / rate);
 }
 
 function sumAdField(

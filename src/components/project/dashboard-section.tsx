@@ -6,37 +6,44 @@ import {
   Sparkles,
   Target,
   ArrowUpRight,
-  X,
   Star,
   Video as VideoIcon,
   Image as ImageIcon,
+  X,
 } from "lucide-react";
 import type { ProjectDetail, Persona } from "@/lib/project-data";
 import { SectionHeader } from "./shared/section-header";
 import {
   computeMetrics,
+  computeTotalSpend,
   formatMetric,
   formatDelta,
   deltaColor,
   type MetricSnapshot,
 } from "./dashboard-metrics";
-import { Sparkline, LargeChart } from "./metric-charts";
+import {
+  Sparkline,
+  ComparisonChart,
+  MAX_COMPARISON_METRICS,
+  colorForIndex,
+} from "./metric-charts";
 import { getWinningConcept, type WinningConcept } from "./persona-hierarchy";
 import { PlacementsAnalysis } from "./placements-analysis";
 
 /**
- * Dashboard tab — project pulse, organized around business outcomes.
+ * Dashboard tab — project pulse.
  *
- * Three metric groups (no operational TOFU at the project level):
- *   · Outcomes — Verified, Qualified, CPVL, CPQL
- *   · Pipeline — Total leads, CPL, Verification %, Qualification %
- *   · Spend & pacing — Spend, Daily burn, Days to goal
+ * Two metric rows only:
+ *   · Outcomes — Verified · Qualified · CPVL · CPQL
+ *   · Pipeline — Total leads · CPL · Verification rate · Qualification rate
  *
- * Plus:
- *   · Pacing strip (goal-anchored)
- *   · Persona performance — winning concept + TOFU signal per persona
- *   · Placements analysis — Meta surface-by-surface breakdown
- *   · Spot's read — derived insights
+ * Spend lives on the pacing strip alongside the goal — it's pacing context,
+ * not a comparable metric tile. Daily-burn and days-to-goal are inferable
+ * from pacing + spend, so they're dropped to reduce noise.
+ *
+ * Click any tile to add the metric to the comparison chart. Up to four
+ * metrics can be compared at once; tiles selected in the comparison show
+ * a colored ring + sparkline matching the chart line.
  */
 export function DashboardSection({
   project,
@@ -46,17 +53,34 @@ export function DashboardSection({
   onAsk: (q: string) => void;
 }) {
   const metrics = useMemo(() => computeMetrics(project), [project]);
-  const [focusedKey, setFocusedKey] = useState<string | null>(null);
-  const focused = focusedKey
-    ? metrics.find((m) => m.def.key === focusedKey) ?? null
-    : null;
+
+  // Up to MAX_COMPARISON_METRICS keys selected for the comparison chart.
+  const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
+
+  const toggleSelected = (key: string) => {
+    setSelectedKeys((cur) => {
+      const isSelected = cur.includes(key);
+      if (isSelected) return cur.filter((k) => k !== key);
+      if (cur.length >= MAX_COMPARISON_METRICS) {
+        // At capacity — drop the oldest selection to make room for the new
+        // one, FIFO. This keeps the toggle action feeling immediate
+        // rather than silently failing.
+        return [...cur.slice(1), key];
+      }
+      return [...cur, key];
+    });
+  };
+
+  const selectedSnapshots = selectedKeys
+    .map((k) => metrics.find((m) => m.def.key === k))
+    .filter((m): m is MetricSnapshot => m != null);
 
   return (
     <div className="space-y-4">
       <SectionHeader
         icon={BarChart3}
         title="Dashboard"
-        subtitle="project pulse · click any tile for the 14-day chart"
+        subtitle="project pulse · click tiles to add up to 4 metrics to one chart"
         onAsk={() =>
           onAsk("Summarize how this project is performing this week against goal")
         }
@@ -76,30 +100,26 @@ export function DashboardSection({
         title="Outcomes"
         sub="goal-relevant numbers"
         metrics={metrics.filter((m) => m.def.category === "outcome")}
-        focusedKey={focusedKey}
-        onSelect={(key) => setFocusedKey((cur) => (cur === key ? null : key))}
+        selectedKeys={selectedKeys}
+        onToggle={toggleSelected}
       />
 
       <MetricGroup
         title="Pipeline"
         sub="lead flow + conversion"
         metrics={metrics.filter((m) => m.def.category === "pipeline")}
-        focusedKey={focusedKey}
-        onSelect={(key) => setFocusedKey((cur) => (cur === key ? null : key))}
+        selectedKeys={selectedKeys}
+        onToggle={toggleSelected}
       />
 
-      <MetricGroup
-        title="Spend & pacing"
-        sub="burn rate · runway"
-        metrics={metrics.filter((m) => m.def.category === "spend")}
-        focusedKey={focusedKey}
-        onSelect={(key) => setFocusedKey((cur) => (cur === key ? null : key))}
-      />
-
-      {focused && (
-        <ExpandedChart
-          snapshot={focused}
-          onClose={() => setFocusedKey(null)}
+      {selectedSnapshots.length > 0 && (
+        <ComparisonPanel
+          snapshots={selectedSnapshots}
+          selectedKeys={selectedKeys}
+          onRemove={(key) =>
+            setSelectedKeys((cur) => cur.filter((k) => k !== key))
+          }
+          onClearAll={() => setSelectedKeys([])}
           project={project}
         />
       )}
@@ -116,6 +136,7 @@ export function DashboardSection({
 function PacingStrip({ project }: { project: ProjectDetail }) {
   const goal = project.goal;
   const goalSet = goal.target > 0;
+  const spend = useMemo(() => computeTotalSpend(project), [project]);
   return (
     <div
       className="rounded-[12px] p-4"
@@ -178,11 +199,15 @@ function PacingStrip({ project }: { project: ProjectDetail }) {
                 : "var(--text-1)"
           }
         />
+        <PacingStat
+          label="Spend to date"
+          value={spend > 0 ? formatSpend(spend) : "—"}
+        />
 
         <div className="flex-1" />
 
         {goalSet ? (
-          <div className="text-[11px] text-text-tertiary italic max-w-[300px] text-right">
+          <div className="text-[11px] text-text-tertiary italic max-w-[280px] text-right">
             {goal.spotRead}
           </div>
         ) : null}
@@ -207,12 +232,23 @@ function PacingStat({
       </div>
       <div
         className="tabular-nums"
-        style={{ fontSize: 15, fontWeight: 600, color: accent || "var(--text-1)" }}
+        style={{
+          fontSize: 15,
+          fontWeight: 600,
+          color: accent || "var(--text-1)",
+          textTransform: "capitalize",
+        }}
       >
         {value}
       </div>
     </div>
   );
+}
+
+function formatSpend(v: number): string {
+  if (v >= 100000) return `₹${(v / 100000).toFixed(1)}L`;
+  if (v >= 1000) return `₹${(v / 1000).toFixed(1)}K`;
+  return `₹${Math.round(v)}`;
 }
 
 // ─── Metric group ───────────────────────────────────────────────────────
@@ -221,14 +257,14 @@ function MetricGroup({
   title,
   sub,
   metrics,
-  focusedKey,
-  onSelect,
+  selectedKeys,
+  onToggle,
 }: {
   title: string;
   sub: string;
   metrics: MetricSnapshot[];
-  focusedKey: string | null;
-  onSelect: (key: string) => void;
+  selectedKeys: string[];
+  onToggle: (key: string) => void;
 }) {
   if (metrics.length === 0) return null;
   return (
@@ -245,14 +281,17 @@ function MetricGroup({
           gridTemplateColumns: `repeat(${Math.min(metrics.length, 4)}, minmax(0,1fr))`,
         }}
       >
-        {metrics.map((m) => (
-          <MetricTile
-            key={m.def.key}
-            snapshot={m}
-            focused={focusedKey === m.def.key}
-            onClick={() => onSelect(m.def.key)}
-          />
-        ))}
+        {metrics.map((m) => {
+          const selectedIdx = selectedKeys.indexOf(m.def.key);
+          return (
+            <MetricTile
+              key={m.def.key}
+              snapshot={m}
+              selectedIdx={selectedIdx}
+              onClick={() => onToggle(m.def.key)}
+            />
+          );
+        })}
       </div>
     </div>
   );
@@ -260,13 +299,16 @@ function MetricGroup({
 
 function MetricTile({
   snapshot,
-  focused,
+  selectedIdx,
   onClick,
 }: {
   snapshot: MetricSnapshot;
-  focused: boolean;
+  /** -1 if not selected. Otherwise its index in the comparison set. */
+  selectedIdx: number;
   onClick: () => void;
 }) {
+  const selected = selectedIdx >= 0;
+  const seriesColor = selected ? colorForIndex(selectedIdx) : undefined;
   const goodTrend =
     !snapshot.delta || snapshot.delta.sign === "flat"
       ? undefined
@@ -281,12 +323,31 @@ function MetricTile({
       className="card-base p-3 text-left transition-shadow"
       style={{
         background: "#FFF",
-        border: `1.5px solid ${focused ? "#1A1A1A" : "var(--border-subtle)"}`,
-        boxShadow: focused ? "0 4px 12px rgba(0,0,0,0.06)" : "none",
+        border: `1.5px solid ${selected ? seriesColor! : "var(--border-subtle)"}`,
+        boxShadow: selected ? `0 4px 12px ${withAlpha(seriesColor!, 0.15)}` : "none",
         cursor: "pointer",
+        position: "relative",
       }}
-      title={snapshot.def.hint}
+      title={
+        selected
+          ? `Selected — click to remove from comparison · ${snapshot.def.hint}`
+          : `Click to add to the comparison chart · ${snapshot.def.hint}`
+      }
     >
+      {selected && (
+        <span
+          aria-hidden
+          style={{
+            position: "absolute",
+            top: 8,
+            right: 8,
+            width: 10,
+            height: 10,
+            borderRadius: "50%",
+            background: seriesColor!,
+          }}
+        />
+      )}
       <div className="flex items-center justify-between gap-1 mb-1">
         <span
           className="uplabel truncate"
@@ -312,84 +373,85 @@ function MetricTile({
             {formatDelta(snapshot.delta)}
           </div>
         </div>
-        <Sparkline series={snapshot.series} trendUp={goodTrend} />
+        <Sparkline
+          series={snapshot.series}
+          trendUp={goodTrend}
+          strokeOverride={selected ? seriesColor : undefined}
+          fillOverride={selected ? withAlpha(seriesColor!, 0.12) : undefined}
+        />
       </div>
     </button>
   );
 }
 
-// ─── Expanded chart ─────────────────────────────────────────────────────
+function withAlpha(hex: string, alpha: number): string {
+  // Naive hex → rgba converter for the small palette we use.
+  const m = hex.replace("#", "");
+  const r = parseInt(m.substring(0, 2), 16);
+  const g = parseInt(m.substring(2, 4), 16);
+  const b = parseInt(m.substring(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
 
-function ExpandedChart({
-  snapshot,
-  onClose,
+// ─── Comparison panel ───────────────────────────────────────────────────
+
+function ComparisonPanel({
+  snapshots,
+  selectedKeys,
+  onRemove,
+  onClearAll,
   project,
 }: {
-  snapshot: MetricSnapshot;
-  onClose: () => void;
+  snapshots: MetricSnapshot[];
+  selectedKeys: string[];
+  onRemove: (key: string) => void;
+  onClearAll: () => void;
   project: ProjectDetail;
 }) {
-  const goodTrend =
-    !snapshot.delta || snapshot.delta.sign === "flat"
-      ? null
-      : snapshot.def.higherIsBetter
-        ? snapshot.delta.sign === "up"
-        : snapshot.delta.sign === "down";
+  const colors = selectedKeys.map((_, i) => colorForIndex(i));
+  const atCapacity = snapshots.length >= MAX_COMPARISON_METRICS;
   return (
     <div className="card-base p-4 fadeUp">
-      <div className="flex items-start gap-3 mb-3">
-        <div className="flex-1">
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <div>
           <div
             className="uplabel mb-1"
             style={{ fontSize: 9.5, color: "var(--text-tertiary)" }}
           >
-            {snapshot.def.label} · last 14 days
+            Comparison · last 14 days
           </div>
-          <div className="flex items-baseline gap-3 flex-wrap">
-            <span
-              className="tabular-nums"
-              style={{ fontSize: 26, fontWeight: 600, letterSpacing: "-0.01em" }}
-            >
-              {formatMetric(snapshot.current, snapshot.def.unit)}
-            </span>
-            <span
-              className="text-[12px] tabular-nums"
-              style={{
-                color: deltaColor(snapshot.delta, snapshot.def.higherIsBetter),
-              }}
-            >
-              {formatDelta(snapshot.delta)}
-            </span>
-            {goodTrend != null && (
-              <span
-                className="pill"
-                style={{
-                  fontSize: 10,
-                  background: goodTrend ? "var(--ok-bg)" : "var(--err-bg)",
-                  color: goodTrend ? "var(--ok-fg)" : "var(--err-fg)",
-                }}
-              >
-                {goodTrend ? "Trending well" : "Watch this"}
-              </span>
-            )}
-          </div>
-          <div className="text-[11.5px] text-text-secondary mt-1 leading-[1.5] max-w-[600px]">
-            {snapshot.def.hint}
+          <div className="text-[11.5px] text-text-secondary leading-[1.5]">
+            {snapshots.length === 1
+              ? "Pick another tile to overlay a second metric."
+              : atCapacity
+                ? `Showing ${snapshots.length} metrics — max ${MAX_COMPARISON_METRICS}. Click an extra tile to swap the oldest out.`
+                : `Showing ${snapshots.length} metrics. Add up to ${MAX_COMPARISON_METRICS - snapshots.length} more by clicking tiles.`}
           </div>
         </div>
         <button
           type="button"
-          onClick={onClose}
-          className="inline-flex items-center justify-center h-7 w-7 rounded-button text-text-tertiary hover:text-text-secondary hover:bg-surface-secondary"
-          title="Close"
+          onClick={onClearAll}
+          className="inline-flex items-center gap-1 h-7 px-2.5 rounded-button border border-border bg-white text-[11.5px] text-text-secondary hover:text-text-primary"
         >
-          <X size={13} />
+          <X size={11} /> Clear all
         </button>
       </div>
 
-      <LargeChart snapshot={snapshot} />
+      <ComparisonChart snapshots={snapshots} colors={colors} onRemove={onRemove} />
 
-      <PersonaBreakdown project={project} metricKey={snapshot.def.key} />
+      {/* If a single metric is selected, surface its hint + per-persona
+          breakdown when relevant (verified / cpvl / leads). */}
+      {snapshots.length === 1 && (
+        <div
+          className="text-[11.5px] text-text-secondary mt-3 pt-3 leading-[1.5]"
+          style={{ borderTop: "1px solid var(--border-subtle)" }}
+        >
+          {snapshots[0].def.hint}
+        </div>
+      )}
+      {snapshots.length === 1 && (
+        <PersonaBreakdown project={project} metricKey={snapshots[0].def.key} />
+      )}
     </div>
   );
 }
@@ -411,7 +473,7 @@ function PersonaBreakdown({
   });
   if (cells.length === 0) return null;
   return (
-    <div className="mt-4 pt-3" style={{ borderTop: "1px solid var(--border-subtle)" }}>
+    <div className="mt-3 pt-3" style={{ borderTop: "1px solid var(--border-subtle)" }}>
       <div className="uplabel mb-2" style={{ fontSize: 9.5 }}>
         By persona
       </div>

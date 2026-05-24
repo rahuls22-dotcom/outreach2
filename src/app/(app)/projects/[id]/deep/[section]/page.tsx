@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, X, PanelRightClose, PanelRightOpen, Sparkles } from "lucide-react";
+import { ArrowLeft, X, ChevronLeft, ChevronRight } from "lucide-react";
 import { getProject, type ProjectDetail } from "@/lib/project-data";
 import { CampaignsDeepDive } from "@/components/project/deep-dive/campaigns-deep-dive";
 import { PersonasDeepDive } from "@/components/project/deep-dive/personas-deep-dive";
@@ -73,8 +73,6 @@ export default function DeepDivePage() {
         sub="—"
         section={sectionParam}
         onExit={() => router.push("/projects")}
-        spotVisible={spotVisible}
-        onToggleSpot={setSpotAndPersist}
       >
         <div className="card-base p-8 text-center text-[12.5px] text-text-tertiary">
           We couldn&apos;t find this project.
@@ -90,8 +88,6 @@ export default function DeepDivePage() {
         sub="Pick a valid section"
         section="campaigns"
         onExit={() => router.push(`/projects/${id}`)}
-        spotVisible={spotVisible}
-        onToggleSpot={setSpotAndPersist}
       >
         <div className="card-base p-8 text-center text-[12.5px] text-text-tertiary">
           The section &quot;{sectionParam}&quot; doesn&apos;t exist. Available sections:
@@ -109,15 +105,13 @@ export default function DeepDivePage() {
       sub={`${SECTION_TITLES[sectionParam]} · Deep dive`}
       section={sectionParam}
       onExit={() => router.push(`/projects/${id}`)}
-      spotVisible={spotVisible}
-      onToggleSpot={setSpotAndPersist}
     >
       <SectionBody
         project={project}
         section={sectionParam}
         focusSpot={focusSpot && spotVisible}
         spotVisible={spotVisible}
-        onShowSpot={() => setSpotAndPersist(true)}
+        onToggleSpot={setSpotAndPersist}
       />
     </DeepDiveShell>
   );
@@ -132,13 +126,13 @@ function SectionBody({
   section,
   focusSpot,
   spotVisible,
-  onShowSpot,
+  onToggleSpot,
 }: {
   project: ProjectDetail;
   section: Section;
   focusSpot: boolean;
   spotVisible: boolean;
-  onShowSpot: () => void;
+  onToggleSpot: (next: boolean) => void;
 }) {
   return (
     <div
@@ -155,32 +149,94 @@ function SectionBody({
         {section === "library" && <LibraryDeepDive project={project} />}
         {section === "dashboard" && <DashboardDeepDive project={project} />}
       </div>
+
+      {/* Spot side panel — collapsible via a handle on its left edge. */}
       {spotVisible && (
-        <SpotSidePanel project={project} section={section} autoFocus={focusSpot} />
+        <div className="relative">
+          <CollapseHandle
+            direction="right"
+            label="Collapse Spot panel"
+            onClick={() => onToggleSpot(false)}
+          />
+          <SpotSidePanel
+            project={project}
+            section={section}
+            autoFocus={focusSpot}
+          />
+        </div>
       )}
+
+      {/* When collapsed, a slim handle pinned to the right edge brings it
+          back — the affordance reads as "grab to open" without the header
+          clutter of an explicit Hide/Show button. */}
       {!spotVisible && (
-        <button
-          type="button"
-          onClick={onShowSpot}
-          className="inline-flex items-center gap-1.5 h-9 px-3 rounded-button"
-          title="Open Spot side panel"
-          style={{
-            position: "absolute",
-            right: 16,
-            bottom: 16,
-            background: "linear-gradient(135deg, #7C3AED 0%, #C026D3 100%)",
-            color: "#FFF",
-            border: "1px solid transparent",
-            boxShadow: "0 8px 24px rgba(124,58,237,0.32)",
-            fontSize: 12,
-            fontWeight: 600,
-            zIndex: 5,
-          }}
-        >
-          <Sparkles size={12} /> Ask Spot
-        </button>
+        <CollapseHandle
+          direction="left"
+          label="Open Spot panel"
+          onClick={() => onToggleSpot(true)}
+          accent
+        />
       )}
     </div>
+  );
+}
+
+/**
+ * Slim collapse handle attached to the panel boundary. Direction is the
+ * direction the panel will move when clicked (right = collapse to the right,
+ * left = expand from the right edge).
+ *
+ * Rendered absolutely positioned so it floats on the divider; vertically
+ * centered. Hover state widens it slightly so the affordance is obvious.
+ */
+function CollapseHandle({
+  direction,
+  label,
+  onClick,
+  accent,
+}: {
+  direction: "left" | "right";
+  label: string;
+  onClick: () => void;
+  /** Slight purple tint so the "open Spot" handle is visually inviting. */
+  accent?: boolean;
+}) {
+  const Icon = direction === "right" ? ChevronRight : ChevronLeft;
+  // When collapsed, the handle hugs the viewport's right edge. When
+  // expanded, it sits on the divider between body and Spot panel.
+  const positionStyle: React.CSSProperties = accent
+    ? { right: 0, top: "50%", transform: "translateY(-50%)" }
+    : { left: -10, top: "50%", transform: "translateY(-50%)" };
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={label}
+      aria-label={label}
+      className="group inline-flex items-center justify-center"
+      style={{
+        position: "absolute",
+        zIndex: 6,
+        width: 20,
+        height: 56,
+        borderRadius: accent ? "6px 0 0 6px" : 6,
+        background: accent
+          ? "linear-gradient(135deg, #7C3AED 0%, #C026D3 100%)"
+          : "#FFF",
+        color: accent ? "#FFF" : "var(--text-2)",
+        border: accent ? "1px solid transparent" : "1px solid var(--border)",
+        borderRight: accent ? "none" : "1px solid var(--border)",
+        boxShadow: accent
+          ? "0 6px 18px rgba(124,58,237,0.32)"
+          : "0 2px 6px rgba(0,0,0,0.06)",
+        cursor: "pointer",
+        transition: "transform 140ms ease",
+        ...positionStyle,
+      }}
+    >
+      <Icon size={13} strokeWidth={2.5} />
+    </button>
   );
 }
 
@@ -189,16 +245,12 @@ function DeepDiveShell({
   sub,
   section,
   onExit,
-  spotVisible,
-  onToggleSpot,
   children,
 }: {
   title: string;
   sub: string;
   section: Section;
   onExit: () => void;
-  spotVisible: boolean;
-  onToggleSpot: (next: boolean) => void;
   children: React.ReactNode;
 }) {
   return (
@@ -212,7 +264,8 @@ function DeepDiveShell({
         flexDirection: "column",
       }}
     >
-      {/* Header bar */}
+      {/* Header bar — slim, only the essentials. The Spot panel collapses
+          via an inline handle on its boundary, not a header toggle. */}
       <div
         className="flex items-center gap-3 px-6 py-2.5"
         style={{
@@ -233,28 +286,6 @@ function DeepDiveShell({
           <span className="text-[11.5px] text-text-tertiary">· {sub}</span>
         </div>
         <SectionSwitcher current={section} projectId={getProjectIdFromExit()} />
-        <button
-          type="button"
-          onClick={() => onToggleSpot(!spotVisible)}
-          className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-button text-[11.5px] transition-colors"
-          title={spotVisible ? "Hide Spot panel · full-screen view" : "Show Spot panel"}
-          style={{
-            background: spotVisible ? "var(--spot-tint)" : "#FFF",
-            color: spotVisible ? "#7C3AED" : "var(--text-2)",
-            border: `1px solid ${spotVisible ? "var(--spot-stroke)" : "var(--border)"}`,
-            fontWeight: 500,
-          }}
-        >
-          {spotVisible ? (
-            <>
-              <PanelRightClose size={12} /> Hide Spot
-            </>
-          ) : (
-            <>
-              <PanelRightOpen size={12} /> Show Spot
-            </>
-          )}
-        </button>
         <button
           type="button"
           onClick={onExit}

@@ -1011,69 +1011,18 @@ function CampaignsPerformanceView({
         subtitle={`${rows.length} live · what's actually running right now`}
         onAsk={() => onAsk("Which live campaign is driving the best CPVL?")}
         actions={
-          <>
-            <div className="relative inline-block mr-1.5">
-              <button
-                type="button"
-                onClick={() => setPickerOpen((v) => !v)}
-                className="inline-flex items-center gap-1 h-8 px-2.5 rounded-button border border-border bg-white text-[12px]"
-              >
-                <Settings size={11} /> Columns
-                <span
-                  className="ml-1 inline-flex items-center justify-center text-[10px] tabular-nums"
-                  style={{
-                    background: "var(--bg-secondary)",
-                    color: "var(--text-2)",
-                    padding: "1px 5px",
-                    borderRadius: 9,
-                    minWidth: 18,
-                  }}
-                >
-                  {visibleKeys.size}
-                </span>
-              </button>
-              {pickerOpen && (
-                <ColumnsPickerPopover
-                  visibleKeys={visibleKeys}
-                  onChange={setVisibleKeys}
-                  onReset={resetColumns}
-                  onClose={() => setPickerOpen(false)}
-                />
-              )}
-            </div>
-            <button
-              type="button"
-              onClick={() =>
-                router.push(`/projects/${project.id}/deep-dive?focus=spot`)
-              }
-              className="inline-flex items-center gap-1 h-8 px-2.5 rounded-button border border-border bg-white text-[12px] mr-1.5"
-            >
-              <SpotMark size={11} /> Analyze with Spot
-            </button>
-            <button
-              type="button"
-              onClick={() => router.push(`/projects/${project.id}/deep-dive`)}
-              className="inline-flex items-center gap-1 h-8 px-2.5 rounded-button border border-border bg-white text-[12px] mr-1.5"
-            >
-              <Maximize2 size={11} /> Open deep dive
-            </button>
-            <button
-              type="button"
-              onClick={() => setImportOpen(true)}
-              className="inline-flex items-center gap-1 h-8 px-2.5 rounded-button border border-border bg-white text-[12px] mr-1.5"
-              title="Import campaigns from connected ad accounts"
-            >
-              <Download size={11} /> Import campaigns
-            </button>
-            <button
-              type="button"
-              onClick={onNewCampaign}
-              className="apply-btn"
-              style={{ background: "linear-gradient(135deg, #7C3AED 0%, #C026D3 100%)" }}
-            >
-              <Sparkles size={11} /> Launch new campaign
-            </button>
-          </>
+          <CampaignsToolbar
+            visibleCount={visibleKeys.size}
+            pickerOpen={pickerOpen}
+            onTogglePicker={() => setPickerOpen((v) => !v)}
+            onClosePicker={() => setPickerOpen(false)}
+            visibleKeys={visibleKeys}
+            onChangeVisibleKeys={setVisibleKeys}
+            onResetColumns={resetColumns}
+            onImport={() => setImportOpen(true)}
+            onDeepDive={() => router.push(`/projects/${project.id}/deep-dive`)}
+            onLaunch={onNewCampaign}
+          />
         }
       />
 
@@ -1332,6 +1281,131 @@ function CampaignsPerformanceView({
           onClose={() => setImportOpen(false)}
         />
       )}
+    </div>
+  );
+}
+
+/**
+ * Compact toolbar above the live-campaigns table. Layout:
+ *
+ *   [Columns ⚙ N]  [Deep dive ↗]  [Import ↓]   |   [+ Launch new campaign]
+ *
+ *  · Tools group (left): icon-led buttons of identical h-8 size, no
+ *    text-wrap, tight 4px gaps, no inconsistent margins.
+ *  · Vertical divider separates secondary tools from the primary CTA so
+ *    the eye lands on Launch first.
+ *  · "Analyze with Spot" was redundant with "Deep dive" (deep dive already
+ *    hosts the Spot side panel) — dropped to reduce noise.
+ */
+function CampaignsToolbar({
+  visibleCount,
+  pickerOpen,
+  onTogglePicker,
+  onClosePicker,
+  visibleKeys,
+  onChangeVisibleKeys,
+  onResetColumns,
+  onImport,
+  onDeepDive,
+  onLaunch,
+}: {
+  visibleCount: number;
+  pickerOpen: boolean;
+  onTogglePicker: () => void;
+  onClosePicker: () => void;
+  visibleKeys: Set<MetricKey>;
+  onChangeVisibleKeys: (next: Set<MetricKey>) => void;
+  onResetColumns: () => void;
+  onImport: () => void;
+  onDeepDive: () => void;
+  onLaunch: () => void;
+}) {
+  return (
+    <div className="inline-flex items-center gap-1.5">
+      {/* Columns */}
+      <div className="relative inline-block">
+        <button
+          type="button"
+          onClick={onTogglePicker}
+          title="Pick which columns to show"
+          className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-button border border-border bg-white text-[12px] font-medium hover:border-border-hover transition-colors"
+          style={{ whiteSpace: "nowrap" }}
+        >
+          <Settings size={12} />
+          <span>Columns</span>
+          <span
+            className="tabular-nums"
+            style={{
+              background: "var(--bg-secondary)",
+              color: "var(--text-2)",
+              padding: "1px 6px",
+              borderRadius: 9,
+              minWidth: 18,
+              fontSize: 10,
+              textAlign: "center",
+            }}
+          >
+            {visibleCount}
+          </span>
+        </button>
+        {pickerOpen && (
+          <ColumnsPickerPopover
+            visibleKeys={visibleKeys}
+            onChange={onChangeVisibleKeys}
+            onReset={onResetColumns}
+            onClose={onClosePicker}
+          />
+        )}
+      </div>
+
+      {/* Deep dive */}
+      <button
+        type="button"
+        onClick={onDeepDive}
+        title="Open the full-page deep dive · with Spot side panel"
+        className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-button border border-border bg-white text-[12px] font-medium hover:border-border-hover transition-colors"
+        style={{ whiteSpace: "nowrap" }}
+      >
+        <Maximize2 size={12} /> Deep dive
+      </button>
+
+      {/* Import (icon-only — less common action) */}
+      <button
+        type="button"
+        onClick={onImport}
+        title="Import campaigns from connected ad accounts"
+        aria-label="Import campaigns"
+        className="inline-flex items-center justify-center h-8 w-8 rounded-button border border-border bg-white hover:border-border-hover transition-colors"
+      >
+        <Download size={12} />
+      </button>
+
+      {/* Divider */}
+      <span
+        aria-hidden
+        style={{
+          width: 1,
+          height: 18,
+          background: "var(--border)",
+          margin: "0 4px",
+        }}
+      />
+
+      {/* Primary CTA */}
+      <button
+        type="button"
+        onClick={onLaunch}
+        className="inline-flex items-center gap-1.5 h-8 px-3 rounded-button text-[12px] font-semibold transition-shadow"
+        style={{
+          background: "linear-gradient(135deg, #7C3AED 0%, #C026D3 100%)",
+          color: "#FFF",
+          border: "1px solid transparent",
+          boxShadow: "0 4px 12px rgba(124,58,237,0.22)",
+          whiteSpace: "nowrap",
+        }}
+      >
+        <Sparkles size={12} /> Launch new campaign
+      </button>
     </div>
   );
 }
