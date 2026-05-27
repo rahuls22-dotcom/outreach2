@@ -31,11 +31,12 @@ import { ReliabilitySection } from "./reliability-section";
 import { LeadExplorer } from "./lead-explorer";
 
 // Suppress unused param warning on the inherited shell prop signature.
-type Props = { onOpenRun?: (r: RunRecord) => void };
+type Props = { onOpenRun?: (r: RunRecord) => void; forceEmpty?: boolean };
 
-export function EnrichmentDashboard(_props: Props) {
+export function EnrichmentDashboard({ forceEmpty = false }: Props) {
   const runs = useEnrichmentCrmStore((s) => s.runs);
-  const { isEmpty } = useDemoMode();
+  const { isEmpty: demoEmpty } = useDemoMode();
+  const isEmpty = forceEmpty || demoEmpty;
 
   // Page-level state — range/filters do NOT persist, chart cards + saved views DO.
   const [range, setRange] = useState<TimeRange>("30d");
