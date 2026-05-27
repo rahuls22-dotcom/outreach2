@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { useSearchParams } from "next/navigation";
 import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
 import type { Variants } from "framer-motion";
@@ -79,9 +80,19 @@ function SourceIcon({ source }: { source: AudienceSource }) {
 }
 
 // ── Create Audience Modal ───────────────────────────────────
-function CreateAudienceModal({ onClose }: { onClose: () => void }) {
+function CreateAudienceModal({
+  onClose,
+  initialSource,
+  initialName,
+  fromEnrichment,
+}: {
+  onClose: () => void;
+  initialSource?: AudienceSource;
+  initialName?: string;
+  fromEnrichment?: boolean;
+}) {
   const [mounted, setMounted] = useState(false);
-  const [source, setSource] = useState<AudienceSource>("revspot_db");
+  const [source, setSource] = useState<AudienceSource>(initialSource || "revspot_db");
   useEffect(() => setMounted(true), []);
   if (!mounted) return null;
 
@@ -107,8 +118,19 @@ function CreateAudienceModal({ onClose }: { onClose: () => void }) {
             {/* Name */}
             <div>
               <label className="block text-[13px] font-medium text-text-primary mb-1.5">Audience Name</label>
-              <input type="text" placeholder="e.g., HNI Whitefield 30-55" className="w-full h-10 px-3 text-[13px] border border-border rounded-input bg-white text-text-primary focus:outline-none focus:border-accent transition-colors duration-150 placeholder:text-text-tertiary" />
+              <input
+                type="text"
+                defaultValue={initialName || ""}
+                placeholder="e.g., HNI Whitefield 30-55"
+                className="w-full h-10 px-3 text-[13px] border border-border rounded-input bg-white text-text-primary focus:outline-none focus:border-accent transition-colors duration-150 placeholder:text-text-tertiary"
+              />
             </div>
+
+            {fromEnrichment && source === "csv_upload" && (
+              <div className="px-3 py-2 rounded-card bg-[#F0FDF4] border border-[#BBF7D0] text-[12px] text-[#15803D]">
+                Enriched lead set will be attached automatically. You can adjust the name above.
+              </div>
+            )}
 
             {/* Source */}
             <div>
@@ -201,8 +223,33 @@ function CreateAudienceModal({ onClose }: { onClose: () => void }) {
 // ── Main Page ───────────────────────────────────────────────
 export default function AudiencesPage() {
   const { isEmpty } = useDemoMode();
+  const params = useSearchParams();
+  const fromEnrichment = params.get("source") === "enrichment";
+  const enrichmentRunId = params.get("runId");
   const [showCreate, setShowCreate] = useState(false);
   const audienceList = isEmpty ? [] : audiences;
+
+  // Auto-open Create Audience modal when arriving from an enrichment run
+  useEffect(() => {
+    if (fromEnrichment) setShowCreate(true);
+  }, [fromEnrichment]);
+
+  // Lightweight banner that confirms the enrichment handoff. Kept narrow on
+  // purpose — the modal carries the bulk of the UX.
+  const enrichmentBanner = useMemo(() => {
+    if (!fromEnrichment) return null;
+    return (
+      <div className="mb-4 px-4 py-2.5 rounded-card border border-border-subtle bg-[#FAF8F2] flex items-center gap-2.5 text-[12px]">
+        <span className="text-text-primary font-medium">From enrichment</span>
+        {enrichmentRunId && (
+          <span className="text-text-tertiary tabular-nums">#{enrichmentRunId}</span>
+        )}
+        <span className="text-text-secondary">
+          — saving these enriched leads as a new audience.
+        </span>
+      </div>
+    );
+  }, [fromEnrichment, enrichmentRunId]);
 
   return (
     <motion.div initial="hidden" animate="show" variants={fadeUp}>
@@ -215,6 +262,8 @@ export default function AudiencesPage() {
           <Plus size={15} strokeWidth={2} /> Create Audience
         </button>
       </div>
+
+      {enrichmentBanner}
 
       {/* Stats */}
       <div className="flex items-center gap-5 mb-5">
@@ -295,7 +344,18 @@ export default function AudiencesPage() {
         ))}
       </div>
 
-      {showCreate && <CreateAudienceModal onClose={() => setShowCreate(false)} />}
+      {showCreate && (
+        <CreateAudienceModal
+          onClose={() => setShowCreate(false)}
+          initialSource={fromEnrichment ? "csv_upload" : undefined}
+          initialName={
+            fromEnrichment && enrichmentRunId
+              ? `Enriched · ${enrichmentRunId} · ${new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short" })}`
+              : undefined
+          }
+          fromEnrichment={fromEnrichment}
+        />
+      )}
     </motion.div>
   );
 }

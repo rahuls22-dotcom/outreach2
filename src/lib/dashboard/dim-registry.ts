@@ -8,6 +8,7 @@
 import type { FilterDim, ChartCardId, LeadProfile } from "./types";
 
 export type DimType = "enum" | "range_money" | "range_number" | "bool";
+export type ChartKind = "donut" | "column";
 
 export interface DimConfig {
   id: FilterDim;
@@ -15,6 +16,9 @@ export interface DimConfig {
   type: DimType;
   /** Top-level grouping in the chart-builder slice-picker. */
   group: "Professional" | "Financial" | "Meta";
+  /** Preferred visualization. Donut for nominal/categorical splits,
+   *  column for ordinal or range-bucketed values. Defaults to "column". */
+  chartKind?: ChartKind;
   /** Enum/range dims: ordered list of bucket labels for breakdowns + filter menu. */
   values?: string[];
   /** Extracts the bucket value from a profile. Returns null when missing. */
@@ -53,30 +57,32 @@ function avgEarnings(p: LeadProfile): number | null {
   return null;
 }
 
-export function incomeBucket(p: LeadProfile): string {
+export function incomeBucket(p: LeadProfile): string | null {
   const v = avgEarnings(p);
-  if (v == null) return "Unknown";
+  if (v == null) return null;
   if (v >= 10_000_000) return "> 1Cr";
   if (v >= 5_000_000) return "50L - 1Cr";
   if (v >= 2_500_000) return "25L - 50L";
   return "< 25L";
 }
 
-export const INCOME_BUCKETS = ["> 1Cr", "50L - 1Cr", "25L - 50L", "< 25L", "Unknown"];
+export const INCOME_BUCKETS = ["> 1Cr", "50L - 1Cr", "25L - 50L", "< 25L"];
 
 // Generic range bucketer — exclusive upper, last bucket catches the rest.
+// Returns null when the underlying value is missing, so breakdownByDim
+// skips the lead instead of producing an "Unknown" bucket.
 function bucketRange(
   v: number | null | undefined,
   steps: { upTo: number; label: string }[],
   topLabel: string,
-): string {
-  if (v == null) return "Unknown";
+): string | null {
+  if (v == null) return null;
   for (const s of steps) if (v < s.upTo) return s.label;
   return topLabel;
 }
 
-const YOE_BUCKETS = ["0-2 yrs", "3-5 yrs", "6-10 yrs", "11-15 yrs", "15+ yrs", "Unknown"];
-function yoeBucket(p: LeadProfile): string {
+const YOE_BUCKETS = ["0-2 yrs", "3-5 yrs", "6-10 yrs", "11-15 yrs", "15+ yrs"];
+function yoeBucket(p: LeadProfile): string | null {
   return bucketRange(
     p.profile?.professional?.years_of_experience,
     [
@@ -89,8 +95,8 @@ function yoeBucket(p: LeadProfile): string {
   );
 }
 
-const CREDIT_BUCKETS = ["< 600", "600-699", "700-749", "750-799", "800+", "Unknown"];
-function creditScoreBucket(p: LeadProfile): string {
+const CREDIT_BUCKETS = ["< 600", "600-699", "700-749", "750-799", "800+"];
+function creditScoreBucket(p: LeadProfile): string | null {
   return bucketRange(
     p.profile?.financial?.credit_score,
     [
@@ -103,8 +109,8 @@ function creditScoreBucket(p: LeadProfile): string {
   );
 }
 
-const CREDIT_LIMIT_BUCKETS = ["< 1L", "1L - 5L", "5L - 10L", "10L+", "Unknown"];
-function creditLimitBucket(p: LeadProfile): string {
+const CREDIT_LIMIT_BUCKETS = ["< 1L", "1L - 5L", "5L - 10L", "10L+"];
+function creditLimitBucket(p: LeadProfile): string | null {
   return bucketRange(
     p.profile?.financial?.credit_limit,
     [
@@ -116,8 +122,8 @@ function creditLimitBucket(p: LeadProfile): string {
   );
 }
 
-const CARD_COUNT_BUCKETS = ["0", "1", "2-3", "4-5", "6+", "Unknown"];
-function cardCountBucket(p: LeadProfile): string {
+const CARD_COUNT_BUCKETS = ["0", "1", "2-3", "4-5", "6+"];
+function cardCountBucket(p: LeadProfile): string | null {
   return bucketRange(
     p.profile?.financial?.total_credit_cards,
     [
@@ -130,8 +136,8 @@ function cardCountBucket(p: LeadProfile): string {
   );
 }
 
-const CAR_BUCKETS = ["0", "1", "2", "3+", "Unknown"];
-function carBucket(p: LeadProfile): string {
+const CAR_BUCKETS = ["0", "1", "2", "3+"];
+function carBucket(p: LeadProfile): string | null {
   return bucketRange(
     p.profile?.financial?.total_cars,
     [
@@ -143,10 +149,10 @@ function carBucket(p: LeadProfile): string {
   );
 }
 
-const HOME_LOAN_BUCKETS = ["None", "< 25L", "25L - 75L", "75L - 1.5Cr", "1.5Cr+", "Unknown"];
-function homeLoanBucket(p: LeadProfile): string {
+const HOME_LOAN_BUCKETS = ["None", "< 25L", "25L - 75L", "75L - 1.5Cr", "1.5Cr+"];
+function homeLoanBucket(p: LeadProfile): string | null {
   const v = p.profile?.financial?.home_loan_amount;
-  if (v == null) return "Unknown";
+  if (v == null) return null;
   if (v === 0) return "None";
   if (v < 2_500_000) return "< 25L";
   if (v < 7_500_000) return "25L - 75L";
@@ -154,8 +160,8 @@ function homeLoanBucket(p: LeadProfile): string {
   return "1.5Cr+";
 }
 
-const SCORE_BUCKETS = ["0-25", "25-50", "50-75", "75-100", "Unknown"];
-function finalScoreBucket(p: LeadProfile): string {
+const SCORE_BUCKETS = ["0-25", "25-50", "50-75", "75-100"];
+function finalScoreBucket(p: LeadProfile): string | null {
   return bucketRange(
     p.profile?.financial?.final_score,
     [
@@ -175,6 +181,7 @@ export const DIM_REGISTRY: Record<FilterDim, DimConfig> = {
     label: "Source",
     type: "enum",
     group: "Meta",
+    chartKind: "donut",
     values: ["CRM", "Bulk", "Single"],
     bucket: (p) => (p.source === "crm" ? "CRM" : p.source === "bulk" ? "Bulk" : "Single"),
   },
@@ -183,6 +190,7 @@ export const DIM_REGISTRY: Record<FilterDim, DimConfig> = {
     label: "Geography",
     type: "enum",
     group: "Professional",
+    chartKind: "donut",
     values: ["Metro", "Tier-2", "Tier-3"],
     bucket: (p) => p.profile?.professional?.location_type ?? null,
   },
@@ -199,6 +207,7 @@ export const DIM_REGISTRY: Record<FilterDim, DimConfig> = {
     label: "Company tier",
     type: "enum",
     group: "Professional",
+    chartKind: "donut",
     values: ["Unicorn", "Mid-Market", "SMB", "Startup"],
     bucket: (p) => p.profile?.professional?.company_tier ?? null,
   },
@@ -207,6 +216,7 @@ export const DIM_REGISTRY: Record<FilterDim, DimConfig> = {
     label: "Industry",
     type: "enum",
     group: "Professional",
+    chartKind: "donut",
     values: ["Fintech", "SaaS", "E-commerce", "Edtech", "Healthcare", "Other"],
     bucket: (p) => p.profile?.professional?.company_industry ?? null,
   },
@@ -215,6 +225,7 @@ export const DIM_REGISTRY: Record<FilterDim, DimConfig> = {
     label: "University tier",
     type: "enum",
     group: "Professional",
+    chartKind: "donut",
     values: ["Tier 1", "Tier 2", "Tier 3", "Other"],
     bucket: (p) => p.profile?.professional?.university_tier ?? null,
   },
@@ -241,6 +252,7 @@ export const DIM_REGISTRY: Record<FilterDim, DimConfig> = {
     label: "Employed",
     type: "bool",
     group: "Professional",
+    chartKind: "donut",
     bucket: (p) =>
       p.profile?.professional?.employed == null
         ? null
@@ -254,6 +266,7 @@ export const DIM_REGISTRY: Record<FilterDim, DimConfig> = {
     label: "Engineer",
     type: "bool",
     group: "Professional",
+    chartKind: "donut",
     bucket: (p) =>
       p.profile?.professional?.engineer == null
         ? null
@@ -267,6 +280,7 @@ export const DIM_REGISTRY: Record<FilterDim, DimConfig> = {
     label: "IIT / IIM",
     type: "bool",
     group: "Professional",
+    chartKind: "donut",
     bucket: (p) =>
       p.profile?.professional?.iit_iim == null
         ? null
@@ -280,6 +294,7 @@ export const DIM_REGISTRY: Record<FilterDim, DimConfig> = {
     label: "MBA",
     type: "bool",
     group: "Professional",
+    chartKind: "donut",
     bucket: (p) =>
       p.profile?.professional?.mba == null
         ? null
@@ -304,6 +319,7 @@ export const DIM_REGISTRY: Record<FilterDim, DimConfig> = {
     label: "Potential tier",
     type: "enum",
     group: "Financial",
+    chartKind: "donut",
     values: ["High", "Medium", "Low"],
     bucket: (p) => p.profile?.financial?.potential_tier ?? null,
   },
@@ -373,7 +389,6 @@ export const DIM_REGISTRY: Record<FilterDim, DimConfig> = {
 
 /** Default preset cards mapped to a dim. */
 export const CHART_CARD_TO_DIM: Record<ChartCardId, FilterDim> = {
-  source: "source",
   company_tier: "company_tier",
   seniority: "seniority",
   geography: "location_type",
@@ -381,7 +396,6 @@ export const CHART_CARD_TO_DIM: Record<ChartCardId, FilterDim> = {
 };
 
 export const CHART_CARD_LABEL: Record<ChartCardId, string> = {
-  source: "Source",
   company_tier: "Company tier",
   seniority: "Seniority",
   geography: "Geography",

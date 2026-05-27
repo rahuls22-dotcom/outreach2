@@ -70,14 +70,12 @@ export interface FilterClause {
 
 /** Default presets that ship in every dashboard. */
 export type ChartCardId =
-  | "source"
   | "company_tier"
   | "seniority"
   | "geography"
   | "income_range";
 
 export const DEFAULT_CHART_CARDS: ChartCardId[] = [
-  "source",
   "company_tier",
   "seniority",
   "geography",

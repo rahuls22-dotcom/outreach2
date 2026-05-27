@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -16,6 +17,13 @@ import {
   EyeOff,
   Sparkles,
   UserSearch,
+  ContactRound,
+  ChevronRight,
+  ChevronUp,
+  Activity,
+  Database,
+  ScanLine,
+  ListChecks,
 } from "lucide-react";
 import { useDemoMode } from "@/lib/demo-mode";
 import { useSpotStore } from "@/lib/spot/store";
@@ -42,7 +50,24 @@ const navSections = [
   {
     label: "Tools",
     items: [
-      { name: "Enrichment", href: "/enrichment", icon: UserSearch },
+      {
+        name: "Enrichment",
+        href: "/enrichment",
+        icon: UserSearch,
+        children: [
+          { name: "Enrich",         href: "/enrichment/operations", icon: Activity },
+          { name: "Enriched leads", href: "/enrichment/database",   icon: Database },
+        ],
+      },
+      {
+        name: "Contact extraction",
+        href: "/contact-extraction",
+        icon: ContactRound,
+        children: [
+          { name: "Extract",            href: "/contact-extraction/operations", icon: ScanLine },
+          { name: "Extracted contacts", href: "/contact-extraction/database",   icon: ListChecks },
+        ],
+      },
       { name: "Creatives", href: "/creatives", icon: ImageIcon },
       { name: "Agents", href: "/agents-mvp", icon: Zap },
       { name: "Audiences", href: "/audiences", icon: Globe, comingSoon: true },
@@ -58,20 +83,43 @@ const navSections = [
 ];
 
 export function Sidebar() {
-  const pathname = usePathname();
+  const pathname = usePathname() || "";
   const { isEmpty, toggle } = useDemoMode();
   const askSpot = useSpotStore((s) => s.askSpot);
   const spotOpen = useSpotStore((s) => s.open);
   const user = useCurrentUser();
 
-  const isActive = (href: string) => {
+  // Manual expand/collapse overrides per parent href. `undefined` = follow the
+  // route default (expanded when current path is under the parent). Toggling the
+  // caret sets an explicit boolean; navigating elsewhere doesn't reset it.
+  const [expandedOverride, setExpandedOverride] = useState<Record<string, boolean>>({});
+
+  // Used to decide whether to render a parent's children. True when current
+  // path is under the parent (e.g. /enrichment, /enrichment/operations).
+  const isUnder = (href: string) => {
     if (href === "/dashboard") return pathname === "/dashboard" || pathname === "/";
-    return pathname.startsWith(href);
+    return pathname === href || pathname.startsWith(href + "/");
   };
 
-  const navLinkClass = (href: string) =>
+  // Parent active highlight = exact match only when item has no children OR
+  // when we're at the exact parent path. Children expand the highlight to
+  // themselves when they own a deeper segment.
+  const isExactlyAt = (href: string) => {
+    if (href === "/dashboard") return pathname === "/dashboard" || pathname === "/";
+    return pathname === href;
+  };
+
+  // Parent gets "active" treatment for any sub-route — including its children —
+  // EXCEPT we want the parent's row not to look pressed while a child is the
+  // current page. So highlight parent only when exactly on it.
+  const isActiveForParent = (item: { href: string; children?: { href: string }[] }) => {
+    if (item.children && item.children.length > 0) return isExactlyAt(item.href);
+    return isUnder(item.href);
+  };
+
+  const navLinkClass = (active: boolean) =>
     `relative flex items-center gap-2.5 px-2 h-8 rounded-[6px] transition-colors duration-150 ${
-      isActive(href)
+      active
         ? "bg-surface-secondary text-text-primary font-medium"
         : "text-text-secondary hover:bg-surface-secondary/60"
     }`;
@@ -88,7 +136,7 @@ export function Sidebar() {
       <nav className="flex-1 overflow-y-auto px-3 py-1 pb-2">
         {/* Dashboard + Spot — standalone at top */}
         <div className="mb-3 space-y-0.5">
-          <Link href={dashboardItem.href} className={navLinkClass(dashboardItem.href)} style={{ fontSize: "13.5px" }}>
+          <Link href={dashboardItem.href} className={navLinkClass(isUnder(dashboardItem.href))} style={{ fontSize: "13.5px" }}>
             <dashboardItem.icon size={16} strokeWidth={1.5} />
             <span>{dashboardItem.name}</span>
           </Link>
@@ -131,16 +179,71 @@ export function Sidebar() {
                     </div>
                   );
                 }
+                const children = ("children" in item ? item.children : undefined) as
+                  | { name: string; href: string; icon: typeof item.icon }[]
+                  | undefined;
+                const hasChildren = !!children && children.length > 0;
+                const isExpanded = hasChildren
+                  ? (expandedOverride[item.href] ?? isUnder(item.href))
+                  : false;
+                const toggleExpanded = (e: React.MouseEvent) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setExpandedOverride((s) => ({ ...s, [item.href]: !isExpanded }));
+                };
                 return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={navLinkClass(item.href)}
-                    style={{ fontSize: "13.5px" }}
-                  >
-                    <item.icon size={16} strokeWidth={1.5} />
-                    <span>{item.name}</span>
-                  </Link>
+                  <div key={item.href}>
+                    <Link
+                      href={item.href}
+                      onClick={() => {
+                        if (hasChildren) {
+                          setExpandedOverride((s) => ({ ...s, [item.href]: true }));
+                        }
+                      }}
+                      className={navLinkClass(isActiveForParent(item))}
+                      style={{ fontSize: "13.5px" }}
+                    >
+                      <item.icon size={16} strokeWidth={1.5} />
+                      <span>{item.name}</span>
+                      {hasChildren && (
+                        <button
+                          type="button"
+                          onClick={toggleExpanded}
+                          aria-label={isExpanded ? "Collapse" : "Expand"}
+                          aria-expanded={isExpanded}
+                          className="ml-auto p-0.5 -mr-0.5 rounded hover:bg-surface-tertiary/60 text-text-tertiary hover:text-text-secondary transition-colors"
+                        >
+                          {isExpanded ? (
+                            <ChevronUp size={12} strokeWidth={2} />
+                          ) : (
+                            <ChevronRight size={12} strokeWidth={2} />
+                          )}
+                        </button>
+                      )}
+                    </Link>
+                    {hasChildren && isExpanded && (
+                      <div className="mt-0.5 mb-1 ml-[14px] pl-3 border-l border-border-subtle space-y-0.5">
+                        {children!.map((child) => {
+                          const childActive = isUnder(child.href);
+                          return (
+                            <Link
+                              key={child.href}
+                              href={child.href}
+                              className={`relative flex items-center gap-2 px-2 h-7 rounded-[6px] transition-colors duration-150 ${
+                                childActive
+                                  ? "bg-surface-secondary text-text-primary font-medium"
+                                  : "text-text-secondary hover:bg-surface-secondary/60"
+                              }`}
+                              style={{ fontSize: "12.5px" }}
+                            >
+                              <child.icon size={13} strokeWidth={1.5} />
+                              <span>{child.name}</span>
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 );
               })}
             </div>

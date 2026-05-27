@@ -8,6 +8,7 @@
 import {
   CRM_NAMES_POOL,
   sampleProfile,
+  varyProfile,
   type EnrichedProfile,
   type EnrichmentType,
   type RunRecord,
@@ -73,7 +74,12 @@ export function flattenRunsToLeadProfiles(
         seeded ??
         (status === "failed" || status === "running"
           ? undefined
-          : synthBulkProfile({ person, types: r.types, status }));
+          : synthBulkProfile({
+              person,
+              types: r.types,
+              status,
+              seed: seed * 1000 + i,
+            }));
 
       out.push({
         id: `${r.id}::${i}`,
@@ -107,11 +113,13 @@ function synthBulkProfile(args: {
   person: (typeof CRM_NAMES_POOL)[number];
   types: EnrichmentType[];
   status: LeadStatus;
+  seed: number;
 }): EnrichedProfile {
-  const { person, types, status } = args;
+  const { person, types, status, seed } = args;
   const wantsPro = types.includes("professional");
   const wantsFin = types.includes("financial");
   const isPartial = status === "not_enriched";
+  const v = varyProfile(seed);
   return {
     enrichment_status: isPartial ? "Partial Enrichment" : "Fully Enriched",
     finance_data: wantsFin && !isPartial ? "Available" : "Not Available",
@@ -120,11 +128,15 @@ function synthBulkProfile(args: {
       wantsPro && !isPartial
         ? {
             ...sampleProfile.professional,
+            ...v.professional,
             name: person.name,
             job_title: person.title,
             company_name: person.company,
           }
         : undefined,
-    financial: wantsFin && !isPartial ? sampleProfile.financial : undefined,
+    financial:
+      wantsFin && !isPartial
+        ? { ...sampleProfile.financial, ...v.financial }
+        : undefined,
   };
 }

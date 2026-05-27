@@ -276,40 +276,23 @@ const mockRuns: RunRecord[] = [
 
 // ── Sample CSV files (download links) ────────────────────────────────────
 
-export function sampleCsvFilename(types: EnrichmentType[]): string {
-  if (types.length === 0) return "enrichment-sample.csv";
-  if (types.length === 2) return "enrichment-sample-pro-fin.csv";
-  return `enrichment-sample-${types[0]}.csv`;
-}
+// Picks the right static sample file based on enrichment types.
+//   - prof + fin → name, phone, email, linkedin (full)
+//   - financial  → name, phone (minimum for financial)
+//   - professional / empty → email, phone, linkedin (no name needed)
+// Files live under public/sample-csvs/ and contain ~50 demo leads each
+// so an uploaded run shows real chart variation.
 
-// Generates a data: URL with sample headers + 2 example rows, scoped to picked types.
-export function sampleCsvDataUrl(types: EnrichmentType[]): string {
+export function sampleCsvFilename(types: EnrichmentType[]): string {
   const hasPro = types.includes("professional");
   const hasFin = types.includes("financial");
-  let cols: string[];
-  if (hasPro && hasFin) cols = ["name", "phone", "email", "linkedin"];
-  else if (hasFin) cols = ["name", "phone"];
-  else if (hasPro) cols = ["email", "phone", "linkedin"];
-  else cols = ["name", "phone", "email", "linkedin"];
+  if (hasPro && hasFin) return "enrichment-sample-pro-fin.csv";
+  if (hasFin) return "enrichment-sample-financial.csv";
+  return "enrichment-sample-professional.csv";
+}
 
-  const fullRow1: Record<string, string> = {
-    name: "Jane Doe",
-    phone: "+919876543210",
-    email: "jane.doe@example.com",
-    linkedin: "https://linkedin.com/in/janedoe",
-  };
-  const fullRow2: Record<string, string> = {
-    name: "Arjun Mehta",
-    phone: "+919812345678",
-    email: "arjun.mehta@phonepe.com",
-    linkedin: "https://linkedin.com/in/arjunmehta",
-  };
-  const rows = [
-    cols.join(","),
-    cols.map((c) => fullRow1[c]).join(","),
-    cols.map((c) => fullRow2[c]).join(","),
-  ];
-  return `data:text/csv;charset=utf-8,${encodeURIComponent(rows.join("\n"))}`;
+export function sampleCsvDataUrl(types: EnrichmentType[]): string {
+  return `/sample-csvs/${sampleCsvFilename(types)}`;
 }
 
 // ── Validation: which types are runnable given inputs available ──────────
