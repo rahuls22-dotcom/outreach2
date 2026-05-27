@@ -17,10 +17,6 @@ interface Props {
 export function ReliabilitySection({ profiles, prevProfiles, range, bounds }: Props) {
   return (
     <section className="mb-8">
-      <h2 className="text-[11px] font-medium uppercase tracking-[0.4px] text-text-tertiary mb-3">
-        How is Revspot doing?
-      </h2>
-
       <ReliabilityKpis profiles={profiles} prevProfiles={prevProfiles} />
 
       <div className="grid grid-cols-1 lg:grid-cols-[1.6fr_1fr] gap-3">
