@@ -473,16 +473,255 @@ function getProductFiles(workflow: SpotWorkflow) {
   return null;
 }
 
-/** Cycling status labels shown while Spot is researching a brand-new
- *  product. Each line is a concrete subtask so the loader reads as
- *  active work-in-progress rather than abstract "thinking". */
-const NEW_PRODUCT_RESEARCH_LABELS = [
-  "Crawling the URL · about, curriculum, pricing pages",
-  "Searching the open web for category signals",
-  "Reading the documents you uploaded",
-  "Synthesizing data into a coherent brief",
-  "Building the product brief",
+/**
+ * Sub-agents driving the deep-research memory build. Same animation
+ * pattern as the plan loader — each one runs sequentially through
+ * the 8-second tool-call, flipping queued → running → done.
+ */
+const MEMORY_BUILD_AGENTS: { id: string; label: string; duration: number }[] = [
+  { id: "url.crawl", label: "Crawling the brand site · about, curriculum, pricing", duration: 1400 },
+  { id: "web.scan", label: "Searching the open web for category signals", duration: 1300 },
+  { id: "docs.read", label: "Reading the documents you uploaded", duration: 1100 },
+  { id: "audience.match", label: "Matching against the Revspot audience graph", duration: 1300 },
+  { id: "data.synth", label: "Synthesizing findings into a coherent brief", duration: 1500 },
+  { id: "memory.write", label: "Writing brief · personas · pricing · USPs to memory", duration: 1400 },
 ];
+
+/**
+ * Memory-building loader · the hero loading state for the deep
+ * research phase. Mirrors the plan loader's three-part composition:
+ * header with progress bar, skeleton previewing the memory layout,
+ * and an agent strip that ticks through the work in real time.
+ */
+function MemoryBuildingLoader({ productName }: { productName: string }) {
+  const TOTAL_MS = MEMORY_BUILD_AGENTS.reduce((s, a) => s + a.duration, 0);
+  const [doneCount, setDoneCount] = useState(0);
+  const [progress, setProgress] = useState(2);
+
+  useEffect(() => {
+    setDoneCount(0);
+    let cumulative = 0;
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    MEMORY_BUILD_AGENTS.forEach((a, i) => {
+      cumulative += a.duration;
+      timers.push(setTimeout(() => setDoneCount(i + 1), cumulative));
+    });
+    return () => timers.forEach(clearTimeout);
+  }, []);
+
+  useEffect(() => {
+    const start = Date.now();
+    const id = setInterval(() => {
+      const elapsed = Date.now() - start;
+      const pct = Math.min(98, (elapsed / TOTAL_MS) * 100);
+      setProgress(pct);
+      if (pct >= 98) clearInterval(id);
+    }, 80);
+    return () => clearInterval(id);
+  }, [TOTAL_MS]);
+
+  return (
+    <div className="px-6 py-6 max-w-[760px] mx-auto">
+      {/* Header — running indicator + title + progress */}
+      <div className="mb-7">
+        <div className="flex items-center gap-2 mb-1.5">
+          <span className="inline-flex items-center gap-1.5 text-[10.5px] uppercase tracking-wider font-semibold text-[#15803D]">
+            <span className="relative inline-flex w-1.5 h-1.5 rounded-full bg-[#15803D]">
+              <span className="absolute inset-0 rounded-full bg-[#15803D] opacity-50 animate-ping" />
+            </span>
+            Spot is researching
+          </span>
+        </div>
+        <h1 className="text-[20px] font-semibold text-text-primary tracking-tight leading-tight">
+          Building memory for{" "}
+          <span className="text-text-primary">{productName}</span>
+        </h1>
+        <div className="text-[12px] text-text-secondary mt-1.5 leading-relaxed">
+          One agent end-to-end — crawling the URL, reading your files, matching
+          audience signals, then writing the brief to product memory.
+        </div>
+
+        <div className="mt-4">
+          <div className="h-1 bg-surface-page rounded-full overflow-hidden">
+            <div
+              className="h-full transition-all duration-300 ease-out"
+              style={{
+                width: `${progress}%`,
+                background:
+                  "linear-gradient(90deg, #C9A86A 0%, #E0C083 60%, #15803D 100%)",
+              }}
+            />
+          </div>
+          <div className="flex items-center justify-between mt-1.5">
+            <span className="text-[10.5px] text-text-tertiary tabular">
+              {Math.round(progress)}%
+            </span>
+            <span className="text-[10.5px] text-text-tertiary tabular">
+              {doneCount} of {MEMORY_BUILD_AGENTS.length} sub-tasks complete
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Skeleton · previews the destination memory layout */}
+      <div className="space-y-5 mb-7">
+        {/* H1 + properties + tagline */}
+        <div>
+          <div className="skeleton h-8 w-3/5 rounded mb-2.5" />
+          <div className="flex gap-1.5 mb-3">
+            <div className="skeleton h-4 w-20 rounded-full" />
+            <div className="skeleton h-4 w-14 rounded-full" />
+            <div className="skeleton h-4 w-24 rounded-full" />
+          </div>
+          <div
+            className="rounded-card border-l-4 px-4 py-3 space-y-1.5"
+            style={{ borderLeftColor: "#E8E3D5", background: "#FAF8F2" }}
+          >
+            <div className="skeleton h-3 w-full rounded" />
+            <div className="skeleton h-3 w-11/12 rounded" />
+            <div className="skeleton h-3 w-2/3 rounded" />
+          </div>
+        </div>
+
+        {/* Product brief · 2-col card grid */}
+        <div>
+          <div className="flex items-center gap-2 pb-1.5 border-b border-border-subtle mb-2.5">
+            <span className="w-1 h-1 rounded-full bg-[#C9A86A]" />
+            <div className="skeleton h-4 w-28 rounded" />
+          </div>
+          <div className="grid grid-cols-2 gap-2.5">
+            {[0, 1, 2, 3].map((i) => (
+              <div
+                key={i}
+                className="bg-white border border-border-subtle rounded-card px-3.5 py-3 space-y-1.5"
+              >
+                <div className="skeleton h-3 w-20 rounded" />
+                <div className="skeleton h-3 w-full rounded" />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Personas · pill-ish stacked rows */}
+        <div>
+          <div className="flex items-center gap-2 pb-1.5 border-b border-border-subtle mb-2.5">
+            <span className="w-1 h-1 rounded-full bg-[#C9A86A]" />
+            <div className="skeleton h-4 w-20 rounded" />
+          </div>
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="flex gap-2.5 mb-2 last:mb-0">
+              <span className="w-1 h-1 rounded-full bg-border mt-2 flex-shrink-0" />
+              <div className="skeleton h-3 w-3/4 rounded" />
+            </div>
+          ))}
+        </div>
+
+        {/* Pricing tiles */}
+        <div>
+          <div className="flex items-center gap-2 pb-1.5 border-b border-border-subtle mb-2.5">
+            <span className="w-1 h-1 rounded-full bg-[#C9A86A]" />
+            <div className="skeleton h-4 w-16 rounded" />
+          </div>
+          <div className="grid grid-cols-3 gap-2.5">
+            {[0, 1, 2].map((i) => (
+              <div
+                key={i}
+                className="bg-white border border-border-subtle rounded-card px-3.5 py-3 space-y-1.5"
+              >
+                <div className="skeleton h-3 w-3/4 rounded" />
+                <div className="skeleton h-5 w-1/2 rounded" />
+                <div className="skeleton h-3 w-2/3 rounded" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Agent strip · concrete sub-tasks ticking through */}
+      <div className="bg-white border border-border rounded-card overflow-hidden">
+        <div className="px-4 py-2.5 border-b border-border-subtle bg-surface-page flex items-center gap-2">
+          <Cog
+            size={11}
+            strokeWidth={1.8}
+            className="text-text-secondary animate-spin"
+            style={{ animationDuration: "2.4s" }}
+          />
+          <span className="text-[10.5px] uppercase tracking-wider text-text-tertiary font-semibold">
+            Deep Research Agent · at work
+          </span>
+        </div>
+        <ul className="divide-y divide-border-subtle">
+          {MEMORY_BUILD_AGENTS.map((a, i) => {
+            const done = i < doneCount;
+            const running = i === doneCount;
+            const queued = i > doneCount;
+            return (
+              <li
+                key={a.id}
+                className={`flex items-center gap-2.5 px-4 py-2 transition-colors ${
+                  done
+                    ? "bg-[#F0FDF4]/40"
+                    : running
+                      ? "bg-[#FAF8F2]"
+                      : ""
+                }`}
+              >
+                <span className="w-3.5 h-3.5 flex items-center justify-center flex-shrink-0">
+                  {done && (
+                    <CheckCircle2
+                      size={13}
+                      strokeWidth={2}
+                      className="text-[#15803D]"
+                    />
+                  )}
+                  {running && (
+                    <Cog
+                      size={12}
+                      strokeWidth={1.8}
+                      className="text-text-primary animate-spin"
+                      style={{ animationDuration: "1.2s" }}
+                    />
+                  )}
+                  {queued && (
+                    <span className="w-2.5 h-2.5 rounded-full border border-border-subtle" />
+                  )}
+                </span>
+                <span
+                  className={`font-mono text-[11px] tabular ${
+                    queued ? "text-text-tertiary" : "text-text-secondary"
+                  }`}
+                >
+                  {a.id}
+                </span>
+                <span
+                  className={`text-[12.5px] flex-1 truncate ${
+                    queued
+                      ? "text-text-tertiary"
+                      : done
+                        ? "text-text-secondary"
+                        : "text-text-primary font-medium"
+                  }`}
+                >
+                  {a.label}
+                </span>
+                {running && (
+                  <span className="text-[10.5px] uppercase tracking-wider text-[#8C6D33] font-semibold flex-shrink-0">
+                    running…
+                  </span>
+                )}
+                {done && (
+                  <span className="text-[10.5px] uppercase tracking-wider text-[#15803D] font-semibold flex-shrink-0">
+                    done
+                  </span>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    </div>
+  );
+}
 
 /** Stringify the in-memory ResearchedMemory shape back into the same
  *  markdown form the existing memory files use. Lets the same Markdown
@@ -567,20 +806,7 @@ function MemoryFileView({
       (workflow.step === "kickoff" && !workflow.kickoffReady));
 
   if (isBuildingFromScratch && workflow.kind === "launch-campaign") {
-    const isMemoryPhase = workflow.step === "kickoff";
-    return (
-      <div className="h-full flex items-center justify-center px-6 py-12">
-        <SpotFullscreen
-          title={
-            isMemoryPhase
-              ? `Building memory for ${workflow.productName}`
-              : `Researching ${workflow.productName}`
-          }
-          messages={NEW_PRODUCT_RESEARCH_LABELS}
-          size={64}
-        />
-      </div>
-    );
+    return <MemoryBuildingLoader productName={workflow.productName} />;
   }
 
   // ── New product · research complete ────────────────────────
