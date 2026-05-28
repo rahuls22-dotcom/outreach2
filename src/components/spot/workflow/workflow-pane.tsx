@@ -167,6 +167,14 @@ export function WorkflowPane() {
     workflow.kind === "launch-campaign" &&
     workflow.step === "product-setup";
 
+  // After the plan is approved we enter `launch-building`. Spot is
+  // assembling everything in the background — there's no file to
+  // preview yet. Take the whole canvas over with a dark Spot loader
+  // that walks the user through the build work.
+  const isBuilding =
+    workflow.kind === "launch-campaign" &&
+    workflow.step === "launch-building";
+
   // Empty canvas defensively · the chat header's "Close canvas"
   // button calls closeCanvasFile until the list is empty + sets
   // canvasOpen=false, but if for some reason we render with 0 panes
@@ -262,12 +270,20 @@ export function WorkflowPane() {
                 )}
               </div>
 
-              {/* Pane body · loader phases keep their warm cream
-                  surface (they're a separate experience); the file
-                  views render against the dark canvas. */}
+              {/* Pane body · the awaiting-input and launch-building
+                  states take the whole pane over with their own
+                  full-bleed loader surfaces. */}
               <div className="flex-1 overflow-y-auto">
                 {isAwaitingSetup && tab === "memory" ? (
                   <AwaitingInputCanvas />
+                ) : isBuilding ? (
+                  <LaunchBuildingLoader
+                    productName={
+                      workflow.kind === "launch-campaign"
+                        ? workflow.productName
+                        : ""
+                    }
+                  />
                 ) : (
                   <FileBody workflow={workflow} tab={tab} />
                 )}
@@ -668,15 +684,19 @@ function LiveBuildLoader({ config }: { config: LoaderConfig }) {
   }, [visibleFindings.length]);
 
   return (
-    <div className="px-6 py-6 max-w-[820px] mx-auto">
-      {/* ── HERO BLOCK ───────────────────────────────────────── */}
+    <div
+      className="px-6 py-6 max-w-[820px] mx-auto"
+      style={{ color: "#F5F4EF" }}
+    >
+      {/* ── HERO BLOCK · dark warm gradient with gold glow ─────── */}
       <div
         className="relative overflow-hidden rounded-card mb-5"
         style={{
           background:
-            "linear-gradient(135deg, #FBF8F0 0%, #F5EFE0 50%, #F0E6CD 100%)",
-          border: "1px solid #E8E3D5",
-          boxShadow: "0 12px 36px -12px rgba(201, 168, 106, 0.25)",
+            "linear-gradient(135deg, #1F1B14 0%, #181612 50%, #131110 100%)",
+          border: "1px solid #2E2820",
+          boxShadow:
+            "0 16px 40px -16px rgba(0,0,0,0.5), 0 0 0 1px rgba(201,168,106,0.06) inset",
         }}
       >
         <div
@@ -684,15 +704,15 @@ function LiveBuildLoader({ config }: { config: LoaderConfig }) {
           className="absolute inset-0 pointer-events-none"
           style={{
             background:
-              "radial-gradient(ellipse 60% 50% at 50% 30%, rgba(201, 168, 106, 0.22) 0%, transparent 70%)",
+              "radial-gradient(ellipse 60% 50% at 50% 25%, rgba(201, 168, 106, 0.18) 0%, transparent 70%)",
           }}
         />
         <div
           aria-hidden
-          className="absolute inset-0 pointer-events-none opacity-50"
+          className="absolute inset-0 pointer-events-none opacity-30"
           style={{
             background:
-              "linear-gradient(110deg, transparent 30%, rgba(255,255,255,0.4) 50%, transparent 70%)",
+              "linear-gradient(110deg, transparent 30%, rgba(201,168,106,0.18) 50%, transparent 70%)",
             backgroundSize: "200% 100%",
             animation: "shimmerSweep 3.6s ease-in-out infinite",
           }}
@@ -706,9 +726,9 @@ function LiveBuildLoader({ config }: { config: LoaderConfig }) {
                 className="absolute inset-0 rounded-full"
                 style={{
                   background:
-                    "radial-gradient(circle, rgba(201, 168, 106, 0.35) 0%, transparent 65%)",
-                  filter: "blur(8px)",
-                  transform: "scale(1.4)",
+                    "radial-gradient(circle, rgba(201, 168, 106, 0.40) 0%, transparent 65%)",
+                  filter: "blur(10px)",
+                  transform: "scale(1.5)",
                 }}
               />
               <SpotLoader mode="orbit" size={56} className="!gap-0 relative" />
@@ -716,46 +736,64 @@ function LiveBuildLoader({ config }: { config: LoaderConfig }) {
 
             <div className="flex-1 min-w-0 pt-1">
               <div className="flex items-center gap-2 mb-1.5">
-                <span className="relative inline-flex w-1.5 h-1.5 rounded-full bg-[#15803D]">
-                  <span className="absolute inset-0 rounded-full bg-[#15803D] opacity-60 animate-ping" />
+                <span className="relative inline-flex w-1.5 h-1.5 rounded-full bg-[#22C55E]">
+                  <span className="absolute inset-0 rounded-full bg-[#22C55E] opacity-60 animate-ping" />
                 </span>
-                <span className="text-[10.5px] uppercase tracking-wider font-semibold text-[#15803D]">
+                <span
+                  className="text-[10.5px] uppercase tracking-wider font-semibold"
+                  style={{ color: "#22C55E" }}
+                >
                   {config.agentName} · live
                 </span>
               </div>
-              <h1 className="text-[22px] font-semibold text-text-primary tracking-tight leading-[1.15]">
+              <h1
+                className="text-[22px] font-semibold tracking-tight leading-[1.15]"
+                style={{ color: "#F5F4EF" }}
+              >
                 {config.title}
               </h1>
-              <p className="text-[12.5px] text-text-secondary mt-1.5 leading-relaxed">
+              <p
+                className="text-[12.5px] mt-1.5 leading-relaxed"
+                style={{ color: "#A8A8A0" }}
+              >
                 {config.blurb}
               </p>
 
               <div className="mt-4">
-                <div className="relative h-1.5 bg-white/60 rounded-full overflow-hidden">
+                <div
+                  className="relative h-1.5 rounded-full overflow-hidden"
+                  style={{ background: "rgba(255,255,255,0.06)" }}
+                >
                   <div
                     className="h-full transition-all duration-300 ease-out relative"
                     style={{
                       width: `${progress}%`,
                       background:
-                        "linear-gradient(90deg, #C9A86A 0%, #E0C083 60%, #15803D 100%)",
+                        "linear-gradient(90deg, #C9A86A 0%, #E0C083 60%, #22C55E 100%)",
                     }}
                   >
                     <span
                       aria-hidden
                       className="absolute right-0 top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full"
                       style={{
-                        background: "#15803D",
+                        background: "#22C55E",
                         boxShadow:
-                          "0 0 12px 2px rgba(34, 197, 94, 0.6), 0 0 4px rgba(255,255,255,0.8)",
+                          "0 0 14px 3px rgba(34, 197, 94, 0.55), 0 0 4px rgba(255,255,255,0.4)",
                       }}
                     />
                   </div>
                 </div>
                 <div className="flex items-center justify-between mt-1.5">
-                  <span className="text-[10.5px] text-text-secondary tabular font-medium">
+                  <span
+                    className="text-[10.5px] tabular font-medium"
+                    style={{ color: "#D6D6CE" }}
+                  >
                     {Math.round(progress)}%
                   </span>
-                  <span className="text-[10.5px] text-text-tertiary tabular">
+                  <span
+                    className="text-[10.5px] tabular"
+                    style={{ color: "#8A8980" }}
+                  >
                     {doneCount} of {config.agents.length} sub-agents complete
                   </span>
                 </div>
@@ -783,16 +821,34 @@ function LiveBuildLoader({ config }: { config: LoaderConfig }) {
       </div>
 
       {/* ── LIVE FINDINGS STREAM ───────────────────────────── */}
-      <div className="bg-white border border-border rounded-card overflow-hidden mb-5">
-        <div className="px-4 py-2.5 border-b border-border-subtle bg-surface-page flex items-center gap-2">
+      <div
+        className="rounded-card overflow-hidden mb-5"
+        style={{
+          background: "#1A1A18",
+          border: "1px solid #262623",
+        }}
+      >
+        <div
+          className="px-4 py-2.5 flex items-center gap-2"
+          style={{
+            background: "#15140F",
+            borderBottom: "1px solid #262623",
+          }}
+        >
           <span className="relative inline-flex w-1.5 h-1.5 rounded-full bg-[#C9A86A]">
             <span className="absolute inset-0 rounded-full bg-[#C9A86A] opacity-50 animate-ping" />
           </span>
-          <span className="text-[10.5px] uppercase tracking-wider text-text-tertiary font-semibold">
+          <span
+            className="text-[10.5px] uppercase tracking-wider font-semibold"
+            style={{ color: "#A8A8A0" }}
+          >
             Live findings
           </span>
           <span className="flex-1" />
-          <span className="text-[10.5px] text-text-tertiary tabular">
+          <span
+            className="text-[10.5px] tabular"
+            style={{ color: "#8A8980" }}
+          >
             {visibleFindings.length} events
           </span>
         </div>
@@ -802,7 +858,10 @@ function LiveBuildLoader({ config }: { config: LoaderConfig }) {
           style={{ scrollBehavior: "smooth" }}
         >
           {visibleFindings.length === 0 ? (
-            <div className="text-[11.5px] text-text-tertiary italic py-2">
+            <div
+              className="text-[11.5px] italic py-2"
+              style={{ color: "#8A8980" }}
+            >
               Listening for events…
             </div>
           ) : (
@@ -821,23 +880,25 @@ function LiveBuildLoader({ config }: { config: LoaderConfig }) {
                     }}
                   >
                     <span
-                      className="font-mono text-[10px] text-text-tertiary tabular flex-shrink-0"
-                      style={{ minWidth: "44px" }}
+                      className="font-mono text-[10px] tabular flex-shrink-0"
+                      style={{ minWidth: "44px", color: "#7A7970" }}
                     >
                       +{ts}s
                     </span>
                     <span className="flex-shrink-0 text-[12px]" aria-hidden>
                       {f.icon}
                     </span>
-                    <span className="text-text-secondary flex-1 truncate">
+                    <span
+                      className="flex-1 truncate"
+                      style={{ color: "#D6D6CE" }}
+                    >
                       {f.label}
                     </span>
                     <span
-                      className={`text-[9.5px] uppercase tracking-wider font-semibold flex-shrink-0 ${
-                        f.category === "write"
-                          ? "text-[#15803D]"
-                          : "text-text-tertiary"
-                      }`}
+                      className="text-[9.5px] uppercase tracking-wider font-semibold flex-shrink-0"
+                      style={{
+                        color: f.category === "write" ? "#22C55E" : "#8A8980",
+                      }}
                     >
                       {f.category}
                     </span>
@@ -850,75 +911,107 @@ function LiveBuildLoader({ config }: { config: LoaderConfig }) {
       </div>
 
       {/* ── COMPACT AGENT STRIP ────────────────────────────── */}
-      <div className="bg-white border border-border rounded-card overflow-hidden">
-        <div className="px-4 py-2.5 border-b border-border-subtle bg-surface-page flex items-center gap-2">
+      <div
+        className="rounded-card overflow-hidden"
+        style={{
+          background: "#1A1A18",
+          border: "1px solid #262623",
+        }}
+      >
+        <div
+          className="px-4 py-2.5 flex items-center gap-2"
+          style={{
+            background: "#15140F",
+            borderBottom: "1px solid #262623",
+          }}
+        >
           <Cog
             size={11}
             strokeWidth={1.8}
-            className="text-text-secondary animate-spin"
-            style={{ animationDuration: "2.4s" }}
+            className="animate-spin"
+            style={{ animationDuration: "2.4s", color: "#A8A8A0" }}
           />
-          <span className="text-[10.5px] uppercase tracking-wider text-text-tertiary font-semibold">
+          <span
+            className="text-[10.5px] uppercase tracking-wider font-semibold"
+            style={{ color: "#A8A8A0" }}
+          >
             Sub-agent topology
           </span>
         </div>
-        <ul className="divide-y divide-border-subtle">
+        <ul style={{ borderTop: "0" }}>
           {config.agents.map((a, i) => {
             const done = i < doneCount;
             const running = i === doneCount;
             const queued = i > doneCount;
+            const bg = done
+              ? "rgba(34, 197, 94, 0.06)"
+              : running
+                ? "rgba(201, 168, 106, 0.07)"
+                : "transparent";
             return (
               <li
                 key={a.id}
-                className={`flex items-center gap-2.5 px-4 py-1.5 transition-colors ${
-                  done ? "bg-[#F0FDF4]/40" : running ? "bg-[#FAF8F2]" : ""
-                }`}
+                className="flex items-center gap-2.5 px-4 py-1.5 transition-colors"
+                style={{
+                  background: bg,
+                  borderTop: i > 0 ? "1px solid #262623" : undefined,
+                }}
               >
                 <span className="w-3.5 h-3.5 flex items-center justify-center flex-shrink-0">
                   {done && (
                     <CheckCircle2
                       size={13}
                       strokeWidth={2}
-                      className="text-[#15803D]"
+                      style={{ color: "#22C55E" }}
                     />
                   )}
                   {running && (
                     <Cog
                       size={12}
                       strokeWidth={1.8}
-                      className="text-text-primary animate-spin"
-                      style={{ animationDuration: "1.2s" }}
+                      className="animate-spin"
+                      style={{ animationDuration: "1.2s", color: "#F5F4EF" }}
                     />
                   )}
                   {queued && (
-                    <span className="w-2.5 h-2.5 rounded-full border border-border-subtle" />
+                    <span
+                      className="w-2.5 h-2.5 rounded-full"
+                      style={{ border: "1px solid #3A3A35" }}
+                    />
                   )}
                 </span>
                 <span
-                  className={`font-mono text-[11px] tabular ${
-                    queued ? "text-text-tertiary" : "text-text-secondary"
-                  }`}
+                  className="font-mono text-[11px] tabular"
+                  style={{ color: queued ? "#7A7970" : "#A8A8A0" }}
                 >
                   {a.id}
                 </span>
                 <span
-                  className={`text-[12px] flex-1 truncate ${
-                    queued
-                      ? "text-text-tertiary"
+                  className="text-[12px] flex-1 truncate"
+                  style={{
+                    color: queued
+                      ? "#7A7970"
                       : done
-                        ? "text-text-secondary"
-                        : "text-text-primary font-medium"
-                  }`}
+                        ? "#A8A8A0"
+                        : "#F5F4EF",
+                    fontWeight: running ? 500 : 400,
+                  }}
                 >
                   {a.label}
                 </span>
                 {running && (
-                  <span className="text-[10px] uppercase tracking-wider text-[#8C6D33] font-semibold flex-shrink-0">
+                  <span
+                    className="text-[10px] uppercase tracking-wider font-semibold flex-shrink-0"
+                    style={{ color: "#E0C083" }}
+                  >
                     running…
                   </span>
                 )}
                 {done && (
-                  <span className="text-[10px] uppercase tracking-wider text-[#15803D] font-semibold flex-shrink-0">
+                  <span
+                    className="text-[10px] uppercase tracking-wider font-semibold flex-shrink-0"
+                    style={{ color: "#22C55E" }}
+                  >
                     done
                   </span>
                 )}
@@ -1003,9 +1096,8 @@ function MemoryBuildingLoader({ productName }: { productName: string }) {
   );
 }
 
-/** Big-number counter card · large tabular value, small label,
- *  emoji icon. Pulses gently when its value is non-zero so the
- *  user notices the increment. */
+/** Big-number counter card · dark surface, large tabular value,
+ *  small label, emoji icon. Soft gold glow when value > 0. */
 function CounterCard({
   icon,
   label,
@@ -1019,9 +1111,11 @@ function CounterCard({
 }) {
   return (
     <div
-      className={`bg-white border border-border rounded-card px-3.5 py-3 relative overflow-hidden transition-transform ${
-        pulse ? "" : ""
-      }`}
+      className="rounded-card px-3.5 py-3 relative overflow-hidden transition-transform"
+      style={{
+        background: "#1A1A18",
+        border: "1px solid #262623",
+      }}
     >
       {pulse && value > 0 && (
         <div
@@ -1029,7 +1123,7 @@ function CounterCard({
           className="absolute inset-0 pointer-events-none"
           style={{
             background:
-              "radial-gradient(ellipse 80% 60% at 100% 0%, rgba(201, 168, 106, 0.08) 0%, transparent 70%)",
+              "radial-gradient(ellipse 80% 60% at 100% 0%, rgba(201, 168, 106, 0.18) 0%, transparent 70%)",
           }}
         />
       )}
@@ -1037,11 +1131,17 @@ function CounterCard({
         <span className="text-[15px]" aria-hidden>
           {icon}
         </span>
-        <span className="text-[22px] font-semibold text-text-primary tabular leading-none">
+        <span
+          className="text-[22px] font-semibold tabular leading-none"
+          style={{ color: "#F5F4EF" }}
+        >
           {value}
         </span>
       </div>
-      <div className="text-[10px] uppercase tracking-wider text-text-tertiary font-semibold mt-1.5">
+      <div
+        className="text-[10px] uppercase tracking-wider font-semibold mt-1.5"
+        style={{ color: "#8A8980" }}
+      >
         {label}
       </div>
     </div>
@@ -1189,6 +1289,144 @@ const PLAN_THOUGHTS = [
   "Locking budget allocations · conservative caps.",
   "Building your plan…",
 ];
+
+/** Same dark Spot pattern, but for the post-approval execution
+ *  phase. The user clicked "Approve plan" — Spot is building all
+ *  the assets in parallel. Copy walks through what each background
+ *  agent is doing so the wait feels like real work. */
+const LAUNCH_BUILD_THOUGHTS = [
+  "Briefing the Persona Builder…",
+  "Building structured persona files for each cohort.",
+  "Drafting creative concepts · 12 statics + 6 reels.",
+  "Generating headline + body variants per angle.",
+  "Designing 3 landing pages — one per persona.",
+  "Wiring lead forms · Meta + WhatsApp + landing.",
+  "Compiling Meta campaign structures · 3 campaigns · 9 ad sets.",
+  "Setting up Google Search + Discover campaigns.",
+  "Resize Agent · adapting creatives to 1:1, 4:5, 9:16, 16:9.",
+  "Running pre-flight checks on all assets.",
+  "I'll surface everything for your approval once it's ready.",
+];
+
+/** Shared dark-Spot loader surface used by both PlanBuildingLoader
+ *  and LaunchBuildingLoader · the only thing that changes is the
+ *  set of cycling thoughts and the agent eyebrow label. */
+function DarkSpotLoader({
+  agentLabel,
+  title,
+  thoughts,
+  intervalMs = 1900,
+}: {
+  agentLabel: string;
+  title: React.ReactNode;
+  thoughts: string[];
+  intervalMs?: number;
+}) {
+  const [idx, setIdx] = useState(0);
+  useEffect(() => {
+    if (thoughts.length < 2) return;
+    const id = setInterval(() => {
+      setIdx((i) => (i + 1) % thoughts.length);
+    }, intervalMs);
+    return () => clearInterval(id);
+  }, [thoughts.length, intervalMs]);
+
+  return (
+    <div
+      className="h-full flex flex-col items-center justify-center px-8 py-12 text-center"
+      style={{ background: "#0A0A09" }}
+    >
+      {/* Soft gold radial glow behind the orb */}
+      <div className="relative mb-7">
+        <div
+          aria-hidden
+          className="absolute inset-0 rounded-full"
+          style={{
+            background:
+              "radial-gradient(circle, rgba(201, 168, 106, 0.32) 0%, transparent 65%)",
+            filter: "blur(14px)",
+            transform: "scale(1.6)",
+          }}
+        />
+        <SpotLoader mode="orbit" size={84} className="!gap-0 relative" />
+      </div>
+
+      <div
+        className="inline-flex items-center gap-1.5 text-[10.5px] uppercase tracking-wider font-semibold mb-2"
+        style={{ color: "#22C55E" }}
+      >
+        <span className="relative inline-flex w-1.5 h-1.5 rounded-full bg-[#22C55E]">
+          <span className="absolute inset-0 rounded-full bg-[#22C55E] opacity-50 animate-ping" />
+        </span>
+        {agentLabel}
+      </div>
+
+      <h1
+        className="text-[24px] font-semibold tracking-tight leading-tight max-w-[560px]"
+        style={{ color: "#F5F4EF" }}
+      >
+        {title}
+      </h1>
+
+      {/* Cycling thought · key={idx} re-fires the slide-in keyframe */}
+      <div
+        key={idx}
+        className="mt-4 text-[14px] leading-relaxed max-w-[520px]"
+        style={{
+          color: "#A8A8A0",
+          animation: "findingSlide 320ms ease-out",
+          minHeight: "44px",
+        }}
+      >
+        {thoughts[idx]}
+      </div>
+
+      {/* Tiny progress dots · vague indicator that something's happening */}
+      <div className="flex items-center gap-1.5 mt-7">
+        {thoughts.map((_, i) => (
+          <span
+            key={i}
+            className="rounded-full transition-all duration-300"
+            style={{
+              width: i === idx ? "16px" : "4px",
+              height: "4px",
+              background: i <= idx ? "#C9A86A" : "#2A2A26",
+            }}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Launch-building canvas loader · the dark Spot pattern shown
+ *  after the user approves the plan, while background agents
+ *  spin up creatives, landing pages, forms, and campaigns. */
+function LaunchBuildingLoader({ productName }: { productName: string }) {
+  return (
+    <DarkSpotLoader
+      agentLabel="Build Agent · live"
+      title={
+        <>
+          Building{" "}
+          <span
+            style={{
+              background:
+                "linear-gradient(135deg, #C9A86A 0%, #E0C083 100%)",
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+            }}
+          >
+            {productName}
+          </span>{" "}
+          in the background
+        </>
+      }
+      thoughts={LAUNCH_BUILD_THOUGHTS}
+      intervalMs={2200}
+    />
+  );
+}
 
 function PlanBuildingLoader({ productName }: { productName: string }) {
   const [idx, setIdx] = useState(0);

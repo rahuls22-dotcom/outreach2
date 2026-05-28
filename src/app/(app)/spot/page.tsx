@@ -1625,41 +1625,77 @@ function WorkflowParkBanner({
 
   if (isBuilding) {
     return (
-      <div className="w-full mb-5 bg-gradient-to-br from-[#FAF8F2] to-[#F5F2E8] border border-[#E8E3D5] rounded-card p-4 relative overflow-hidden">
-        <div className="absolute -top-2 -right-2 opacity-[0.08]">
+      <div
+        className="w-full mb-5 rounded-card p-4 relative overflow-hidden"
+        style={{
+          background:
+            "linear-gradient(135deg, #1F1B14 0%, #181612 50%, #131110 100%)",
+          border: "1px solid #2E2820",
+          boxShadow:
+            "0 12px 32px -12px rgba(0,0,0,0.45), 0 0 0 1px rgba(201,168,106,0.06) inset",
+        }}
+      >
+        <div
+          aria-hidden
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background:
+              "radial-gradient(ellipse 60% 60% at 100% 0%, rgba(201, 168, 106, 0.20) 0%, transparent 70%)",
+          }}
+        />
+        <div className="absolute -top-2 -right-2 opacity-[0.10]">
           <SpotMark size={64} />
         </div>
         <div className="relative">
           <div className="flex items-start gap-3 mb-3">
-            {/* Orbiting Spot — matches the in-canvas loader so the
-                user sees a consistent "working" signal everywhere. */}
             <div className="flex-shrink-0 flex items-center justify-center w-12 h-12">
               <SpotLoader mode="orbit" size={20} className="!gap-0" />
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5 mb-0.5">
-                <span className="inline-flex w-1.5 h-1.5 rounded-full bg-[#15803D]" />
-                <span className="text-[10.5px] uppercase tracking-wider text-[#15803D] font-semibold">
+                <span className="relative inline-flex w-1.5 h-1.5 rounded-full bg-[#22C55E]">
+                  <span className="absolute inset-0 rounded-full bg-[#22C55E] opacity-50 animate-ping" />
+                </span>
+                <span
+                  className="text-[10.5px] uppercase tracking-wider font-semibold"
+                  style={{ color: "#22C55E" }}
+                >
                   Spot is working
                 </span>
               </div>
-              <div className="text-[14px] font-semibold text-text-primary leading-tight">
+              <div
+                className="text-[14px] font-semibold leading-tight"
+                style={{ color: "#F5F4EF" }}
+              >
                 Building {workflow.productName}
               </div>
-              <div className="text-[12px] text-text-secondary mt-1 leading-relaxed">
+              <div
+                className="text-[12px] mt-1 leading-relaxed"
+                style={{ color: "#A8A8A0" }}
+              >
                 Six agents running in parallel · Creative · Resize · Landing · Forms ·
-                Campaigns · Voice. I'll ping you when it's ready to review.
+                Campaigns · Voice. I&apos;ll ping you when it&apos;s ready to review.
               </div>
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <div className="flex-1 h-1.5 rounded-full bg-white/60 overflow-hidden">
+            <div
+              className="flex-1 h-1.5 rounded-full overflow-hidden"
+              style={{ background: "rgba(255,255,255,0.06)" }}
+            >
               <div
-                className="h-full bg-gradient-to-r from-[#15803D] to-[#22C55E] transition-all duration-500"
-                style={{ width: `${progress}%` }}
+                className="h-full transition-all duration-500"
+                style={{
+                  width: `${progress}%`,
+                  background:
+                    "linear-gradient(90deg, #C9A86A 0%, #E0C083 60%, #22C55E 100%)",
+                }}
               />
             </div>
-            <span className="text-[11px] text-text-secondary tabular flex-shrink-0">
+            <span
+              className="text-[11px] tabular flex-shrink-0"
+              style={{ color: "#A8A8A0" }}
+            >
               {Math.round(progress)}% · ETA ~2 hrs
             </span>
           </div>
@@ -1673,45 +1709,88 @@ function WorkflowParkBanner({
       <button
         type="button"
         onClick={onResume}
-        className="w-full mb-5 group bg-gradient-to-br from-[#F0FDF4] to-[#DCFCE7] border border-[#86EFAC] rounded-card p-4 flex items-center gap-3 hover:border-[#15803D] transition-colors text-left relative overflow-hidden"
+        className="w-full mb-5 group rounded-card p-4 flex items-center gap-3 text-left relative overflow-hidden transition-colors"
+        style={{
+          background:
+            "linear-gradient(135deg, #0E2A1A 0%, #0A1F14 50%, #07170E 100%)",
+          border: "1px solid #1A4D2A",
+          boxShadow: "0 12px 32px -12px rgba(0,0,0,0.5)",
+        }}
       >
-        <div className="absolute -top-2 -right-2 opacity-[0.08]">
+        <div
+          aria-hidden
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background:
+              "radial-gradient(ellipse 60% 60% at 100% 0%, rgba(34, 197, 94, 0.22) 0%, transparent 70%)",
+          }}
+        />
+        <div className="absolute -top-2 -right-2 opacity-[0.10]">
           <SpotMark size={64} />
         </div>
-        <div className="relative w-9 h-9 rounded-full bg-white border border-[#86EFAC] flex items-center justify-center flex-shrink-0 shadow-sm">
-          <span className="relative inline-flex w-2 h-2 rounded-full bg-[#15803D]">
-            <span className="absolute inset-0 rounded-full bg-[#15803D] opacity-50 animate-ping" />
+        <div
+          className="relative w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
+          style={{
+            background: "#0A1F14",
+            border: "1px solid #1A4D2A",
+            boxShadow: "0 0 18px rgba(34, 197, 94, 0.25)",
+          }}
+        >
+          <span className="relative inline-flex w-2 h-2 rounded-full bg-[#22C55E]">
+            <span className="absolute inset-0 rounded-full bg-[#22C55E] opacity-50 animate-ping" />
           </span>
         </div>
         <div className="relative flex-1 min-w-0">
-          <div className="text-[10.5px] uppercase tracking-wider text-[#15803D] font-semibold mb-0.5">
+          <div
+            className="text-[10.5px] uppercase tracking-wider font-semibold mb-0.5"
+            style={{ color: "#22C55E" }}
+          >
             Ready to review · {workflow.productName}
           </div>
-          <div className="text-[13.5px] font-semibold text-text-primary leading-tight">
+          <div
+            className="text-[13.5px] font-semibold leading-tight"
+            style={{ color: "#F5F4EF" }}
+          >
             Spot finished building · approve to deploy live
           </div>
-          <div className="text-[11.5px] text-text-secondary mt-0.5">
+          <div
+            className="text-[11.5px] mt-0.5"
+            style={{ color: "#A8A8A0" }}
+          >
             18 creatives · 72 resized variants · 3 landing pages · 2 forms · 3 campaigns
           </div>
         </div>
-        <span className="relative inline-flex items-center gap-1 h-8 px-3 rounded-button bg-[#15803D] text-white text-[12px] font-medium group-hover:bg-[#0F6B30] flex-shrink-0">
-          Review & approve
+        <span
+          className="relative inline-flex items-center gap-1 h-8 px-3 rounded-button text-[12px] font-medium flex-shrink-0"
+          style={{
+            background: "#22C55E",
+            color: "#0A1F14",
+          }}
+        >
+          Review &amp; approve
           <ArrowRight size={12} strokeWidth={2} />
         </span>
       </button>
     );
   }
 
-  // Default — generic parked workflow.
+  // Default — generic parked workflow (dark warm tone).
   return (
     <button
       type="button"
       onClick={onResume}
-      className="w-full mb-5 group bg-[#FAF8F2] border border-[#E8E3D5] rounded-card p-3 flex items-center gap-3 hover:border-[#D4B566] transition-colors text-left"
+      className="w-full mb-5 group rounded-card p-3 flex items-center gap-3 text-left transition-colors"
+      style={{
+        background: "#1A1A18",
+        border: "1px solid #2E2820",
+      }}
     >
       <SpotMark size={20} />
       <div className="flex-1 min-w-0">
-        <div className="text-[10.5px] uppercase tracking-wider text-text-tertiary font-medium">
+        <div
+          className="text-[10.5px] uppercase tracking-wider font-medium"
+          style={{ color: "#8A8980" }}
+        >
           {workflow.kind === "launch-campaign"
             ? "Launch in progress"
             : workflow.kind === "scale"
@@ -1720,11 +1799,17 @@ function WorkflowParkBanner({
                 ? "Optimize plan in progress"
                 : "Angle test in progress"}
         </div>
-        <div className="text-[13px] font-medium text-text-primary truncate">
+        <div
+          className="text-[13px] font-medium truncate"
+          style={{ color: "#F5F4EF" }}
+        >
           {workflow.productName} · {STEP_LABELS[workflow.step] || workflow.step}
         </div>
       </div>
-      <span className="inline-flex items-center gap-1 h-7 px-2.5 rounded-button bg-[#111] text-[#FAFAF8] text-[11.5px] font-medium group-hover:bg-black">
+      <span
+        className="inline-flex items-center gap-1 h-7 px-2.5 rounded-button text-[11.5px] font-medium"
+        style={{ background: "#FAFAF8", color: "#0A0A09" }}
+      >
         Resume
         <ArrowRight size={11} strokeWidth={2} />
       </span>
