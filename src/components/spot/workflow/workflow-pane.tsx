@@ -32,14 +32,24 @@ import {
 import {
   DiagnosticStep,
 } from "@/components/spot/workflow/diagnostic-steps";
+import {
+  LaunchPlanStep,
+  LaunchBuildingStep,
+  LaunchReviewStep,
+} from "@/components/spot/workflow/launch-build-steps";
 import { SpotMark } from "@/components/spot/spot-mark";
 import { PRODUCTS } from "@/lib/products-data";
 
 const STEP_ICONS: Record<WorkflowStep, typeof Users> = {
-  // Launch flow
+  // Launch flow (new consolidated structure)
   "deep-research": Search,
   "product-setup": Package,
   kickoff: Sparkles,
+  "launch-plan": Sparkles,
+  "launch-building": Cog,
+  "launch-review": CheckCircle2,
+  // Legacy step icons — unused since these steps left STEP_ORDER, but
+  // kept for type-completeness on the Record<WorkflowStep, ...> map.
   personas: Users,
   "media-plan": ChartPie,
   angles: Sparkles,
@@ -225,6 +235,15 @@ function StepBody({ workflow }: { workflow: SpotWorkflow }) {
       return <ProductSetupStep />;
     case "kickoff":
       return <KickoffStep workflow={workflow} />;
+    // New consolidated launch steps
+    case "launch-plan":
+      return <LaunchPlanStep workflow={workflow} />;
+    case "launch-building":
+      return <LaunchBuildingStep workflow={workflow} />;
+    case "launch-review":
+      return <LaunchReviewStep workflow={workflow} />;
+    // Legacy launch steps — unreachable in the new STEP_ORDER but
+    // kept compiling in case an in-flight workflow references them.
     case "personas":
       return <PersonasStep />;
     case "media-plan":
@@ -660,6 +679,87 @@ function KickoffStep({ workflow }: { workflow: LaunchWorkflow }) {
             <p className="text-[13px] text-text-secondary leading-relaxed mt-1">{researched.tagline}</p>
           </div>
 
+          {/* Structured brief — what the product IS */}
+          {researched.brief && researched.brief.length > 0 && (
+            <div className="bg-white border border-border rounded-card p-4">
+              <div className="label-section mb-2.5">Product brief</div>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                {researched.brief.map((row, i) => (
+                  <div key={i} className="flex items-baseline gap-2 text-[12.5px]">
+                    <span className="text-[14px] flex-shrink-0">{row.icon}</span>
+                    <span className="text-text-tertiary text-[11.5px] flex-shrink-0">
+                      {row.label}:
+                    </span>
+                    <span className="text-text-primary truncate">{row.value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Pricing + Offers — side by side */}
+          <div className="grid grid-cols-2 gap-3">
+            {researched.pricing && researched.pricing.length > 0 && (
+              <div className="bg-white border border-border rounded-card p-4">
+                <div className="flex items-center gap-1.5 mb-2.5">
+                  <span className="text-[14px]">💰</span>
+                  <span className="label-section">Pricing · suggested</span>
+                </div>
+                <div className="space-y-1.5">
+                  {researched.pricing.map((p, i) => (
+                    <div
+                      key={i}
+                      className="flex items-baseline justify-between gap-2 py-1 border-b border-border-subtle last:border-0"
+                    >
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-[12.5px] font-medium text-text-primary truncate">
+                          {p.name}
+                        </span>
+                        {p.badge && (
+                          <span className="text-[10px] text-text-tertiary mt-0.5">{p.badge}</span>
+                        )}
+                      </div>
+                      <div className="flex items-baseline gap-1 flex-shrink-0">
+                        <span className="text-[13px] font-semibold text-text-primary tabular">
+                          {p.cost}
+                        </span>
+                        {p.cadence && (
+                          <span className="text-[10.5px] text-text-tertiary">{p.cadence}</span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {researched.offers && researched.offers.length > 0 && (
+              <div className="bg-white border border-border rounded-card p-4">
+                <div className="flex items-center gap-1.5 mb-2.5">
+                  <span className="text-[14px]">🎁</span>
+                  <span className="label-section">Offers · proposed</span>
+                </div>
+                <ul className="space-y-1.5">
+                  {researched.offers.map((o, i) => (
+                    <li key={i} className="flex items-baseline gap-2 text-[12.5px]">
+                      <CheckCircle2
+                        size={10}
+                        strokeWidth={2}
+                        className="text-[#15803D] flex-shrink-0 mt-0.5"
+                      />
+                      <span className="text-text-primary">{o.label}</span>
+                      {o.meta && (
+                        <span className="text-[10.5px] text-text-tertiary ml-auto flex-shrink-0">
+                          {o.meta}
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+
+          {/* USPs + Avoid */}
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-white border border-border rounded-card p-4">
               <div className="flex items-center gap-1.5 mb-2">

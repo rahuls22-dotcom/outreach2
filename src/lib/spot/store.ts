@@ -281,8 +281,8 @@ export const useSpotStore = create<PanelState>((set) => ({
             },
             {
               type: "step-cta",
-              label: "Looks right — start with personas",
-              helper: "I'll bring up who you've been targeting.",
+              label: "Looks right — show me the plan",
+              helper: "I'll fold personas, media, creatives, landing pages, and campaigns into one plan to approve.",
               refineHint: "or tell me what's missing",
             },
           ],
@@ -394,14 +394,34 @@ export const useSpotStore = create<PanelState>((set) => ({
         if (!s.workflow || s.workflow.kind !== "launch-campaign") return {};
         const researched: import("./workflow").ResearchedMemory = {
           tagline: `${productName} — fresh research from Spot. Memory pre-filled; edit any field in chat.`,
+          brief: [
+            { icon: "📅", label: "Duration", value: "2 years · cohort-led" },
+            { icon: "👥", label: "Cohort size", value: "Capped at 60 · live classes" },
+            { icon: "📚", label: "Curriculum", value: "Category-standard · benchmarked against top 3 incumbents" },
+            { icon: "👨‍🏫", label: "Mentors", value: "Senior alumni · 1:1 monthly review" },
+            { icon: "🎯", label: "Outcome", value: "Entrance-exam preparation track" },
+          ],
           usps: [
             "Strongest category signal: live cohort + mentor-led delivery beats pure-recorded on retention.",
             "Pricing band sits in the median tier — room to test premium / lite variants once we have data.",
             "Closest competitor's positioning is rank-led; an outcomes-led counter-position should win on trust.",
+            "60-student cap and named-mentor framing test well against generic 'best coaching' positioning.",
           ],
           avoid: [
             "Don't promise specific outcomes (ranks, jobs, admits) — likely flagged by legal.",
             "Skip celebrity-endorsement framing unless explicitly cleared.",
+            "Avoid name-checking competitors (Allen, Aakash, FIITJEE) — reads as insecure.",
+          ],
+          pricing: [
+            { name: "2-year cohort", cost: "₹62,000", cadence: "one-shot", badge: "Suggested · median band" },
+            { name: "2-year · EMI", cost: "₹5,600", cadence: "/month · 12 months" },
+            { name: "1-year intensive", cost: "₹36,000", cadence: "one-shot" },
+          ],
+          offers: [
+            { label: "Early-bird · 10% off", meta: "first 14 days" },
+            { label: "Sibling discount · 8%", meta: "stackable" },
+            { label: "14-day money-back", meta: "no questions" },
+            { label: "Refer-a-friend · ₹3K credit", meta: "post-enrol" },
           ],
           sources: [
             ...(attachedFiles.length > 0
@@ -447,8 +467,8 @@ export const useSpotStore = create<PanelState>((set) => ({
             },
             {
               type: "step-cta",
-              label: "Looks right — start with personas",
-              helper: "I'll dispatch the Persona Researcher next.",
+              label: "Looks right — show me the plan",
+              helper: "I'll fold personas, media, creatives, landing pages, and campaigns into one plan to approve.",
               refineHint: "or tell me what's missing",
             },
           ],
@@ -540,6 +560,16 @@ export const useSpotStore = create<PanelState>((set) => ({
             },
           ],
         });
+
+        // Entering launch-building? Auto-park the user to the homepage so
+        // they see the "Spot working" card on /spot. The chat stays alive
+        // and full-width on the home view; the building canvas isn't
+        // useful by itself.
+        const extraSetterPayload: Partial<PanelState> = {};
+        if (upcoming === "launch-building") {
+          extraSetterPayload.viewHomeOverride = true;
+        }
+
         // After the fake delay, flip the tool-call to done + append the
         // step intro. Step itself already advanced.
         setTimeout(() => {
@@ -567,8 +597,28 @@ export const useSpotStore = create<PanelState>((set) => ({
                 : s2.workflow;
             return { thread: finalThread, workflow };
           });
+
+          // launch-building auto-advances to launch-review after the
+          // tool-call resolves. The user doesn't need to click anything —
+          // Spot finished building, surfaces the review notification.
+          if (upcoming === "launch-building") {
+            // Small additional beat so the "Got it · working on X" intro
+            // message lands and the user sees it briefly before the
+            // "ready to review" intro takes over.
+            setTimeout(() => {
+              // Call the advance function from the live store reference.
+              const store = useSpotStore.getState();
+              if (store.workflow && store.workflow.step === "launch-building") {
+                store.advanceWorkflow();
+              }
+            }, 600);
+          }
         }, tc.delayMs);
-        return { workflow: nextWorkflow, thread: [...s.thread, ...appended] };
+        return {
+          workflow: nextWorkflow,
+          thread: [...s.thread, ...appended],
+          ...extraSetterPayload,
+        };
       }
 
       // No tool call configured for this transition — advance synchronously.

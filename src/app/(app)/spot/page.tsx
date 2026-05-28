@@ -46,6 +46,7 @@ import { PAST_CHATS, SPOT_QUEUE, type QueueItem, type QueueStatus } from "@/lib/
 import type { SpotMessage, SpotScope } from "@/lib/spot/types";
 import { WorkflowPane } from "@/components/spot/workflow/workflow-pane";
 import { PRODUCTS, diagnoseProduct } from "@/lib/products-data";
+import { STEP_LABELS, type SpotWorkflow } from "@/lib/spot/workflow";
 import {
   planForProduct,
   PLAN_STATUS_TONE,
@@ -279,7 +280,11 @@ export default function SpotPage() {
   }
 
   // ─── ACTIVE THREAD ──────────────────────────────────────────────
-  if (!isEmpty) {
+  // Render the active-thread chat only when the user hasn't asked to
+  // see the homepage. Without this guard, clicking the Home button
+  // inside a workflow drops the user into a plain chat view instead
+  // of the welcome screen + product cards + Resume banner.
+  if (!isEmpty && !viewHomeOverride) {
     return (
       <div className="min-h-screen flex flex-col bg-[var(--chat-bg)]">
         {/* Top bar */}
@@ -345,27 +350,11 @@ export default function SpotPage() {
       {/* Top half: hero + composer + chips — narrow centered column so
           the welcome moment feels intimate and Claude-like. */}
       <div className="max-w-[780px] mx-auto w-full px-6 pt-14">
-        {/* Resume banner — when a workflow is parked */}
+        {/* Resume banner — when a workflow is parked. We give the building
+            and review states their own visual treatment so the user
+            understands what's happening at a glance. */}
         {workflow && viewHomeOverride && (
-          <button
-            type="button"
-            onClick={resumeWorkflow}
-            className="w-full mb-5 group bg-[#FAF8F2] border border-[#E8E3D5] rounded-card p-3 flex items-center gap-3 hover:border-[#D4B566] transition-colors text-left"
-          >
-            <SpotMark size={20} />
-            <div className="flex-1 min-w-0">
-              <div className="text-[10.5px] uppercase tracking-wider text-text-tertiary font-medium">
-                Launch in progress
-              </div>
-              <div className="text-[13px] font-medium text-text-primary truncate">
-                {workflow.productName} · paused on {workflow.step}
-              </div>
-            </div>
-            <span className="inline-flex items-center gap-1 h-7 px-2.5 rounded-button bg-[#111] text-[#FAFAF8] text-[11.5px] font-medium group-hover:bg-black">
-              Resume
-              <ArrowRight size={11} strokeWidth={2} />
-            </span>
-          </button>
+          <WorkflowParkBanner workflow={workflow} onResume={resumeWorkflow} />
         )}
 
         {/* Hero */}
@@ -978,5 +967,150 @@ function PanelHeader({
         {action}
       </span>
     </div>
+  );
+}
+
+/**
+ * Banner shown on the /spot homepage when a workflow is parked. Three
+ * visual states drive different copy + accents:
+ *
+ *   · launch-building → "Spot is working" with progress bar (no jump-in
+ *     CTA; the user just waits).
+ *   · launch-review   → "Ready to review" with a green pulsing dot and
+ *     a primary Approve CTA — high-energy invitation back into the canvas.
+ *   · anything else    → Default Resume banner.
+ *
+ * The launch-building bar fills from 0% → 100% over the building delay
+ * so the user has something to watch.
+ */
+function WorkflowParkBanner({
+  workflow,
+  onResume,
+}: {
+  workflow: SpotWorkflow;
+  onResume: () => void;
+}) {
+  const isBuilding = workflow.step === "launch-building";
+  const isReview = workflow.step === "launch-review";
+
+  // Progress bar fill animation while building.
+  const [progress, setProgress] = useState(0);
+  useEffect(() => {
+    if (!isBuilding) return;
+    setProgress(8); // start visible
+    const interval = setInterval(() => {
+      setProgress((p) => {
+        if (p >= 92) return 92; // hold near full until step advances
+        return p + Math.random() * 6;
+      });
+    }, 800);
+    return () => clearInterval(interval);
+  }, [isBuilding]);
+
+  if (isBuilding) {
+    return (
+      <div className="w-full mb-5 bg-gradient-to-br from-[#FAF8F2] to-[#F5F2E8] border border-[#E8E3D5] rounded-card p-4 relative overflow-hidden">
+        <div className="absolute -top-2 -right-2 opacity-[0.08]">
+          <SpotMark size={64} />
+        </div>
+        <div className="relative">
+          <div className="flex items-start gap-3 mb-3">
+            <div className="relative w-9 h-9 flex-shrink-0">
+              <SpotMark size={22} className="spot-breath absolute inset-0 m-auto" />
+              <div className="absolute inset-0 rounded-full border-2 border-dashed border-border-subtle animate-[spin_4s_linear_infinite]" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-1.5 mb-0.5">
+                <span className="inline-flex w-1.5 h-1.5 rounded-full bg-[#15803D]" />
+                <span className="text-[10.5px] uppercase tracking-wider text-[#15803D] font-semibold">
+                  Spot is working
+                </span>
+              </div>
+              <div className="text-[14px] font-semibold text-text-primary leading-tight">
+                Building {workflow.productName}
+              </div>
+              <div className="text-[12px] text-text-secondary mt-1 leading-relaxed">
+                Six agents running in parallel · Creative · Resize · Landing · Forms ·
+                Campaigns · Voice. I'll ping you when it's ready to review.
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="flex-1 h-1.5 rounded-full bg-white/60 overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-[#15803D] to-[#22C55E] transition-all duration-500"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+            <span className="text-[11px] text-text-secondary tabular flex-shrink-0">
+              {Math.round(progress)}% · ETA ~2 hrs
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (isReview) {
+    return (
+      <button
+        type="button"
+        onClick={onResume}
+        className="w-full mb-5 group bg-gradient-to-br from-[#F0FDF4] to-[#DCFCE7] border border-[#86EFAC] rounded-card p-4 flex items-center gap-3 hover:border-[#15803D] transition-colors text-left relative overflow-hidden"
+      >
+        <div className="absolute -top-2 -right-2 opacity-[0.08]">
+          <SpotMark size={64} />
+        </div>
+        <div className="relative w-9 h-9 rounded-full bg-white border border-[#86EFAC] flex items-center justify-center flex-shrink-0 shadow-sm">
+          <span className="relative inline-flex w-2 h-2 rounded-full bg-[#15803D]">
+            <span className="absolute inset-0 rounded-full bg-[#15803D] opacity-50 animate-ping" />
+          </span>
+        </div>
+        <div className="relative flex-1 min-w-0">
+          <div className="text-[10.5px] uppercase tracking-wider text-[#15803D] font-semibold mb-0.5">
+            Ready to review · {workflow.productName}
+          </div>
+          <div className="text-[13.5px] font-semibold text-text-primary leading-tight">
+            Spot finished building · approve to deploy live
+          </div>
+          <div className="text-[11.5px] text-text-secondary mt-0.5">
+            18 creatives · 72 resized variants · 3 landing pages · 2 forms · 3 campaigns
+          </div>
+        </div>
+        <span className="relative inline-flex items-center gap-1 h-8 px-3 rounded-button bg-[#15803D] text-white text-[12px] font-medium group-hover:bg-[#0F6B30] flex-shrink-0">
+          Review & approve
+          <ArrowRight size={12} strokeWidth={2} />
+        </span>
+      </button>
+    );
+  }
+
+  // Default — generic parked workflow.
+  return (
+    <button
+      type="button"
+      onClick={onResume}
+      className="w-full mb-5 group bg-[#FAF8F2] border border-[#E8E3D5] rounded-card p-3 flex items-center gap-3 hover:border-[#D4B566] transition-colors text-left"
+    >
+      <SpotMark size={20} />
+      <div className="flex-1 min-w-0">
+        <div className="text-[10.5px] uppercase tracking-wider text-text-tertiary font-medium">
+          {workflow.kind === "launch-campaign"
+            ? "Launch in progress"
+            : workflow.kind === "scale"
+              ? "Scale plan in progress"
+              : workflow.kind === "optimize"
+                ? "Optimize plan in progress"
+                : "Angle test in progress"}
+        </div>
+        <div className="text-[13px] font-medium text-text-primary truncate">
+          {workflow.productName} · {STEP_LABELS[workflow.step] || workflow.step}
+        </div>
+      </div>
+      <span className="inline-flex items-center gap-1 h-7 px-2.5 rounded-button bg-[#111] text-[#FAFAF8] text-[11.5px] font-medium group-hover:bg-black">
+        Resume
+        <ArrowRight size={11} strokeWidth={2} />
+      </span>
+    </button>
   );
 }

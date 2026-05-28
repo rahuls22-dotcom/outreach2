@@ -20,10 +20,18 @@ import {
 // step's UI; the chat narrates and carries the approval CTAs.
 
 export type WorkflowStep =
-  // Launch flow
+  // Launch flow — new consolidated structure:
+  // deep-research → product-setup → kickoff → launch-plan
+  //   → launch-building (async) → launch-review → done
   | "deep-research"
   | "product-setup"
   | "kickoff"
+  | "launch-plan"
+  | "launch-building"
+  | "launch-review"
+  // Legacy launch step types — kept in the union so existing canvas
+  // components keep compiling, but removed from STEP_ORDER. The new
+  // flow folds all of these into launch-plan + launch-review.
   | "personas"
   | "media-plan"
   | "angles"
@@ -53,22 +61,22 @@ export const STEP_ORDER: WorkflowStep[] = [
   "deep-research",
   "product-setup",
   "kickoff",
-  "personas",
-  "media-plan",
-  "angles",
-  "resize-qa",
-  "forms",
-  "campaigns",
-  "voice-agent",
+  "launch-plan",
+  "launch-building",
+  "launch-review",
   "done",
 ];
 
 /** Labels used in the step indicator at the top of the workspace pane. */
 export const STEP_LABELS: Record<WorkflowStep, string> = {
-  // launch
+  // launch (new structure)
   "deep-research": "Deep research",
   "product-setup": "Product memory",
-  kickoff: "Kickoff",
+  kickoff: "Memory",
+  "launch-plan": "Plan",
+  "launch-building": "Spot working",
+  "launch-review": "Review & deploy",
+  // legacy step labels — kept for type-completeness only
   personas: "Personas",
   "media-plan": "Plan",
   angles: "Creatives",
@@ -96,13 +104,9 @@ export const STEP_LABELS: Record<WorkflowStep, string> = {
 /** Steps that show in the visible step rail (launch flow default). */
 export const VISIBLE_STEPS: WorkflowStep[] = [
   "kickoff",
-  "personas",
-  "media-plan",
-  "angles",
-  "resize-qa",
-  "forms",
-  "campaigns",
-  "voice-agent",
+  "launch-plan",
+  "launch-building",
+  "launch-review",
 ];
 
 /** Per-kind step order. nextStep() reads this off the workflow kind. */
@@ -132,12 +136,21 @@ export type WorkflowApprovals = {
   formIds: string[];
 };
 
-/** Memory Spot synthesises on the fly during deep research. */
+/** Memory Spot synthesises on the fly during deep research.
+ *  Mirrors the relevant subset of ProductSummary so the kickoff canvas
+ *  can render the freshly-researched product the same way it renders
+ *  existing products from the library. */
 export type ResearchedMemory = {
   tagline: string;
   usps: string[];
   avoid: string[];
   sources: string[];
+  /** Suggested pricing plans · Spot proposes based on category benchmarks. */
+  pricing: { name: string; cost: string; cadence?: string; badge?: string }[];
+  /** Promotional offers · Spot proposes based on competitive landscape. */
+  offers: { label: string; meta?: string }[];
+  /** Structured product brief rows · Spot's read on what the product *is*. */
+  brief: { icon: string; label: string; value: string }[];
 };
 
 export type LaunchWorkflow = {
@@ -883,6 +896,28 @@ export const STEP_TOOL_CALL: Partial<Record<WorkflowStep, StepToolCall>> = {
   // Extended flows — folded in from extended-flows.ts so the engine has
   // a single tool-call map regardless of which workflow kind is active.
   ...(EXTENDED_TOOL_CALLS as unknown as Partial<Record<WorkflowStep, StepToolCall>>),
+  // New launch-plan step — builds the consolidated plan (parallel agents).
+  "launch-plan": {
+    agent: "spot.plan",
+    detail:
+      "personas.fetch · media.plan · creative.brief · forms.draft · campaigns.compile · agents.match — running in parallel…",
+    delayMs: 5600,
+  },
+  // Building step — Spot is working asynchronously. The tool-call is
+  // long-ish so the user can navigate away.
+  "launch-building": {
+    agent: "build.execute",
+    detail:
+      "Creative Agent · Resize Agent · Landing Builder · Forms Agent · Campaign Compiler — building in the background.",
+    delayMs: 30000,
+  },
+  // Review step lands quickly — Spot just compiles assets for review.
+  "launch-review": {
+    agent: "build.complete",
+    detail: "compiling preview · creatives, landing pages, lead forms, campaign tree…",
+    delayMs: 2200,
+  },
+  // Legacy steps below kept so any old in-flight workflow still narrates.
   personas: {
     agent: "personas.lookup",
     detail: "scanning library + cross-product audience graph…",
@@ -943,6 +978,62 @@ export function stepIntroMessage(
     return extendedIntroMessage(step, w.productName, w.kind);
   }
   switch (step) {
+    case "launch-plan":
+      return {
+        role: "spot",
+        parts: [
+          {
+            type: "text",
+            text:
+              "Here's what I'd build for you — one plan covering personas, media, creatives, landing pages, lead forms, campaign tree, and outreach. Approve once and I'll spend ~2 hours assembling everything in the background.",
+          },
+          {
+            type: "step-cta",
+            label: "Approve plan · I'll get to work",
+            helper:
+              "I'll work in the background. You can keep using Revspot — I'll ping you when it's ready to review.",
+            refineHint: "or tell me what to change before I start",
+          },
+        ],
+      };
+    case "launch-building":
+      return {
+        role: "spot",
+        parts: [
+          {
+            type: "headline",
+            text: `Got it — working on ${w.productName}.`,
+            verdict: "info",
+          },
+          {
+            type: "text",
+            text:
+              "ETA ~2 hours. Five agents running in parallel: Creative Agent (12 statics + 6 reels), Resize Agent (48 variants), Landing Builder (3 pages), Forms Agent (2 lead forms), Campaign Compiler. I'll surface everything for your approval when it's done — keep working, I'll find you.",
+          },
+        ],
+      };
+    case "launch-review":
+      return {
+        role: "spot",
+        parts: [
+          {
+            type: "headline",
+            text: `${w.productName} · ready to review.`,
+            verdict: "ok",
+          },
+          {
+            type: "text",
+            text:
+              "All assets built. Right pane has the full preview — creatives, landing pages, lead forms, campaign tree, voice agent. Approve to deploy live to Meta + Google.",
+          },
+          {
+            type: "step-cta",
+            label: "Approve all · deploy live",
+            helper: "I'll push to Meta + Google immediately and start the watchers.",
+            refineHint: "or tell me which assets need a tweak",
+          },
+        ],
+      };
     case "personas":
       return {
         role: "spot",
