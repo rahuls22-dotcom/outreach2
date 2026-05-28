@@ -165,9 +165,14 @@ export default function SpotPage() {
 
   const [draft, setDraft] = useState("");
   // Chat-panel width (px) — user-resizable via the divider drag handle.
-  // Default sized so the chat is the primary surface even with the
-  // canvas open (~10% wider than the previous 800).
-  const [chatWidth, setChatWidth] = useState(880);
+  // Default to 40% of the viewport so the canvas gets ~60% to render
+  // the file content comfortably. Falls back to a sensible px value
+  // during SSR before window is available.
+  const [chatWidth, setChatWidth] = useState(() =>
+    typeof window !== "undefined"
+      ? Math.max(420, Math.round(window.innerWidth * 0.4))
+      : 720,
+  );
   const [pending, setPending] = useState(false);
   const [scopeOpen, setScopeOpen] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -430,14 +435,18 @@ export default function SpotPage() {
           />
         )}
 
-        {/* Right — workflow canvas. Floated as a rounded card with
-            shadow so it reads as an overlay panel on top of the chat,
-            not a hard split-pane. */}
+        {/* Right — workflow canvas. Floated as a rounded card on a
+            dark surface so the markdown content reads in Notion-style
+            dark mode. */}
         {canvasOpen && (
           <div className="flex-1 min-w-0 p-2 pl-0">
             <div
-              className="h-full bg-white rounded-card border border-border overflow-hidden"
-              style={{ boxShadow: "0 10px 32px -12px rgba(0,0,0,0.18)" }}
+              className="h-full rounded-card border overflow-hidden"
+              style={{
+                background: "#161614",
+                borderColor: "#2A2A26",
+                boxShadow: "0 14px 36px -12px rgba(0,0,0,0.45)",
+              }}
             >
               <WorkflowPane />
             </div>

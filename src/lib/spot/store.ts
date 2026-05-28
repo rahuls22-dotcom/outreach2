@@ -768,7 +768,7 @@ export const useSpotStore = create<PanelState>((set) => ({
         };
         return { workflow: nextWorkflow, thread: [...updatedThread, kickoff] };
       });
-    }, 8000); // Single agent does the whole research + memory write
+    }, 14000); // Deliberately slower so each loader stage gets to breathe
   },
 
   // Diagnostic workflows — Scale, Optimize, Test-Angles. They all share

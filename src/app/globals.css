@@ -402,6 +402,46 @@
   to   { opacity: 1; transform: translateY(0); }
 }
 
+/* ─── Dark-mode markdown viewer ─────────────────────────────────
+ * Notion-style dark canvas for the right pane. We override the
+ * light-theme component styles by targeting tailwind utility
+ * classes inside `.md-dark`. Surface = soft-black, text = off-white,
+ * borders muted, with the gold accent kept for warmth.
+ * ───────────────────────────────────────────────────────────────── */
+
+.md-dark h1, .md-dark h2, .md-dark h3, .md-dark h4 {
+  color: #F5F4EF !important;
+}
+.md-dark p {
+  color: #B8B7B0 !important;
+}
+.md-dark .text-text-primary  { color: #F5F4EF !important; }
+.md-dark .text-text-secondary { color: #B8B7B0 !important; }
+.md-dark .text-text-tertiary  { color: #8A8980 !important; }
+.md-dark .bg-white            { background: #1F1F1D !important; }
+.md-dark .border-border        { border-color: #2E2E2A !important; }
+.md-dark .border-border-subtle { border-color: #26262300 !important; border-color: #262623 !important; }
+.md-dark .bg-surface-page      { background: #1A1A18 !important; }
+.md-dark .bg-surface-secondary { background: #26262300 !important; background: #262623 !important; }
+.md-dark .hover\:border-border:hover { border-color: #3A3A35 !important; }
+
+/* Inline code in dark mode gets a deeper sunken look. */
+.md-dark code {
+  background: #26262300 !important;
+  background: #1A1A18 !important;
+  border-color: #2E2E2A !important;
+  color: #E8E0C8 !important;
+}
+
+/* Properties-bar pills */
+.md-dark .uppercase.tracking-wider.text-text-tertiary {
+  color: #8A8980 !important;
+}
+
+/* Strong text stays bright (we use `text-text-primary` in <strong>). */
+.md-dark strong { color: #F5F4EF !important; }
+.md-dark em { color: #B8B7B0 !important; }
+
 /* Tilt — gentle wobble of the core. No halo. */
 .spot-tilt {
   display: inline-flex;

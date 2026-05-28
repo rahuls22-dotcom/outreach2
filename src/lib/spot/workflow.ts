@@ -970,8 +970,8 @@ export const STEP_TOOL_CALL: Partial<Record<WorkflowStep, StepToolCall>> = {
   "launch-plan": {
     agent: "spot.plan",
     detail:
-      "personas.fetch · media.plan · creative.brief · forms.draft · campaigns.compile · agents.match — running in parallel…",
-    delayMs: 5600,
+      "personas.draft · memory.read · media.plan · creative.brief · rollout.sequence · budget.lock — running in parallel…",
+    delayMs: 11800,
   },
   // Building step — Spot is working asynchronously. The tool-call is
   // long-ish so the user can navigate away. Persona Builder runs first

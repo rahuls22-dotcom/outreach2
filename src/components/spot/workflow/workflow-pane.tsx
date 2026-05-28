@@ -174,7 +174,10 @@ export function WorkflowPane() {
   const panes: CanvasFile[] = canvasFiles.length > 0 ? canvasFiles : ["memory"];
 
   return (
-    <div className="h-full flex flex-col bg-white">
+    <div
+      className="h-full flex flex-col"
+      style={{ background: "#161614", color: "#F5F4EF" }}
+    >
       {/* File panes — 1 or 2 columns side-by-side */}
       <div className="flex-1 flex min-h-0">
         {panes.map((tab, idx) => {
@@ -185,17 +188,25 @@ export function WorkflowPane() {
           return (
             <div
               key={tab}
-              className={`flex-1 min-w-0 flex flex-col ${
-                idx > 0 ? "border-l border-border-subtle" : ""
-              }`}
+              className="flex-1 min-w-0 flex flex-col"
+              style={
+                idx > 0 ? { borderLeft: "1px solid #262623" } : undefined
+              }
             >
-              {/* Pane header · slim, just the filename + close (if 2 panes) */}
-              <div className="px-4 py-2.5 border-b border-border-subtle bg-surface-page flex items-center gap-2">
-                <Icon size={12} strokeWidth={1.7} className="text-text-secondary" />
-                <span className="text-[12px] font-medium text-text-primary">
+              {/* Pane header · slim, dark-mode, filename + close */}
+              <div
+                className="px-4 py-2.5 flex items-center gap-2"
+                style={{
+                  background: "#1A1A18",
+                  borderBottom: "1px solid #262623",
+                  color: "#B8B7B0",
+                }}
+              >
+                <Icon size={12} strokeWidth={1.7} />
+                <span className="text-[12px] font-medium" style={{ color: "#F5F4EF" }}>
                   {meta.label}
                 </span>
-                <span className="text-[10.5px] font-mono text-text-tertiary">
+                <span className="text-[10.5px] font-mono" style={{ color: "#8A8980" }}>
                   {meta.file}
                 </span>
                 <span className="flex-1" />
@@ -204,20 +215,20 @@ export function WorkflowPane() {
                     type="button"
                     onClick={() => closeCanvasFile(tab)}
                     title="Close this pane"
-                    className="inline-flex items-center justify-center h-5 w-5 rounded text-text-tertiary hover:bg-surface-secondary hover:text-text-primary"
+                    className="inline-flex items-center justify-center h-5 w-5 rounded hover:bg-white/5"
+                    style={{ color: "#8A8980" }}
                   >
                     <X size={11} strokeWidth={1.8} />
                   </button>
                 )}
-                {/* Global controls anchored to the rightmost pane header
-                    so they don't compete with per-pane close buttons. */}
                 {isLast && !canClose && (
                   <>
                     <button
                       type="button"
                       onClick={toggleCanvas}
                       title="Minimize canvas — chat stays full-width; workflow state is preserved."
-                      className="inline-flex items-center justify-center h-5 w-5 rounded text-text-tertiary hover:bg-surface-secondary hover:text-text-primary"
+                      className="inline-flex items-center justify-center h-5 w-5 rounded hover:bg-white/5"
+                      style={{ color: "#8A8980" }}
                     >
                       <PanelRightClose size={11} strokeWidth={1.7} />
                     </button>
@@ -225,7 +236,8 @@ export function WorkflowPane() {
                       type="button"
                       onClick={exitWorkflow}
                       title="Close workflow — abandons progress and returns to Spot."
-                      className="inline-flex items-center justify-center h-5 w-5 rounded text-text-tertiary hover:bg-surface-secondary hover:text-text-primary"
+                      className="inline-flex items-center justify-center h-5 w-5 rounded hover:bg-white/5"
+                      style={{ color: "#8A8980" }}
                     >
                       <X size={11} strokeWidth={1.8} />
                     </button>
@@ -233,12 +245,16 @@ export function WorkflowPane() {
                 )}
                 {isLast && canClose && (
                   <>
-                    <span className="w-px h-3 bg-border-subtle mx-0.5" />
+                    <span
+                      className="w-px h-3 mx-0.5"
+                      style={{ background: "#262623" }}
+                    />
                     <button
                       type="button"
                       onClick={toggleCanvas}
                       title="Minimize canvas — chat stays full-width."
-                      className="inline-flex items-center justify-center h-5 w-5 rounded text-text-tertiary hover:bg-surface-secondary hover:text-text-primary"
+                      className="inline-flex items-center justify-center h-5 w-5 rounded hover:bg-white/5"
+                      style={{ color: "#8A8980" }}
                     >
                       <PanelRightClose size={11} strokeWidth={1.7} />
                     </button>
@@ -246,7 +262,9 @@ export function WorkflowPane() {
                 )}
               </div>
 
-              {/* Pane body */}
+              {/* Pane body · loader phases keep their warm cream
+                  surface (they're a separate experience); the file
+                  views render against the dark canvas. */}
               <div className="flex-1 overflow-y-auto">
                 {isAwaitingSetup && tab === "memory" ? (
                   <AwaitingInputCanvas />
@@ -476,22 +494,25 @@ function getProductFiles(workflow: SpotWorkflow) {
 /**
  * Sub-agents driving the deep-research memory build. Same animation
  * pattern as the plan loader — each one runs sequentially through
- * the 8-second tool-call, flipping queued → running → done.
+ * the 14-second tool-call, flipping queued → running → done.
+ * Durations are deliberately slow (~2-3s each) so the user has time
+ * to register each stage instead of seeing a blur of state changes.
  */
 const MEMORY_BUILD_AGENTS: { id: string; label: string; duration: number }[] = [
-  { id: "url.crawl", label: "Crawling the brand site · about, curriculum, pricing", duration: 1400 },
-  { id: "web.scan", label: "Searching the open web for category signals", duration: 1300 },
-  { id: "docs.read", label: "Reading the documents you uploaded", duration: 1100 },
-  { id: "audience.match", label: "Matching against the Revspot audience graph", duration: 1300 },
-  { id: "data.synth", label: "Synthesizing findings into a coherent brief", duration: 1500 },
-  { id: "memory.write", label: "Writing brief · personas · pricing · USPs to memory", duration: 1400 },
+  { id: "url.crawl", label: "Crawling the brand site · about, curriculum, pricing", duration: 2400 },
+  { id: "web.scan", label: "Searching the open web for category signals", duration: 2200 },
+  { id: "docs.read", label: "Reading the documents you uploaded", duration: 1800 },
+  { id: "audience.match", label: "Matching against the Revspot audience graph", duration: 2100 },
+  { id: "data.synth", label: "Synthesizing findings into a coherent brief", duration: 2800 },
+  { id: "memory.write", label: "Writing brief · personas · pricing · USPs to memory", duration: 2700 },
 ];
 
 /**
- * Scripted findings · what Spot "discovers" over the 8s loader.
+ * Scripted findings · what Spot "discovers" over the loader run.
  * Each one appears at a specific timestamp, the way a real agent
- * would emit progress events. Renders as a streaming feed below
- * the live counters.
+ * would emit progress events. Pacing is deliberately staged — each
+ * finding gets ~600-900ms of breathing room so the user can read it
+ * before the next one slides in. Bursts and pauses mimic real work.
  */
 const MEMORY_FINDINGS: {
   time: number;
@@ -499,28 +520,34 @@ const MEMORY_FINDINGS: {
   icon: string;
   label: string;
 }[] = [
-  { time: 350, category: "crawl", icon: "🌐", label: "GET /about · 200 · 1.4kb" },
-  { time: 700, category: "crawl", icon: "🌐", label: "GET /curriculum · 200 · 8.2kb" },
-  { time: 1050, category: "crawl", icon: "🌐", label: "GET /pricing · 200 · 2.1kb" },
-  { time: 1300, category: "crawl", icon: "🔗", label: "Extracted 47 product entities" },
-  { time: 1600, category: "web", icon: "🔍", label: "Indexed 12 category review sites" },
-  { time: 1950, category: "web", icon: "🔍", label: "Indexed 8 parent forum threads" },
-  { time: 2250, category: "web", icon: "🏷️", label: "Found 3 competitor pricing tiers" },
-  { time: 2600, category: "docs", icon: "📄", label: "Parsed uploaded brochure · 14 pages" },
-  { time: 2900, category: "docs", icon: "📄", label: "Extracted 22 positioning phrases" },
-  { time: 3200, category: "graph", icon: "🧠", label: "Matched 5 cross-product personas" },
-  { time: 3650, category: "graph", icon: "🧠", label: "Cohort overlap with 2 existing products" },
-  { time: 4050, category: "graph", icon: "📈", label: "Found ₹420 CPL benchmark · category median" },
-  { time: 4450, category: "synth", icon: "✨", label: "Drafted product tagline" },
-  { time: 4850, category: "synth", icon: "✨", label: "Locked 4 USPs · ranked by category lift" },
-  { time: 5300, category: "synth", icon: "🛡️", label: "Flagged 3 do-not-mention items" },
-  { time: 5700, category: "synth", icon: "👥", label: "Drafted Persona 1 · Working professional" },
-  { time: 6050, category: "synth", icon: "👥", label: "Drafted Persona 2 · College student" },
-  { time: 6400, category: "synth", icon: "👥", label: "Drafted Persona 3 · Parent buying for child" },
-  { time: 6750, category: "synth", icon: "💰", label: "Proposed 3 pricing tiers · median band" },
-  { time: 7100, category: "write", icon: "✓", label: "Committed brief → memory.md" },
-  { time: 7400, category: "write", icon: "✓", label: "Committed personas → memory.md" },
-  { time: 7700, category: "write", icon: "✓", label: "Memory index rebuilt · ready" },
+  // ── Stage 1 · Crawling (0-3s) — quick bursts of GET requests ──
+  { time: 500, category: "crawl", icon: "🌐", label: "GET /about · 200 · 1.4kb" },
+  { time: 1100, category: "crawl", icon: "🌐", label: "GET /curriculum · 200 · 8.2kb" },
+  { time: 1700, category: "crawl", icon: "🌐", label: "GET /pricing · 200 · 2.1kb" },
+  { time: 2400, category: "crawl", icon: "🔗", label: "Extracted 47 product entities" },
+  // ── Stage 2 · Web scan (3-6s) — slower, broader sources ──
+  { time: 3200, category: "web", icon: "🔍", label: "Indexed 12 category review sites" },
+  { time: 4000, category: "web", icon: "🔍", label: "Indexed 8 parent forum threads" },
+  { time: 4800, category: "web", icon: "🏷️", label: "Found 3 competitor pricing tiers" },
+  // ── Stage 3 · Docs (6-7.5s) — file parsing beats ──
+  { time: 5800, category: "docs", icon: "📄", label: "Parsed uploaded brochure · 14 pages" },
+  { time: 6600, category: "docs", icon: "📄", label: "Extracted 22 positioning phrases" },
+  // ── Stage 4 · Graph (7.5-9s) — cross-references ──
+  { time: 7400, category: "graph", icon: "🧠", label: "Matched 5 cross-product personas" },
+  { time: 8200, category: "graph", icon: "🧠", label: "Cohort overlap with 2 existing products" },
+  { time: 9000, category: "graph", icon: "📈", label: "Found ₹420 CPL benchmark · category median" },
+  // ── Stage 5 · Synth (9-12s) — the creative work, slower beats ──
+  { time: 9900, category: "synth", icon: "✨", label: "Drafted product tagline" },
+  { time: 10600, category: "synth", icon: "✨", label: "Locked 4 USPs · ranked by category lift" },
+  { time: 11200, category: "synth", icon: "🛡️", label: "Flagged 3 do-not-mention items" },
+  { time: 11800, category: "synth", icon: "👥", label: "Drafted Persona 1 · Working professional" },
+  { time: 12300, category: "synth", icon: "👥", label: "Drafted Persona 2 · College student" },
+  { time: 12700, category: "synth", icon: "👥", label: "Drafted Persona 3 · Parent buying for child" },
+  { time: 13100, category: "synth", icon: "💰", label: "Proposed 3 pricing tiers · median band" },
+  // ── Stage 6 · Write (12.5-14s) — atomic commits to memory.md ──
+  { time: 13500, category: "write", icon: "✓", label: "Committed brief → memory.md" },
+  { time: 13800, category: "write", icon: "✓", label: "Committed personas → memory.md" },
+  { time: 14000, category: "write", icon: "✓", label: "Memory index rebuilt · ready" },
 ];
 
 /** Live counters · numbers tick up as findings accumulate. Each is
@@ -558,50 +585,56 @@ function useTickingNumber(target: number, ms = 400) {
 }
 
 /**
- * Memory-building loader · the "wow" loading state for the deep
- * research phase. Designed to feel ALIVE — multiple coordinated
- * motions, live data streaming, counters ticking up, content
- * actually being discovered in real time.
+ * LiveBuildLoader · the shared "wow" loading surface. Same composition
+ * for the memory build phase and the plan build phase — just swap the
+ * config in. Designed to feel ALIVE: coordinated motions, live data
+ * streaming one entry at a time, counters that tick up smoothly,
+ * agents that flip queued → running → done in real time.
  *
  * Composition (top → bottom):
  *
- *   1. Hero block · gradient-meshed card with the orbit Spot loader
- *      floating on a soft radial glow, the page title, and a
- *      smooth gradient progress bar with a glowing tip
- *
- *   2. Live counters · four big numbers that tick up as findings
- *      accumulate (pages crawled, entities extracted, signals
- *      found, personas drafted). Each in its own card with an
- *      icon and a faint animated pulse on increment
- *
- *   3. Live findings stream · scrolling terminal-style feed of
- *      concrete discoveries with timestamps, fading newest at
- *      top, oldest at bottom. Each line slides in
- *
- *   4. Agent strip · the 6 sub-agents from before, more compact,
- *      still ticking queued → running → done so the user can see
- *      the agent topology
+ *   1. Hero block · gradient-meshed card with the orbit SpotLoader on
+ *      a soft radial glow, the page title, and a smooth gradient
+ *      progress bar with a glowing tip
+ *   2. Live counters · 4 big numbers ticking up as findings accumulate
+ *   3. Live findings stream · scrolling terminal-style feed, one
+ *      finding at a time, sliding in
+ *   4. Sub-agent topology · the underlying agents ticking through
  */
-function MemoryBuildingLoader({ productName }: { productName: string }) {
-  const TOTAL_MS = MEMORY_BUILD_AGENTS.reduce((s, a) => s + a.duration, 0);
+type LoaderConfig = {
+  agentName: string; // e.g. "Deep Research Agent"
+  title: React.ReactNode; // e.g. "Building memory for {gradient-name}"
+  blurb: string;
+  agents: typeof MEMORY_BUILD_AGENTS;
+  findings: typeof MEMORY_FINDINGS;
+  counters: {
+    icon: string;
+    label: string;
+    /** Derive the current value from the visible findings array. */
+    valueOf: (visible: typeof MEMORY_FINDINGS) => number;
+  }[];
+};
+
+function LiveBuildLoader({ config }: { config: LoaderConfig }) {
+  const TOTAL_MS = config.agents.reduce((s, a) => s + a.duration, 0);
   const [doneCount, setDoneCount] = useState(0);
   const [progress, setProgress] = useState(2);
-  const [visibleFindings, setVisibleFindings] = useState<typeof MEMORY_FINDINGS>([]);
+  const [visibleFindings, setVisibleFindings] = useState<typeof MEMORY_FINDINGS>(
+    [],
+  );
   const findingsRef = useRef<HTMLDivElement>(null);
 
-  // Sub-agents · tick queued → running → done.
   useEffect(() => {
     setDoneCount(0);
     let cumulative = 0;
     const timers: ReturnType<typeof setTimeout>[] = [];
-    MEMORY_BUILD_AGENTS.forEach((a, i) => {
+    config.agents.forEach((a, i) => {
       cumulative += a.duration;
       timers.push(setTimeout(() => setDoneCount(i + 1), cumulative));
     });
     return () => timers.forEach(clearTimeout);
-  }, []);
+  }, [config.agents]);
 
-  // Progress bar fills smoothly.
   useEffect(() => {
     const start = Date.now();
     const id = setInterval(() => {
@@ -613,11 +646,12 @@ function MemoryBuildingLoader({ productName }: { productName: string }) {
     return () => clearInterval(id);
   }, [TOTAL_MS]);
 
-  // Live findings stream · schedule each at its timestamp.
+  // Live findings · push one at a time at its scheduled timestamp so
+  // the user sees the feed grow line-by-line (not a bulk reveal).
   useEffect(() => {
     setVisibleFindings([]);
     const timers: ReturnType<typeof setTimeout>[] = [];
-    MEMORY_FINDINGS.forEach((f) => {
+    config.findings.forEach((f) => {
       timers.push(
         setTimeout(() => {
           setVisibleFindings((prev) => [...prev, f]);
@@ -625,20 +659,13 @@ function MemoryBuildingLoader({ productName }: { productName: string }) {
       );
     });
     return () => timers.forEach(clearTimeout);
-  }, []);
+  }, [config.findings]);
 
-  // Auto-scroll findings to the newest entry.
   useEffect(() => {
     if (findingsRef.current) {
       findingsRef.current.scrollTop = findingsRef.current.scrollHeight;
     }
   }, [visibleFindings.length]);
-
-  const counters = countersFromFindings(visibleFindings);
-  const pages = useTickingNumber(counters.pages);
-  const entities = useTickingNumber(counters.entities);
-  const signals = useTickingNumber(counters.signals);
-  const personas = useTickingNumber(counters.personas);
 
   return (
     <div className="px-6 py-6 max-w-[820px] mx-auto">
@@ -652,7 +679,6 @@ function MemoryBuildingLoader({ productName }: { productName: string }) {
           boxShadow: "0 12px 36px -12px rgba(201, 168, 106, 0.25)",
         }}
       >
-        {/* Soft radial glow underlay */}
         <div
           aria-hidden
           className="absolute inset-0 pointer-events-none"
@@ -661,7 +687,6 @@ function MemoryBuildingLoader({ productName }: { productName: string }) {
               "radial-gradient(ellipse 60% 50% at 50% 30%, rgba(201, 168, 106, 0.22) 0%, transparent 70%)",
           }}
         />
-        {/* Subtle moving gradient sheen */}
         <div
           aria-hidden
           className="absolute inset-0 pointer-events-none opacity-50"
@@ -675,7 +700,6 @@ function MemoryBuildingLoader({ productName }: { productName: string }) {
 
         <div className="relative px-7 py-7">
           <div className="flex items-start gap-5">
-            {/* Big orbit loader · the hero glyph */}
             <div className="relative flex-shrink-0">
               <div
                 aria-hidden
@@ -696,28 +720,16 @@ function MemoryBuildingLoader({ productName }: { productName: string }) {
                   <span className="absolute inset-0 rounded-full bg-[#15803D] opacity-60 animate-ping" />
                 </span>
                 <span className="text-[10.5px] uppercase tracking-wider font-semibold text-[#15803D]">
-                  Deep Research Agent · live
+                  {config.agentName} · live
                 </span>
               </div>
               <h1 className="text-[22px] font-semibold text-text-primary tracking-tight leading-[1.15]">
-                Building memory for{" "}
-                <span
-                  style={{
-                    background:
-                      "linear-gradient(135deg, #8C6D33 0%, #C9A86A 100%)",
-                    WebkitBackgroundClip: "text",
-                    WebkitTextFillColor: "transparent",
-                  }}
-                >
-                  {productName}
-                </span>
+                {config.title}
               </h1>
               <p className="text-[12.5px] text-text-secondary mt-1.5 leading-relaxed">
-                One agent end-to-end — crawling, reading, synthesizing, then
-                writing everything to product memory.
+                {config.blurb}
               </p>
 
-              {/* Progress bar with glowing tip */}
               <div className="mt-4">
                 <div className="relative h-1.5 bg-white/60 rounded-full overflow-hidden">
                   <div
@@ -728,7 +740,6 @@ function MemoryBuildingLoader({ productName }: { productName: string }) {
                         "linear-gradient(90deg, #C9A86A 0%, #E0C083 60%, #15803D 100%)",
                     }}
                   >
-                    {/* Glowing leading tip */}
                     <span
                       aria-hidden
                       className="absolute right-0 top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full"
@@ -745,7 +756,7 @@ function MemoryBuildingLoader({ productName }: { productName: string }) {
                     {Math.round(progress)}%
                   </span>
                   <span className="text-[10.5px] text-text-tertiary tabular">
-                    {doneCount} of {MEMORY_BUILD_AGENTS.length} sub-agents complete
+                    {doneCount} of {config.agents.length} sub-agents complete
                   </span>
                 </div>
               </div>
@@ -755,31 +766,20 @@ function MemoryBuildingLoader({ productName }: { productName: string }) {
       </div>
 
       {/* ── LIVE COUNTERS ───────────────────────────────────── */}
-      <div className="grid grid-cols-4 gap-2.5 mb-5">
-        <CounterCard
-          icon="🌐"
-          label="Pages crawled"
-          value={pages}
-          pulse={counters.pages > 0}
-        />
-        <CounterCard
-          icon="🔗"
-          label="Entities found"
-          value={entities}
-          pulse={counters.entities > 0}
-        />
-        <CounterCard
-          icon="📊"
-          label="Signals indexed"
-          value={signals}
-          pulse={counters.signals > 0}
-        />
-        <CounterCard
-          icon="👥"
-          label="Personas drafted"
-          value={personas}
-          pulse={counters.personas > 0}
-        />
+      <div
+        className="grid gap-2.5 mb-5"
+        style={{
+          gridTemplateColumns: `repeat(${config.counters.length}, minmax(0, 1fr))`,
+        }}
+      >
+        {config.counters.map((c, i) => (
+          <CounterCardLive
+            key={i}
+            icon={c.icon}
+            label={c.label}
+            target={c.valueOf(visibleFindings)}
+          />
+        ))}
       </div>
 
       {/* ── LIVE FINDINGS STREAM ───────────────────────────── */}
@@ -822,7 +822,7 @@ function MemoryBuildingLoader({ productName }: { productName: string }) {
                   >
                     <span
                       className="font-mono text-[10px] text-text-tertiary tabular flex-shrink-0"
-                      style={{ minWidth: "42px" }}
+                      style={{ minWidth: "44px" }}
                     >
                       +{ts}s
                     </span>
@@ -863,7 +863,7 @@ function MemoryBuildingLoader({ productName }: { productName: string }) {
           </span>
         </div>
         <ul className="divide-y divide-border-subtle">
-          {MEMORY_BUILD_AGENTS.map((a, i) => {
+          {config.agents.map((a, i) => {
             const done = i < doneCount;
             const running = i === doneCount;
             const queued = i > doneCount;
@@ -871,11 +871,7 @@ function MemoryBuildingLoader({ productName }: { productName: string }) {
               <li
                 key={a.id}
                 className={`flex items-center gap-2.5 px-4 py-1.5 transition-colors ${
-                  done
-                    ? "bg-[#F0FDF4]/40"
-                    : running
-                      ? "bg-[#FAF8F2]"
-                      : ""
+                  done ? "bg-[#F0FDF4]/40" : running ? "bg-[#FAF8F2]" : ""
                 }`}
               >
                 <span className="w-3.5 h-3.5 flex items-center justify-center flex-shrink-0">
@@ -932,6 +928,78 @@ function MemoryBuildingLoader({ productName }: { productName: string }) {
         </ul>
       </div>
     </div>
+  );
+}
+
+/** Counter card · wraps a ticking number so the parent doesn't have
+ *  to plumb the hook into a render-flat config object. */
+function CounterCardLive({
+  icon,
+  label,
+  target,
+}: {
+  icon: string;
+  label: string;
+  target: number;
+}) {
+  const value = useTickingNumber(target);
+  return <CounterCard icon={icon} label={label} value={value} pulse={target > 0} />;
+}
+
+/* ── Memory + Plan loader wrappers (pick a config, render shared body) ── */
+
+function MemoryBuildingLoader({ productName }: { productName: string }) {
+  return (
+    <LiveBuildLoader
+      config={{
+        agentName: "Deep Research Agent",
+        title: (
+          <>
+            Building memory for{" "}
+            <span
+              style={{
+                background:
+                  "linear-gradient(135deg, #8C6D33 0%, #C9A86A 100%)",
+                WebkitBackgroundClip: "text",
+                WebkitTextFillColor: "transparent",
+              }}
+            >
+              {productName}
+            </span>
+          </>
+        ),
+        blurb:
+          "One agent end-to-end — crawling, reading, synthesizing, then writing everything to product memory.",
+        agents: MEMORY_BUILD_AGENTS,
+        findings: MEMORY_FINDINGS,
+        counters: [
+          {
+            icon: "🌐",
+            label: "Pages crawled",
+            valueOf: (v) =>
+              v.filter((f) => f.category === "crawl" && f.label.startsWith("GET")).length,
+          },
+          {
+            icon: "🔗",
+            label: "Entities found",
+            valueOf: (v) => (v.find((f) => f.label.includes("entities")) ? 47 : 0),
+          },
+          {
+            icon: "📊",
+            label: "Signals indexed",
+            valueOf: (v) =>
+              v.filter((f) => f.category === "web").length +
+              v.filter((f) => f.category === "graph").length,
+          },
+          {
+            icon: "👥",
+            label: "Personas drafted",
+            valueOf: (v) =>
+              v.filter((f) => f.label.startsWith("Drafted Persona")).length,
+          },
+        ],
+      }}
+    />
   );
 }
 
@@ -1082,7 +1150,7 @@ function MemoryFileView({
     return (
       <div className="relative">
         <div className="px-6 py-5 max-w-[720px]">
-          <Markdown source={md} />
+          <Markdown source={md} theme="dark" />
         </div>
       </div>
     );
@@ -1095,7 +1163,7 @@ function MemoryFileView({
   return (
     <div className="relative">
       <div className="px-6 py-5 max-w-[720px]">
-        <Markdown source={files.productInfoMd} />
+        <Markdown source={files.productInfoMd} theme="dark" />
       </div>
       {buildingOverlay && <BuildingOverlay label="Spot is updating memory…" />}
     </div>
@@ -1103,242 +1171,112 @@ function MemoryFileView({
 }
 
 /**
- * Sub-agents driving the plan build. Each one runs sequentially; the
- * loader animates from queued → running → done as the fake timeline
- * progresses, so the canvas reads like real parallel-ish agent work
- * instead of a single spinner. Durations sum to the launch-plan
- * tool-call delayMs (5600).
+ * Sub-agents driving the plan build. Same one-at-a-time pacing as
+ * the memory loader · slower durations so each stage gets to breathe.
+ * Total ~12s, matching the launch-plan tool-call delayMs below.
  */
 const PLAN_BUILD_AGENTS: { id: string; label: string; duration: number }[] = [
-  { id: "personas.draft", label: "Drafting personas from category research", duration: 1100 },
-  { id: "memory.read", label: "Cross-referencing product memory", duration: 700 },
-  { id: "media.plan", label: "Drafting media mix · Meta · Google · WhatsApp", duration: 1000 },
-  { id: "creative.brief", label: "Composing creative angles per persona", duration: 1000 },
-  { id: "rollout.sequence", label: "Sequencing the 14-day rollout", duration: 900 },
-  { id: "budget.lock", label: "Locking budget allocations", duration: 900 },
+  { id: "personas.draft", label: "Drafting personas from category research", duration: 2200 },
+  { id: "memory.read", label: "Cross-referencing product memory", duration: 1600 },
+  { id: "media.plan", label: "Drafting media mix · Meta · Google · WhatsApp", duration: 2000 },
+  { id: "creative.brief", label: "Composing creative angles per persona", duration: 2200 },
+  { id: "rollout.sequence", label: "Sequencing the 14-day rollout", duration: 2000 },
+  { id: "budget.lock", label: "Locking budget allocations", duration: 1800 },
+];
+
+/** Scripted findings for the plan build — same staged pacing as the
+ *  memory loader. The categories map to the agents above so the
+ *  feed and the agent strip move in sync. */
+const PLAN_FINDINGS: typeof MEMORY_FINDINGS = [
+  // ── Stage 1 · Persona drafting (0-3s) ──
+  { time: 500, category: "synth", icon: "👥", label: "Persona 1 brief · Working professional" },
+  { time: 1300, category: "synth", icon: "👥", label: "Persona 2 brief · College student" },
+  { time: 2000, category: "synth", icon: "👥", label: "Persona 3 brief · Parent buying for child" },
+  // ── Stage 2 · Memory · cross-reference (3-4s) ──
+  { time: 2700, category: "graph", icon: "🧠", label: "Loaded brief, USPs, avoid list from memory" },
+  { time: 3500, category: "graph", icon: "🧠", label: "Matched 4 USPs to persona pain points" },
+  // ── Stage 3 · Media mix (4-6s) ──
+  { time: 4400, category: "web", icon: "📣", label: "Meta · 3 campaigns · ₹500/day each" },
+  { time: 5200, category: "web", icon: "🔍", label: "Google Search · brand + category terms" },
+  { time: 5900, category: "web", icon: "📱", label: "Click-to-WhatsApp on parent persona" },
+  // ── Stage 4 · Creative angles (6-8s) ──
+  { time: 6700, category: "synth", icon: "✨", label: "Drafted Outcome angle · 3 personas" },
+  { time: 7300, category: "synth", icon: "✨", label: "Drafted Authority angle · 3 personas" },
+  { time: 7900, category: "synth", icon: "✨", label: "Drafted Social-proof angle · 3 personas" },
+  // ── Stage 5 · Rollout sequencing (8-10s) ──
+  { time: 8600, category: "crawl", icon: "📅", label: "Phase 1 · Day 1-2 · Setup tasks compiled" },
+  { time: 9200, category: "crawl", icon: "📅", label: "Phase 2 · Day 3-7 · Launch tasks compiled" },
+  { time: 9800, category: "crawl", icon: "📅", label: "Phase 3 · Day 8-14 · Optimize tasks compiled" },
+  // ── Stage 6 · Budget + write (10-12s) ──
+  { time: 10500, category: "synth", icon: "💰", label: "Total ₹30,800 over 14 days · daily cap ₹2,200" },
+  { time: 11100, category: "write", icon: "✓", label: "Committed plan → plan.md" },
+  { time: 11600, category: "write", icon: "✓", label: "Plan index rebuilt · ready for review" },
 ];
 
 /**
- * Plan-building loader · the canvas's hero loading state when the
- * launch-plan agent is running. Three coordinated parts:
- *
- *   1. Header  — title + smooth progress bar that fills over 5.6s
- *   2. Skeleton — shimmering blocks shaped like the plan structure
- *      (H1, properties, tagline, phase blocks) so the reveal at
- *      the end is a smooth swap, not a jarring layout shift
- *   3. Agent strip — checklist of the 6 sub-agents, each flipping
- *      from queued → running (spinner) → done (check) as their
- *      slice of the timeline elapses
- *
- * Beats the previous centred-orb-in-a-card because (a) the skeleton
- * previews the destination layout, (b) the progress bar gives a
- * real sense of "almost there", (c) the agent strip makes Spot's
- * work visible and concrete.
+ * Plan-building loader · wraps the shared LiveBuildLoader with the
+ * plan-specific config (agents, findings, counters). Visually
+ * identical to the memory loader by design — same wow surface,
+ * just different content streaming through.
  */
 function PlanBuildingLoader({ productName }: { productName: string }) {
-  const TOTAL_MS = PLAN_BUILD_AGENTS.reduce((s, a) => s + a.duration, 0);
-  const [doneCount, setDoneCount] = useState(0);
-  const [progress, setProgress] = useState(2);
-
-  // Advance the agent checklist on each agent's duration boundary.
-  useEffect(() => {
-    setDoneCount(0);
-    let cumulative = 0;
-    const timers: ReturnType<typeof setTimeout>[] = [];
-    PLAN_BUILD_AGENTS.forEach((a, i) => {
-      cumulative += a.duration;
-      timers.push(setTimeout(() => setDoneCount(i + 1), cumulative));
-    });
-    return () => timers.forEach(clearTimeout);
-  }, []);
-
-  // Smoothly fill the progress bar over the total duration.
-  useEffect(() => {
-    const start = Date.now();
-    const id = setInterval(() => {
-      const elapsed = Date.now() - start;
-      const pct = Math.min(98, (elapsed / TOTAL_MS) * 100);
-      setProgress(pct);
-      if (pct >= 98) clearInterval(id);
-    }, 80);
-    return () => clearInterval(id);
-  }, [TOTAL_MS]);
-
   return (
-    <div className="px-6 py-6 max-w-[760px] mx-auto">
-      {/* Header — running indicator + title + progress */}
-      <div className="mb-7">
-        <div className="flex items-center gap-2 mb-1.5">
-          <span className="inline-flex items-center gap-1.5 text-[10.5px] uppercase tracking-wider font-semibold text-[#15803D]">
-            <span className="relative inline-flex w-1.5 h-1.5 rounded-full bg-[#15803D]">
-              <span className="absolute inset-0 rounded-full bg-[#15803D] opacity-50 animate-ping" />
-            </span>
-            Spot is drafting
-          </span>
-        </div>
-        <h1 className="text-[20px] font-semibold text-text-primary tracking-tight leading-tight">
-          Drafting the launch plan for{" "}
-          <span className="text-text-primary">{productName}</span>
-        </h1>
-        <div className="text-[12px] text-text-secondary mt-1.5 leading-relaxed">
-          Six agents running in parallel — reading memory, pulling personas,
-          drafting media mix, sequencing the rollout, locking budget.
-        </div>
-
-        {/* Progress bar */}
-        <div className="mt-4">
-          <div className="h-1 bg-surface-page rounded-full overflow-hidden">
-            <div
-              className="h-full transition-all duration-300 ease-out"
+    <LiveBuildLoader
+      config={{
+        agentName: "Launch Plan Agent",
+        title: (
+          <>
+            Drafting the launch plan for{" "}
+            <span
               style={{
-                width: `${progress}%`,
                 background:
-                  "linear-gradient(90deg, #C9A86A 0%, #E0C083 60%, #15803D 100%)",
+                  "linear-gradient(135deg, #8C6D33 0%, #C9A86A 100%)",
+                WebkitBackgroundClip: "text",
+                WebkitTextFillColor: "transparent",
               }}
-            />
-          </div>
-          <div className="flex items-center justify-between mt-1.5">
-            <span className="text-[10.5px] text-text-tertiary tabular">
-              {Math.round(progress)}%
+            >
+              {productName}
             </span>
-            <span className="text-[10.5px] text-text-tertiary tabular">
-              {doneCount} of {PLAN_BUILD_AGENTS.length} agents complete
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Skeleton — previews the destination plan layout so the
-          eventual reveal lands as a smooth swap, not a jump. */}
-      <div className="space-y-5 mb-7">
-        {/* H1 + properties + tagline-callout */}
-        <div>
-          <div className="skeleton h-8 w-3/5 rounded mb-2.5" />
-          <div className="flex gap-1.5 mb-3">
-            <div className="skeleton h-4 w-16 rounded-full" />
-            <div className="skeleton h-4 w-20 rounded-full" />
-            <div className="skeleton h-4 w-14 rounded-full" />
-          </div>
-          <div
-            className="rounded-card border-l-4 px-4 py-3 space-y-1.5"
-            style={{ borderLeftColor: "#E8E3D5", background: "#FAF8F2" }}
-          >
-            <div className="skeleton h-3 w-full rounded" />
-            <div className="skeleton h-3 w-11/12 rounded" />
-            <div className="skeleton h-3 w-2/3 rounded" />
-          </div>
-        </div>
-
-        {/* Phase blocks */}
-        {[
-          { titleW: "w-1/3", lines: 3 },
-          { titleW: "w-2/5", lines: 4 },
-          { titleW: "w-1/3", lines: 3 },
-          { titleW: "w-1/4", lines: 3 },
-        ].map((phase, i) => (
-          <div key={i} className="space-y-2">
-            <div className="flex items-center gap-2 pb-1.5 border-b border-border-subtle mb-2.5">
-              <span className="w-1 h-1 rounded-full bg-[#C9A86A]" />
-              <div className={`skeleton h-4 ${phase.titleW} rounded`} />
-            </div>
-            {Array.from({ length: phase.lines }).map((_, j) => (
-              <div key={j} className="flex gap-2.5">
-                <span className="w-1 h-1 rounded-full bg-border mt-2 flex-shrink-0" />
-                <div
-                  className={`skeleton h-3 rounded ${
-                    j % 3 === 0 ? "w-full" : j % 3 === 1 ? "w-11/12" : "w-3/4"
-                  }`}
-                />
-              </div>
-            ))}
-          </div>
-        ))}
-      </div>
-
-      {/* Agent strip · concrete sub-tasks flipping done one at a time */}
-      <div className="bg-white border border-border rounded-card overflow-hidden">
-        <div className="px-4 py-2.5 border-b border-border-subtle bg-surface-page flex items-center gap-2">
-          <Cog
-            size={11}
-            strokeWidth={1.8}
-            className="text-text-secondary animate-spin"
-            style={{ animationDuration: "2.4s" }}
-          />
-          <span className="text-[10.5px] uppercase tracking-wider text-text-tertiary font-semibold">
-            Agents at work
-          </span>
-        </div>
-        <ul className="divide-y divide-border-subtle">
-          {PLAN_BUILD_AGENTS.map((a, i) => {
-            const done = i < doneCount;
-            const running = i === doneCount;
-            const queued = i > doneCount;
-            return (
-              <li
-                key={a.id}
-                className={`flex items-center gap-2.5 px-4 py-2 transition-colors ${
-                  done
-                    ? "bg-[#F0FDF4]/40"
-                    : running
-                      ? "bg-[#FAF8F2]"
-                      : ""
-                }`}
-              >
-                {/* Status glyph */}
-                <span className="w-3.5 h-3.5 flex items-center justify-center flex-shrink-0">
-                  {done && (
-                    <CheckCircle2
-                      size={13}
-                      strokeWidth={2}
-                      className="text-[#15803D]"
-                    />
-                  )}
-                  {running && (
-                    <Cog
-                      size={12}
-                      strokeWidth={1.8}
-                      className="text-text-primary animate-spin"
-                      style={{ animationDuration: "1.2s" }}
-                    />
-                  )}
-                  {queued && (
-                    <span className="w-2.5 h-2.5 rounded-full border border-border-subtle" />
-                  )}
-                </span>
-                <span
-                  className={`font-mono text-[11px] tabular ${
-                    queued ? "text-text-tertiary" : "text-text-secondary"
-                  }`}
-                >
-                  {a.id}
-                </span>
-                <span
-                  className={`text-[12.5px] flex-1 truncate ${
-                    queued
-                      ? "text-text-tertiary"
-                      : done
-                        ? "text-text-secondary"
-                        : "text-text-primary font-medium"
-                  }`}
-                >
-                  {a.label}
-                </span>
-                {running && (
-                  <span className="text-[10.5px] uppercase tracking-wider text-[#8C6D33] font-semibold flex-shrink-0">
-                    running…
-                  </span>
-                )}
-                {done && (
-                  <span className="text-[10.5px] uppercase tracking-wider text-[#15803D] font-semibold flex-shrink-0">
-                    done
-                  </span>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      </div>
-    </div>
+          </>
+        ),
+        blurb:
+          "Six agents working in parallel — drafting personas, pulling memory, building media mix, composing creatives, sequencing rollout, locking budget.",
+        agents: PLAN_BUILD_AGENTS,
+        findings: PLAN_FINDINGS,
+        counters: [
+          {
+            icon: "👥",
+            label: "Personas drafted",
+            valueOf: (v) =>
+              v.filter((f) => f.label.startsWith("Persona ")).length,
+          },
+          {
+            icon: "📣",
+            label: "Channels planned",
+            valueOf: (v) =>
+              v.filter(
+                (f) =>
+                  f.label.startsWith("Meta ·") ||
+                  f.label.startsWith("Google ") ||
+                  f.label.startsWith("Click-to-WhatsApp"),
+              ).length,
+          },
+          {
+            icon: "✨",
+            label: "Creative angles",
+            valueOf: (v) =>
+              v.filter((f) => f.label.startsWith("Drafted ") && f.label.includes("angle"))
+                .length * 3, // 3 personas per angle
+          },
+          {
+            icon: "📅",
+            label: "Phases sequenced",
+            valueOf: (v) =>
+              v.filter((f) => f.label.startsWith("Phase ")).length,
+          },
+        ],
+      }}
+    />
   );
 }
 
@@ -1433,7 +1371,7 @@ function PlanFileView({
       workflow.step === "launch-plan"
     ) {
       setPlanBuilding(true);
-      const id = setTimeout(() => setPlanBuilding(false), 5600);
+      const id = setTimeout(() => setPlanBuilding(false), 11800);
       return () => clearTimeout(id);
     }
     setPlanBuilding(false);
@@ -1454,7 +1392,7 @@ function PlanFileView({
     return (
       <div className="relative">
         <div className="px-6 py-5 max-w-[760px]">
-          <Markdown source={md} />
+          <Markdown source={md} theme="dark" />
         </div>
         {buildingOverlay && <BuildingOverlay label="Spot is drafting the plan…" />}
       </div>
@@ -1480,7 +1418,7 @@ function PlanFileView({
   return (
     <div className="relative">
       <div className="px-6 py-5 max-w-[720px]">
-        <Markdown source={files.planMd} />
+        <Markdown source={files.planMd} theme="dark" />
       </div>
       {buildingOverlay && (
         <BuildingOverlay label="Spot is proposing plan changes…" />

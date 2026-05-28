@@ -37,15 +37,26 @@ import {
 
 /* ─── Public component ────────────────────────────────────────── */
 
-export function Markdown({ source }: { source: string }) {
+/** Theme toggle · "dark" flips the article into Notion-style dark
+ *  mode (off-black surface, light text, gold accents). Defaults to
+ *  light. The class `md-dark` powers most of the colour overrides
+ *  in globals.css so we don't need a per-block prop. */
+export function Markdown({
+  source,
+  theme = "light",
+}: {
+  source: string;
+  theme?: "light" | "dark";
+}) {
   const blocks = parseBlocks(source);
   const enriched = enrichWithSections(blocks);
 
-  // First italic-only paragraph after H1 (if any) → properties bar.
-  // First regular paragraph after that → tagline callout.
-  // We render them inline below the H1.
   return (
-    <article className="md-render max-w-[760px] mx-auto px-1">
+    <article
+      className={`md-render max-w-[760px] mx-auto px-1 ${
+        theme === "dark" ? "md-dark" : ""
+      }`}
+    >
       {enriched.map((b, i) => renderBlock(b, i))}
     </article>
   );
