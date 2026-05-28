@@ -1504,22 +1504,46 @@ function DiagnosticPhaseLoader({
   );
 }
 
-/** Same dark Spot pattern, but for the post-approval execution
- *  phase. The user clicked "Approve plan" — Spot is building all
- *  the assets in parallel. Copy walks through what each background
- *  agent is doing so the wait feels like real work. */
-const LAUNCH_BUILD_THOUGHTS = [
-  "Briefing the Persona Builder…",
-  "Building structured persona files for each cohort.",
-  "Drafting creative concepts · 12 statics + 6 reels.",
-  "Generating headline + body variants per angle.",
-  "Designing 3 landing pages — one per persona.",
-  "Wiring lead forms · Meta + WhatsApp + landing.",
-  "Compiling Meta campaign structures · 3 campaigns · 9 ad sets.",
-  "Setting up Google Search + Discover campaigns.",
-  "Resize Agent · adapting creatives to 1:1, 4:5, 9:16, 16:9.",
-  "Running pre-flight checks on all assets.",
-  "I'll surface everything for your approval once it's ready.",
+/** The five concrete tasks Spot runs after the user clicks
+ *  "Put Spot to work". Each task has its own visible state in the
+ *  LaunchBuildingTaskLoader (queued → running → done) and the
+ *  durations sum to ~28s to match the launch-building tool-call. */
+const LAUNCH_BUILD_TASKS: {
+  id: string;
+  label: string;
+  sub: string;
+  duration: number;
+}[] = [
+  {
+    id: "creatives",
+    label: "Building creatives, forms, landing pages",
+    sub: "12 statics · 6 reels · 3 landing pages · 2 lead forms",
+    duration: 6500,
+  },
+  {
+    id: "plan",
+    label: "Building the campaign plan",
+    sub: "3 Meta campaigns · 9 ad sets · Google Search + Discover",
+    duration: 5000,
+  },
+  {
+    id: "crm",
+    label: "Verifying CRM integrations",
+    sub: "lead routing · pixel · CAPI · attribution windows",
+    duration: 4500,
+  },
+  {
+    id: "agent",
+    label: "Building Pre-Sales Agent (Voice + WhatsApp)",
+    sub: "agent persona · script · objection handling · escalation rules",
+    duration: 6500,
+  },
+  {
+    id: "launch",
+    label: "Launching campaigns",
+    sub: "publishing to Meta + Google · arming the watchers",
+    duration: 5500,
+  },
 ];
 
 /** Shared dark-Spot loader surface used by both PlanBuildingLoader
@@ -1620,61 +1644,264 @@ function DarkSpotLoader({
   );
 }
 
-/** Launch-building canvas loader · the dark Spot pattern shown
- *  after the user approves the plan, while background agents spin
- *  up creatives, landing pages, forms, and campaigns. */
+/**
+ * Launch-building canvas loader · the dark Spot canvas shown after
+ * the user clicks "Put Spot to work". Designed around 5 explicit
+ * tasks — each one renders as a row in a task list with state
+ * (queued / running / done) and a one-line sub-label so the user
+ * sees exactly what Spot is doing at each beat.
+ */
 function LaunchBuildingLoader({ productName }: { productName: string }) {
   const showHomeView = useSpotStore((s) => s.showHomeView);
   const router = useRouter();
+  const TOTAL_MS = LAUNCH_BUILD_TASKS.reduce((s, t) => s + t.duration, 0);
+  const [doneCount, setDoneCount] = useState(0);
+  const [progress, setProgress] = useState(2);
+
+  // Advance task state on each task's duration boundary.
+  useEffect(() => {
+    setDoneCount(0);
+    let cumulative = 0;
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    LAUNCH_BUILD_TASKS.forEach((t, i) => {
+      cumulative += t.duration;
+      timers.push(setTimeout(() => setDoneCount(i + 1), cumulative));
+    });
+    return () => timers.forEach(clearTimeout);
+  }, []);
+
+  // Smooth progress bar across the whole 28s run.
+  useEffect(() => {
+    const start = Date.now();
+    const id = setInterval(() => {
+      const elapsed = Date.now() - start;
+      const pct = Math.min(99, (elapsed / TOTAL_MS) * 100);
+      setProgress(pct);
+      if (pct >= 99) clearInterval(id);
+    }, 80);
+    return () => clearInterval(id);
+  }, [TOTAL_MS]);
+
   return (
-    <DarkSpotLoader
-      agentLabel="Build Agent · live"
-      title={
-        <>
-          Building{" "}
-          <span
+    <div
+      className="h-full flex flex-col items-center justify-center px-8 py-12"
+      style={{ background: "#0A0A09" }}
+    >
+      {/* Spot orb + headline */}
+      <div className="relative mb-6">
+        <div
+          aria-hidden
+          className="absolute inset-0 rounded-full"
+          style={{
+            background:
+              "radial-gradient(circle, rgba(201, 168, 106, 0.32) 0%, transparent 65%)",
+            filter: "blur(14px)",
+            transform: "scale(1.5)",
+          }}
+        />
+        <SpotLoader mode="orbit" size={64} className="!gap-0 relative" />
+      </div>
+
+      <div
+        className="inline-flex items-center gap-1.5 text-[10.5px] uppercase tracking-wider font-semibold mb-2"
+        style={{ color: "#22C55E" }}
+      >
+        <span className="relative inline-flex w-1.5 h-1.5 rounded-full bg-[#22C55E]">
+          <span className="absolute inset-0 rounded-full bg-[#22C55E] opacity-50 animate-ping" />
+        </span>
+        Build Agent · live · 5 tasks
+      </div>
+
+      <h1
+        className="text-[22px] font-semibold tracking-tight leading-tight text-center max-w-[560px]"
+        style={{ color: "#F5F4EF" }}
+      >
+        Spot is working on{" "}
+        <span
+          style={{
+            background:
+              "linear-gradient(135deg, #C9A86A 0%, #E0C083 100%)",
+            WebkitBackgroundClip: "text",
+            WebkitTextFillColor: "transparent",
+          }}
+        >
+          {productName}
+        </span>
+      </h1>
+
+      {/* Progress bar */}
+      <div className="w-full max-w-[540px] mt-5">
+        <div
+          className="relative h-1.5 rounded-full overflow-hidden"
+          style={{ background: "rgba(255,255,255,0.06)" }}
+        >
+          <div
+            className="h-full transition-all duration-300 ease-out relative"
             style={{
+              width: `${progress}%`,
               background:
-                "linear-gradient(135deg, #C9A86A 0%, #E0C083 100%)",
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
+                "linear-gradient(90deg, #C9A86A 0%, #E0C083 60%, #22C55E 100%)",
             }}
           >
-            {productName}
-          </span>{" "}
-          in the background
-        </>
-      }
-      thoughts={LAUNCH_BUILD_THOUGHTS}
-      intervalMs={2200}
-      actions={
-        <div className="flex items-center gap-2 mt-8">
-          <button
-            type="button"
-            onClick={() =>
-              router.push("/memory?focus=prod-guyjus-spoken-english")
-            }
-            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-button text-[12px] font-medium transition-colors"
-            style={{
-              background: "#FAFAF8",
-              color: "#0A0A09",
-            }}
-          >
-            View project memory
-            <ArrowRight size={11} strokeWidth={1.8} />
-          </button>
-          <button
-            type="button"
-            onClick={showHomeView}
-            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-button text-[12px] transition-colors hover:bg-white/5"
-            style={{ color: "#A8A8A0" }}
-          >
-            <Home size={12} strokeWidth={1.7} />
-            Back to Spot homepage
-          </button>
+            <span
+              aria-hidden
+              className="absolute right-0 top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full"
+              style={{
+                background: "#22C55E",
+                boxShadow:
+                  "0 0 14px 3px rgba(34, 197, 94, 0.55), 0 0 4px rgba(255,255,255,0.4)",
+              }}
+            />
+          </div>
         </div>
-      }
-    />
+        <div className="flex items-center justify-between mt-1.5">
+          <span
+            className="text-[10.5px] tabular font-medium"
+            style={{ color: "#D6D6CE" }}
+          >
+            {Math.round(progress)}%
+          </span>
+          <span
+            className="text-[10.5px] tabular"
+            style={{ color: "#8A8980" }}
+          >
+            {doneCount} of {LAUNCH_BUILD_TASKS.length} tasks complete
+          </span>
+        </div>
+      </div>
+
+      {/* Task list */}
+      <div
+        className="w-full max-w-[540px] mt-6 rounded-card overflow-hidden"
+        style={{
+          background: "#1A1A18",
+          border: "1px solid #262623",
+        }}
+      >
+        <ul>
+          {LAUNCH_BUILD_TASKS.map((t, i) => {
+            const done = i < doneCount;
+            const running = i === doneCount;
+            const queued = i > doneCount;
+            const rowBg = done
+              ? "rgba(34, 197, 94, 0.06)"
+              : running
+                ? "rgba(201, 168, 106, 0.07)"
+                : "transparent";
+            return (
+              <li
+                key={t.id}
+                className="px-4 py-3 transition-colors flex items-start gap-3"
+                style={{
+                  background: rowBg,
+                  borderTop: i > 0 ? "1px solid #262623" : undefined,
+                }}
+              >
+                {/* Status glyph */}
+                <span className="w-4 h-4 flex items-center justify-center flex-shrink-0 mt-0.5">
+                  {done && (
+                    <CheckCircle2
+                      size={15}
+                      strokeWidth={2}
+                      style={{ color: "#22C55E" }}
+                    />
+                  )}
+                  {running && (
+                    <Cog
+                      size={14}
+                      strokeWidth={1.8}
+                      className="animate-spin"
+                      style={{ animationDuration: "1.2s", color: "#E0C083" }}
+                    />
+                  )}
+                  {queued && (
+                    <span
+                      className="w-3 h-3 rounded-full"
+                      style={{ border: "1.5px solid #3A3A35" }}
+                    />
+                  )}
+                </span>
+
+                {/* Step number + content */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="text-[10.5px] tabular font-mono flex-shrink-0"
+                      style={{
+                        color: queued ? "#5A5A52" : done ? "#7A7970" : "#C9A86A",
+                      }}
+                    >
+                      {String(i + 1).padStart(2, "0")}
+                    </span>
+                    <span
+                      className="text-[13px] flex-1 truncate"
+                      style={{
+                        color: queued
+                          ? "#7A7970"
+                          : done
+                            ? "#A8A8A0"
+                            : "#F5F4EF",
+                        fontWeight: running ? 600 : 500,
+                      }}
+                    >
+                      {t.label}
+                    </span>
+                    {running && (
+                      <span
+                        className="text-[10px] uppercase tracking-wider font-semibold flex-shrink-0"
+                        style={{ color: "#E0C083" }}
+                      >
+                        running…
+                      </span>
+                    )}
+                    {done && (
+                      <span
+                        className="text-[10px] uppercase tracking-wider font-semibold flex-shrink-0"
+                        style={{ color: "#22C55E" }}
+                      >
+                        done
+                      </span>
+                    )}
+                  </div>
+                  <div
+                    className="text-[11px] mt-0.5 truncate"
+                    style={{
+                      color: queued ? "#5A5A52" : "#8A8980",
+                    }}
+                  >
+                    {t.sub}
+                  </div>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+
+      {/* Actions */}
+      <div className="flex items-center gap-2 mt-7">
+        <button
+          type="button"
+          onClick={() =>
+            router.push("/memory?focus=prod-guyjus-spoken-english")
+          }
+          className="inline-flex items-center gap-1.5 h-8 px-3 rounded-button text-[12px] font-medium transition-colors"
+          style={{ background: "#FAFAF8", color: "#0A0A09" }}
+        >
+          View project memory
+          <ArrowRight size={11} strokeWidth={1.8} />
+        </button>
+        <button
+          type="button"
+          onClick={showHomeView}
+          className="inline-flex items-center gap-1.5 h-8 px-3 rounded-button text-[12px] transition-colors hover:bg-white/5"
+          style={{ color: "#A8A8A0" }}
+        >
+          <Home size={12} strokeWidth={1.7} />
+          Back to Spot homepage
+        </button>
+      </div>
+    </div>
   );
 }
 

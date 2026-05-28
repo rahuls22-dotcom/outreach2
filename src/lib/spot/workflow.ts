@@ -78,8 +78,9 @@ export const STEP_ORDER: WorkflowStep[] = [
   "kickoff",
   "launch-plan",
   "launch-building",
-  "launch-review",
-  "launch-deploy",
+  // launch-review and launch-deploy are kept in the union for back-compat
+  // but no longer in the flow — building runs all 5 tasks (including
+  // launching campaigns) and advances straight to `done`.
   "done",
 ];
 
@@ -124,8 +125,6 @@ export const VISIBLE_STEPS: WorkflowStep[] = [
   "kickoff",
   "launch-plan",
   "launch-building",
-  "launch-review",
-  "launch-deploy",
 ];
 
 /** Per-kind step order. nextStep() reads this off the workflow kind. */
@@ -977,15 +976,15 @@ export const STEP_TOOL_CALL: Partial<Record<WorkflowStep, StepToolCall>> = {
       "personas.draft · memory.read · media.plan · creative.brief · rollout.sequence · budget.lock — running in parallel…",
     delayMs: 11800,
   },
-  // Building step — Spot is working asynchronously. The tool-call is
-  // long-ish so the user can navigate away. Persona Builder runs first
-  // so the rest of the agents (creative, landing, forms) have personas
-  // to brief against.
+  // Building step — Spot runs 5 tasks end-to-end: build creatives +
+  // forms + landing pages → lock campaign plan → verify CRM →
+  // build Pre-Sales Agent → launch campaigns. ~28s total, matching
+  // the task durations rendered in LaunchBuildingTaskLoader.
   "launch-building": {
     agent: "build.execute",
     detail:
-      "Persona Builder · Creative Agent · Resize Agent · Landing Builder · Forms Agent · Campaign Compiler — building in the background.",
-    delayMs: 30000,
+      "Task 1/5 · creatives + forms + landing pages → 2/5 · campaign plan → 3/5 · CRM integrations → 4/5 · Pre-Sales Agent → 5/5 · launch campaigns.",
+    delayMs: 28000,
   },
   // Review step lands quickly — Spot just compiles assets for review.
   "launch-review": {
@@ -1071,13 +1070,13 @@ export function stepIntroMessage(
           {
             type: "text",
             text:
-              "Here's what I'd build for you — one plan covering personas, media, creatives, landing pages, lead forms, campaign tree, and outreach. Approve once and I'll spend ~2 hours assembling everything in the background.",
+              "Here's the plan — personas, media, creatives, landing pages, lead forms, campaign tree, and outreach. Five concrete tasks ready to run end-to-end: build creatives + forms + landing pages, lock the campaign plan, verify CRM integrations, spin up the Pre-Sales Agent, and launch campaigns. Approve once and I'll handle the rest.",
           },
           {
             type: "step-cta",
-            label: "Approve plan · I'll get to work",
+            label: "Put Spot to work",
             helper:
-              "I'll work in the background. You can keep using Revspot — I'll ping you when it's ready to review.",
+              "5 tasks · ~25 seconds end-to-end · I'll surface a summary once everything's live.",
             refineHint: "or tell me what to change before I start",
           },
         ],
@@ -1088,13 +1087,13 @@ export function stepIntroMessage(
         parts: [
           {
             type: "headline",
-            text: `Got it — working on ${w.productName}.`,
+            text: `On it — running 5 tasks for ${w.productName}.`,
             verdict: "info",
           },
           {
             type: "text",
             text:
-              "ETA ~2 hours. Five agents running in parallel: Creative Agent (12 statics + 6 reels), Resize Agent (48 variants), Landing Builder (3 pages), Forms Agent (2 lead forms), Campaign Compiler. I'll surface everything for your approval when it's done — keep working, I'll find you.",
+              "Building creatives + forms + landing pages → locking the campaign plan → verifying CRM integrations → spinning up the Pre-Sales Agent (Voice + WhatsApp) → launching campaigns. You can watch on the right or step away — I'll ping you when everything is live.",
           },
         ],
       };
