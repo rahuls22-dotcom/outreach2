@@ -309,9 +309,12 @@ export default function SpotPage() {
     return (
       <div className="h-screen flex bg-[var(--chat-bg)]">
         {/* Left — chat. Resizable via the drag handle on the right edge.
-            Goes full-width when the canvas is minimized. */}
+            Goes full-width when the canvas is minimized. `relative` so
+            the new-product drawer can absolute-position inside it
+            without escaping into the canvas. `overflow-hidden` clips
+            the drawer's pre-mount transform off-screen. */}
         <div
-          className="flex flex-col border-r border-border bg-[var(--chat-bg)]"
+          className="relative overflow-hidden flex flex-col border-r border-border bg-[var(--chat-bg)]"
           style={canvasOpen ? { width: `${chatWidth}px`, flex: "0 0 auto" } : { flex: 1 }}
         >
           <div className="flex items-center gap-2.5 px-4 py-3 border-b border-border-subtle bg-white/70 backdrop-blur-sm">
@@ -385,6 +388,20 @@ export default function SpotPage() {
               }
             />
           </div>
+
+          {/* New-product drawer · slides up from the bottom of *this*
+              chat column (not the whole screen) once Spot has finished
+              its "preparing intake form" tool-call. Submitting closes
+              the drawer and starts deep research; the chat narrates. */}
+          {workflow.kind === "launch-campaign" &&
+            workflow.step === "product-setup" &&
+            workflow.productSetupModalOpen === true &&
+            !workflow.productSetupAnswers?.name && (
+              <ProductSetupDrawer
+                onSubmit={(data) => submitProductSetupForm(data)}
+                onClose={() => exitWorkflow()}
+              />
+            )}
         </div>
 
         {/* Drag handle — user controls chat width. 4px visible band with
@@ -406,20 +423,6 @@ export default function SpotPage() {
             <WorkflowPane />
           </div>
         )}
-
-        {/* New-product modal · overlays the entire workflow surface
-            on entry. Sits *above* the chat panel until the user
-            submits or cancels — exactly the Claude-style "ask the
-            user a question" pattern. After submit, the modal closes
-            and the chat starts narrating research. */}
-        {workflow.kind === "launch-campaign" &&
-          workflow.step === "product-setup" &&
-          !workflow.productSetupAnswers?.name && (
-            <ProductSetupModal
-              onSubmit={(data) => submitProductSetupForm(data)}
-              onClose={() => exitWorkflow()}
-            />
-          )}
       </div>
     );
   }
@@ -585,16 +588,20 @@ function AgentTrailIndicator({ working }: { working: boolean }) {
 }
 
 /**
- * ProductSetupModal — overlay shown on the left chat panel when the
- * user starts a new product. Collects name + URL + files in one shot
- * (vs the old chat-driven Q&A which felt like a one-way conversation).
+ * ProductSetupDrawer — bottom drawer that slides up from the bottom
+ * of the left chat panel when the user starts a new product. Mounted
+ * absolutely inside the left column so it never escapes onto the
+ * canvas. Three fields in one shot: name + URL + files.
  *
- * Sits on top of the chat column (z-50) with a soft backdrop, so the
- * surrounding UI is visible but quiet. On submit, the parent calls
- * submitProductSetupForm which mirrors the inputs as a user message
- * and triggers deep research. On cancel, exitWorkflow returns to home.
+ * Animation: on mount, requestAnimationFrame flips `visible` so the
+ * backdrop fades in and the panel translates from `translate-y-full`
+ * to `translate-y-0` over 320ms. Closing animates back down before
+ * onClose fires so the exit feels real, not a yank.
+ *
+ * On submit, the parent calls submitProductSetupForm which mirrors
+ * the inputs as a user message + triggers deep research.
  */
-function ProductSetupModal({
+function ProductSetupDrawer({
   onSubmit,
   onClose,
 }: {
@@ -605,7 +612,16 @@ function ProductSetupModal({
   const [url, setUrl] = useState("");
   const [fileNames, setFileNames] = useState<string[]>([]);
   const [dragOver, setDragOver] = useState(false);
+  const [visible, setVisible] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Slide-up on mount: defer the visible flip to the next paint so
+  // the initial render commits with translate-y-full, then we
+  // transition to translate-y-0.
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setVisible(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
 
   const addFiles = (files: FileList | File[]) => {
     const names = Array.from(files).map((f) => f.name);
@@ -613,39 +629,73 @@ function ProductSetupModal({
   };
 
   const canSubmit = name.trim().length > 0;
+
+  const animateOutThen = (cb: () => void) => {
+    setVisible(false);
+    setTimeout(cb, 280);
+  };
+
   const handleSubmit = () => {
     if (!canSubmit) return;
-    onSubmit({
+    // Capture the form before the animate-out unmounts state.
+    const data = {
       name: name.trim(),
       url: url.trim() || undefined,
       files: fileNames.length > 0 ? fileNames : undefined,
-    });
+    };
+    animateOutThen(() => onSubmit(data));
   };
+
+  const handleClose = () => animateOutThen(onClose);
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-6"
-      style={{ background: "rgba(20, 20, 20, 0.42)", backdropFilter: "blur(4px)" }}
+      className="absolute inset-0 z-40 flex flex-col justify-end"
       role="dialog"
       aria-modal="true"
-      aria-labelledby="product-setup-modal-title"
+      aria-labelledby="product-setup-drawer-title"
     >
+      {/* Backdrop · contained inside the left column, not the whole
+          screen. Tap to dismiss. */}
+      <button
+        type="button"
+        onClick={handleClose}
+        aria-label="Close"
+        className={`absolute inset-0 transition-opacity duration-300 ease-out cursor-default ${
+          visible ? "opacity-100" : "opacity-0"
+        }`}
+        style={{ background: "rgba(16, 16, 16, 0.32)", backdropFilter: "blur(2px)" }}
+      />
+
+      {/* Drawer · slides from below. Bounded to a comfortable max-
+          height so a sliver of chat peeks at the top, signalling
+          the drawer can be dismissed. */}
       <div
-        className="w-full max-w-[460px] bg-white rounded-card border border-border overflow-hidden"
-        style={{ boxShadow: "0 24px 60px -12px rgba(0,0,0,0.28)" }}
-        onClick={(e) => e.stopPropagation()}
+        className={`relative bg-white border-t border-x border-border shadow-[0_-20px_50px_-10px_rgba(0,0,0,0.18)] transition-transform duration-300 ease-out ${
+          visible ? "translate-y-0" : "translate-y-full"
+        }`}
+        style={{
+          borderTopLeftRadius: 18,
+          borderTopRightRadius: 18,
+          maxHeight: "calc(100% - 56px)",
+        }}
       >
+        {/* Drag handle · purely cosmetic, signals the drawer pattern. */}
+        <div className="flex justify-center pt-2.5 pb-1">
+          <span className="block w-9 h-1 rounded-full bg-border" />
+        </div>
+
         {/* Header */}
-        <div className="px-5 pt-5 pb-4 border-b border-border-subtle">
-          <div className="flex items-center gap-2.5 mb-3">
-            <SpotMark size={18} />
-            <span className="text-[11px] uppercase tracking-wider text-text-tertiary font-medium">
+        <div className="px-5 pt-2 pb-4 border-b border-border-subtle">
+          <div className="flex items-center gap-2.5 mb-2.5">
+            <SpotMark size={16} />
+            <span className="text-[10.5px] uppercase tracking-wider text-text-tertiary font-medium">
               Spot · new product
             </span>
             <span className="flex-1" />
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleClose}
               title="Cancel"
               className="inline-flex items-center justify-center h-6 w-6 rounded-button text-text-tertiary hover:bg-surface-secondary hover:text-text-primary"
             >
@@ -653,19 +703,19 @@ function ProductSetupModal({
             </button>
           </div>
           <h2
-            id="product-setup-modal-title"
+            id="product-setup-drawer-title"
             className="text-[15px] font-semibold text-text-primary leading-tight"
           >
             What are we launching?
           </h2>
           <p className="text-[12px] text-text-secondary mt-1 leading-relaxed">
-            Give me a name. Drop a URL or files if you have them — I&apos;ll
-            crawl what I can and write the memory.
+            A name is enough. Add a URL or files and I&apos;ll crawl what I
+            can before writing the memory.
           </p>
         </div>
 
-        {/* Form */}
-        <div className="px-5 py-4 space-y-3.5">
+        {/* Form · scrollable if it exceeds the drawer height. */}
+        <div className="px-5 py-4 space-y-3.5 overflow-y-auto" style={{ maxHeight: "calc(80vh - 200px)" }}>
           <div>
             <label className="block text-[11px] uppercase tracking-wider text-text-tertiary font-medium mb-1.5">
               Product name
@@ -785,7 +835,7 @@ function ProductSetupModal({
         <div className="px-5 py-3 border-t border-border-subtle bg-surface-page flex items-center gap-2">
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleClose}
             className="inline-flex items-center h-8 px-3 rounded-button text-[12px] text-text-secondary hover:text-text-primary hover:bg-surface-secondary"
           >
             Cancel

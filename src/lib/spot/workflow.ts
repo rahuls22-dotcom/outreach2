@@ -201,6 +201,11 @@ export type LaunchWorkflow = {
    *  "product-setup"; ignored after. */
   productSetupStage?: ProductSetupStage;
   productSetupAnswers?: ProductSetupAnswers;
+  /** Bottom-drawer open state on the left chat panel. False
+   *  immediately after startNewProductFlow (Spot's "preparing form"
+   *  tool-call is still running); flips to true after the ~1.4s
+   *  delay so the drawer slides up. Drives the entrance animation. */
+  productSetupModalOpen?: boolean;
 };
 
 /**

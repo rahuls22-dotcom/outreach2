@@ -321,11 +321,13 @@ export const useSpotStore = create<PanelState>((set) => ({
     }, 4500);
   },
 
-  // Kicks off the new-product flow. The left chat panel opens a
-  // modal overlay (rendered by /spot/page.tsx) that collects name,
-  // URL, and files in one shot. On submit, submitProductSetupForm
-  // mirrors the input as a user message and triggers deep research.
-  startNewProductFlow: () =>
+  // Kicks off the new-product flow. The chat acknowledges the
+  // request, runs a "preparing intake form" tool-call (visible
+  // spinner), then ~1.4s later the bottom drawer slides up over
+  // the left chat panel. On submit, submitProductSetupForm mirrors
+  // the input as a user message and triggers deep research.
+  startNewProductFlow: () => {
+    const callId = `tc-form-${Date.now()}`;
     set(() => ({
       open: true,
       maximized: false,
@@ -346,10 +348,11 @@ export const useSpotStore = create<PanelState>((set) => ({
         attachedVoiceAgentId: null,
         productSetupStage: "name",
         productSetupAnswers: {},
+        productSetupModalOpen: false,
       },
-      // Seed the chat with a single Spot intro line so the column
-      // isn't empty behind the modal. The modal collects the inputs;
-      // after submit, the chat starts narrating the research.
+      // Spot reacts immediately: a one-liner + a running tool-call
+      // so the user sees the agent doing something. The drawer
+      // arrives after the tool-call resolves.
       thread: [
         {
           role: "spot",
@@ -358,13 +361,44 @@ export const useSpotStore = create<PanelState>((set) => ({
             {
               type: "text",
               text:
-                "Tell me about it in the form — a name, a URL or files if you have them. " +
-                "I'll dispatch the Deep Research Agent and write the memory.",
+                "Spinning up a quick intake — name, brand URL, any files you have. " +
+                "I'll pull what I can and write the memory.",
+            },
+            {
+              type: "tool-call",
+              id: callId,
+              agent: "Spot",
+              detail: "preparing intake form…",
+              status: "running",
             },
           ],
         },
       ],
-    })),
+    }));
+
+    // After the fake delay, resolve the tool-call and open the
+    // drawer. The drawer's own mount-effect handles the slide-up.
+    setTimeout(() => {
+      set((s) => {
+        if (!s.workflow || s.workflow.kind !== "launch-campaign") return {};
+        const updatedThread = s.thread.map((m) => {
+          if (m.role !== "spot") return m;
+          return {
+            ...m,
+            parts: m.parts.map((p) =>
+              p.type === "tool-call" && p.id === callId
+                ? { ...p, status: "done" as const }
+                : p,
+            ),
+          };
+        });
+        return {
+          workflow: { ...s.workflow, productSetupModalOpen: true },
+          thread: updatedThread,
+        };
+      });
+    }, 1400);
+  },
 
   // Modal submit — captures all three inputs at once. Mirrors the
   // input as a single user message, then triggers deep research.
@@ -414,6 +448,7 @@ export const useSpotStore = create<PanelState>((set) => ({
       productName: trimmedName,
       productSetupAnswers: answers,
       productSetupStage: "ready",
+      productSetupModalOpen: false,
     };
 
     set((s) => ({
