@@ -685,33 +685,30 @@ function ProductSetupDrawer({
           <span className="block w-9 h-1 rounded-full bg-border" />
         </div>
 
-        {/* Header */}
+        {/* Header — minimal, no brand chrome */}
         <div className="px-5 pt-2 pb-4 border-b border-border-subtle">
-          <div className="flex items-center gap-2.5 mb-2.5">
-            <SpotMark size={16} />
-            <span className="text-[10.5px] uppercase tracking-wider text-text-tertiary font-medium">
-              Spot · new product
-            </span>
-            <span className="flex-1" />
+          <div className="flex items-start gap-3">
+            <div className="flex-1 min-w-0">
+              <h2
+                id="product-setup-drawer-title"
+                className="text-[15px] font-semibold text-text-primary leading-tight"
+              >
+                What are we launching?
+              </h2>
+              <p className="text-[12px] text-text-secondary mt-1 leading-relaxed">
+                A name is enough. Add a URL or files and I&apos;ll crawl
+                what I can before writing the memory.
+              </p>
+            </div>
             <button
               type="button"
               onClick={handleClose}
               title="Cancel"
-              className="inline-flex items-center justify-center h-6 w-6 rounded-button text-text-tertiary hover:bg-surface-secondary hover:text-text-primary"
+              className="inline-flex items-center justify-center h-6 w-6 rounded-button text-text-tertiary hover:bg-surface-secondary hover:text-text-primary flex-shrink-0"
             >
               <X size={13} strokeWidth={1.6} />
             </button>
           </div>
-          <h2
-            id="product-setup-drawer-title"
-            className="text-[15px] font-semibold text-text-primary leading-tight"
-          >
-            What are we launching?
-          </h2>
-          <p className="text-[12px] text-text-secondary mt-1 leading-relaxed">
-            A name is enough. Add a URL or files and I&apos;ll crawl what I
-            can before writing the memory.
-          </p>
         </div>
 
         {/* Form · scrollable if it exceeds the drawer height. */}

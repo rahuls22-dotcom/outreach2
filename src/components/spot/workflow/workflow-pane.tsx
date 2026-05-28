@@ -4,10 +4,10 @@
 // approval action lives in the left chat (via the step-cta part). This
 // pane just shows what Spot is working on.
 
-import { PanelRightClose, X, Users, Package, ChartPie, Sparkles, Megaphone, Layout as LayoutIcon, PartyPopper, CheckCircle2, Check, Wifi, WifiOff, Cog, ChevronRight, Pencil, Search, ShieldAlert, TrendingUp, ExternalLink, Image as ImageIcon, Mic, MessageSquare, Phone, ArrowRight, Upload, FileText, Film as FilmIcon, Layers, Paperclip, Brain } from "lucide-react";
+import { PanelRightClose, X, Users, Package, ChartPie, Sparkles, Megaphone, Layout as LayoutIcon, PartyPopper, CheckCircle2, Check, Wifi, WifiOff, Cog, ChevronRight, ChevronDown, Pencil, Search, ShieldAlert, TrendingUp, ExternalLink, Image as ImageIcon, Mic, MessageSquare, Phone, ArrowRight, Upload, FileText, Film as FilmIcon, Layers, Paperclip, Brain } from "lucide-react";
 import { motion } from "framer-motion";
 import type { Variants } from "framer-motion";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSpotStore } from "@/lib/spot/store";
 import {
   STEP_LABELS,
@@ -156,19 +156,34 @@ export function WorkflowPane() {
   const headerTitle =
     workflow.kind === "campaign-dive" ? workflow.entityName : workflow.productName;
 
+  // Product-setup with no answers yet → no memory exists, so the
+  // canvas shouldn't pretend a file is open. Show a clean "awaiting
+  // input" pane instead, and hide the file picker.
+  const isAwaitingSetup =
+    workflow.kind === "launch-campaign" &&
+    workflow.step === "product-setup" &&
+    !workflow.productSetupAnswers?.name;
+
   return (
     <div className="h-full flex flex-col bg-white">
-      {/* Header — product context + canvas controls */}
+      {/* Header — product context + file picker dropdown + canvas controls */}
       <div className="border-b border-border-subtle bg-surface-page">
-        <div className="px-5 py-3 flex items-center gap-3">
+        <div className="px-5 py-3 flex items-center gap-2.5">
           <div className="flex-1 min-w-0">
             <div className="text-[11px] text-text-tertiary leading-tight">
               {headerVerb} {headerTitle}
             </div>
-            <div className="text-[14px] font-semibold text-text-primary leading-tight">
-              memory / {slugFor(workflow.productId, workflow.productName)}
+            <div className="text-[14px] font-semibold text-text-primary leading-tight truncate">
+              {isAwaitingSetup
+                ? "New product workspace"
+                : `memory / ${slugFor(workflow.productId, workflow.productName)}`}
             </div>
           </div>
+          {/* File picker · Claude-Code-style preview dropdown.
+              Hidden during product-setup (no files yet). */}
+          {!isAwaitingSetup && (
+            <FilePickerDropdown activeTab={activeTab} onChange={setActiveTab} />
+          )}
           <button
             type="button"
             onClick={toggleCanvas}
@@ -186,45 +201,115 @@ export function WorkflowPane() {
             <X size={14} strokeWidth={1.6} />
           </button>
         </div>
+      </div>
 
-        {/* File tabs · Claude-Code style. Filename in monospace, active
-            tab gets a darker bottom border. */}
-        <div className="flex items-end px-5">
+      {/* Body — either the awaiting-input loader or the active file */}
+      <div className="flex-1 overflow-y-auto">
+        {isAwaitingSetup ? (
+          <AwaitingInputCanvas />
+        ) : (
+          <FileBody workflow={workflow} tab={activeTab} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * File picker dropdown · Claude-Code-style preview button. Click the
+ * pill in the header to switch between memory.md / plan.md /
+ * dashboard.html / assets/. Replaces the old tab row so the canvas
+ * chrome stays minimal — files are a switchable view, not a
+ * permanent navigation.
+ */
+function FilePickerDropdown({
+  activeTab,
+  onChange,
+}: {
+  activeTab: FileTabKey;
+  onChange: (k: FileTabKey) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const active = FILE_TABS.find((t) => t.key === activeTab) ?? FILE_TABS[0];
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    window.addEventListener("mousedown", handler);
+    return () => window.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const ActiveIcon = active.icon;
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-button border border-border bg-white hover:border-border-hover text-[12px] text-text-primary"
+        title="Switch file"
+      >
+        <ActiveIcon size={11} strokeWidth={1.7} className="text-text-secondary" />
+        <span className="font-mono text-[11px]">{active.file}</span>
+        <ChevronDown size={11} strokeWidth={1.8} className="text-text-tertiary" />
+      </button>
+      {open && (
+        <div
+          className="absolute top-[calc(100%+4px)] right-0 z-50 bg-white border border-border rounded-card py-1 min-w-[220px]"
+          style={{ boxShadow: "0 8px 28px -8px rgba(0,0,0,0.14)" }}
+        >
           {FILE_TABS.map((t) => {
             const Icon = t.icon;
-            const active = t.key === activeTab;
+            const isActive = t.key === activeTab;
             return (
               <button
                 key={t.key}
                 type="button"
-                onClick={() => setActiveTab(t.key)}
-                className={`relative inline-flex items-center gap-1.5 py-2.5 px-3 text-[12px] font-medium transition-colors whitespace-nowrap ${
-                  active ? "text-text-primary" : "text-text-secondary hover:text-text-primary"
+                onClick={() => {
+                  onChange(t.key);
+                  setOpen(false);
+                }}
+                className={`w-full text-left flex items-center gap-2 px-3 h-8 hover:bg-surface-secondary text-[12.5px] ${
+                  isActive ? "bg-surface-secondary/60" : ""
                 }`}
               >
-                <Icon size={11} strokeWidth={1.7} />
-                <span>{t.label}</span>
-                <span
-                  className="text-[10px] font-mono text-text-tertiary ml-0.5"
-                  style={{ opacity: active ? 0.7 : 0.4 }}
-                >
+                <Icon size={11} strokeWidth={1.7} className="text-text-tertiary" />
+                <span className="text-text-primary">{t.label}</span>
+                <span className="text-[10.5px] font-mono text-text-tertiary ml-auto">
                   {t.file}
                 </span>
-                {active && (
-                  <span
-                    aria-hidden
-                    className="absolute left-3 right-3 -bottom-px h-0.5 bg-text-primary rounded-full"
-                  />
+                {isActive && (
+                  <Check size={11} strokeWidth={2} className="text-text-primary ml-1" />
                 )}
               </button>
             );
           })}
         </div>
-      </div>
+      )}
+    </div>
+  );
+}
 
-      {/* Body — file content */}
-      <div className="flex-1 overflow-y-auto">
-        <FileBody workflow={workflow} tab={activeTab} />
+/**
+ * Awaiting-input canvas · shown when the new-product workflow is
+ * mid-flight but the user hasn't submitted the drawer yet. No empty
+ * file mockup, no skeleton — just a calm loader that says Spot is
+ * waiting on the form. Keeps the right pane honest: there's nothing
+ * to preview yet.
+ */
+function AwaitingInputCanvas() {
+  return (
+    <div className="h-full flex flex-col items-center justify-center px-8 py-16 text-center">
+      <SpotLoader mode="orbit" size={48} className="!gap-0" />
+      <div className="text-section-header text-text-primary mt-5">
+        Awaiting your input
+      </div>
+      <div className="text-[12.5px] text-text-secondary mt-1.5 max-w-[340px] leading-relaxed">
+        Drop the basics in the form on the left. As soon as you submit, I&apos;ll
+        start research and write the product memory into this workspace.
       </div>
     </div>
   );
