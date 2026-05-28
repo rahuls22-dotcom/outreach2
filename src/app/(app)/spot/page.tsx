@@ -46,7 +46,7 @@ import { useCurrentUser } from "@/lib/workspace-store";
 import { projectsList } from "@/lib/campaign-data";
 import { SPOT_SESSIONS, type SpotSession } from "@/lib/spot/mock-history";
 import type { SpotMessage, SpotScope } from "@/lib/spot/types";
-import { WorkflowPane } from "@/components/spot/workflow/workflow-pane";
+import { WorkflowPane, ChatHeaderFilePicker } from "@/components/spot/workflow/workflow-pane";
 import { PRODUCTS, diagnoseProduct } from "@/lib/products-data";
 import { STEP_LABELS, type SpotWorkflow } from "@/lib/spot/workflow";
 import {
@@ -165,8 +165,9 @@ export default function SpotPage() {
 
   const [draft, setDraft] = useState("");
   // Chat-panel width (px) — user-resizable via the divider drag handle.
-  // Default to a generous 620 so the chat is the primary surface.
-  const [chatWidth, setChatWidth] = useState(620);
+  // Default ~30% wider than before (620 → 800) so the chat reads as
+  // the primary surface even with the canvas open.
+  const [chatWidth, setChatWidth] = useState(800);
   const [pending, setPending] = useState(false);
   const [scopeOpen, setScopeOpen] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -308,7 +309,7 @@ export default function SpotPage() {
         {/* Left — chat. Resizable via the drag handle on the right
             edge. Goes full-width when the canvas is minimized. */}
         <div
-          className="flex flex-col border-r border-border bg-[var(--chat-bg)]"
+          className="flex flex-col bg-[var(--chat-bg)]"
           style={canvasOpen ? { width: `${chatWidth}px`, flex: "0 0 auto" } : { flex: 1 }}
         >
           <div className="flex items-center gap-2.5 px-4 py-3 border-b border-border-subtle bg-white/70 backdrop-blur-sm">
@@ -320,9 +321,6 @@ export default function SpotPage() {
             >
               <Home size={14} strokeWidth={1.6} />
             </button>
-            {/* Logo +30% (was 16 → 21). When an agent is running, swap
-                the static mark for the orbit loader so the chat panel
-                visibly reflects work-in-progress. */}
             {isAgentRunning ? (
               <SpotLoader mode="orbit" size={21} className="!gap-0" />
             ) : (
@@ -342,44 +340,44 @@ export default function SpotPage() {
                         : `Launching · ${workflow.productName}`}
               </div>
             </div>
+            {/* File picker · Claude-style preview button. Lives on the
+                LEFT (the input side) so the user opens/closes canvas
+                files from the same place they type. */}
+            <ChatHeaderFilePicker compact />
             {!canvasOpen && (
               <button
                 type="button"
                 onClick={() => useSpotStore.getState().toggleCanvas()}
                 title="Show canvas"
-                className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-button border border-border bg-white hover:border-border-hover text-[11.5px] text-text-secondary hover:text-text-primary"
+                className="inline-flex items-center justify-center h-7 w-7 rounded-button text-text-secondary hover:bg-surface-secondary hover:text-text-primary"
               >
                 <PanelRightOpen size={12} strokeWidth={1.6} />
-                Show canvas
               </button>
             )}
           </div>
+          {/* Top-anchored chat · standard top-down message flow with
+              the composer pinned at the bottom. The question card
+              lives inside the thread at the end. */}
           <div ref={threadScrollRef} className="flex-1 overflow-y-auto scroll px-4 py-4">
-            {/* Bottom-anchored stack — content piles at the bottom of
-                the chat (Claude-style). When there are few messages,
-                the question card sits just above the composer instead
-                of stranded at the top. */}
-            <div className="min-h-full flex flex-col justify-end">
-              {thread.map((m, i) => (
-                <MessageBubble key={i} message={m} animate={i === thread.length - 1} />
-              ))}
-              {pending && <TypingDots />}
-              <AgentTrailIndicator working={isAgentRunning || pending} />
+            {thread.map((m, i) => (
+              <MessageBubble key={i} message={m} animate={i === thread.length - 1} />
+            ))}
+            {pending && <TypingDots />}
+            <AgentTrailIndicator working={isAgentRunning || pending} />
 
-              {/* Inline question card · appears once Spot has finished
-                  preparing the intake. Three sequential questions:
-                  name → URL → files. Submitting the last one closes
-                  the card and kicks off deep research. */}
-              {workflow.kind === "launch-campaign" &&
-                workflow.step === "product-setup" &&
-                workflow.productSetupModalOpen === true &&
-                !workflow.productSetupAnswers?.name && (
-                  <ProductSetupQuestionCard
-                    onSubmit={(data) => submitProductSetupForm(data)}
-                    onClose={() => exitWorkflow()}
-                  />
-                )}
-            </div>
+            {/* Inline question card · appears once Spot has finished
+                preparing the intake. Three sequential questions:
+                name → URL → files. Submitting the last one closes
+                the card and kicks off deep research. */}
+            {workflow.kind === "launch-campaign" &&
+              workflow.step === "product-setup" &&
+              workflow.productSetupModalOpen === true &&
+              !workflow.productSetupAnswers?.name && (
+                <ProductSetupQuestionCard
+                  onSubmit={(data) => submitProductSetupForm(data)}
+                  onClose={() => exitWorkflow()}
+                />
+              )}
           </div>
           <div className="border-t border-border-subtle px-3 py-3 bg-white/50 backdrop-blur-sm">
             <Composer
@@ -417,11 +415,17 @@ export default function SpotPage() {
           />
         )}
 
-        {/* Right — workflow canvas. Collapses (instead of unmounting)
-            when the user minimises; state stays intact. */}
+        {/* Right — workflow canvas. Floated as a rounded card with
+            shadow so it reads as an overlay panel on top of the chat,
+            not a hard split-pane. */}
         {canvasOpen && (
-          <div className="flex-1 min-w-0">
-            <WorkflowPane />
+          <div className="flex-1 min-w-0 p-2 pl-0">
+            <div
+              className="h-full bg-white rounded-card border border-border overflow-hidden"
+              style={{ boxShadow: "0 10px 32px -12px rgba(0,0,0,0.18)" }}
+            >
+              <WorkflowPane />
+            </div>
           </div>
         )}
       </div>
@@ -460,9 +464,10 @@ export default function SpotPage() {
           </button>
         </div>
 
-        {/* Conversation */}
+        {/* Conversation · wider column (+30%) so the chat reads as
+            the primary surface, not a narrow strip. */}
         <div ref={threadScrollRef} className="flex-1 overflow-y-auto scroll">
-          <div className="max-w-[720px] mx-auto w-full px-6 py-8">
+          <div className="max-w-[940px] mx-auto w-full px-6 py-8">
             {thread.map((m, i) => (
               <MessageBubble key={i} message={m} animate={i === thread.length - 1} />
             ))}
@@ -473,7 +478,7 @@ export default function SpotPage() {
         {/* Composer pinned at the bottom — standard chat layout once
             we're in conversation mode. */}
         <div className="border-t border-border-subtle bg-white/50 backdrop-blur-sm">
-          <div className="max-w-[720px] mx-auto w-full px-6 py-4">
+          <div className="max-w-[940px] mx-auto w-full px-6 py-4">
             <Composer
               value={draft}
               onChange={setDraft}

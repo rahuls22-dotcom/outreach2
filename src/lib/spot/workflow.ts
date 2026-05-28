@@ -65,6 +65,12 @@ export type WorkflowKind =
   | "test-angles"
   | "campaign-dive";
 
+/** Files the right canvas can show — Claude-Code-style file browser
+ *  of the product workspace. The chat header owns the picker (so the
+ *  toggle stays on the input side, like Claude), and the canvas
+ *  renders up to two of them side-by-side. */
+export type CanvasFile = "memory" | "plan" | "dashboard" | "assets";
+
 export const STEP_ORDER: WorkflowStep[] = [
   "deep-research",
   "product-setup",

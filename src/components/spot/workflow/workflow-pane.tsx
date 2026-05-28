@@ -22,6 +22,7 @@ import {
   VOICE_AGENTS,
   buildResizeReviews,
   generatePlan,
+  type CanvasFile,
   type WorkflowStep,
   type LaunchWorkflow,
   type DiagnosticWorkflow,
@@ -99,20 +100,23 @@ const canvasReveal: Variants = {
 // file browser of the product's memory: memory.md / plan.md /
 // dashboard.html / assets/. The step rail is gone — workflows are
 // agentic, not procedural, so we surface them as files instead of
-// chips.
-type FileTabKey = "memory" | "plan" | "dashboard" | "assets";
-
-const FILE_TABS: { key: FileTabKey; label: string; file: string; icon: typeof FileText }[] = [
+// chips. CanvasFile lives in workflow.ts so the chat header (which
+// owns the picker) can import the same type.
+export const FILE_TABS: {
+  key: CanvasFile;
+  label: string;
+  file: string;
+  icon: typeof FileText;
+}[] = [
   { key: "memory", label: "Memory", file: "memory.md", icon: FileText },
   { key: "plan", label: "Plan", file: "plan.md", icon: TrendingUp },
   { key: "dashboard", label: "Dashboard", file: "dashboard.html", icon: ChartPie },
   { key: "assets", label: "Assets", file: "assets/", icon: ImageIcon },
 ];
 
-/** Default tab to show based on the current workflow step. The user
- *  can switch tabs freely but step transitions auto-focus the most
- *  relevant file. */
-function defaultTabForStep(step: WorkflowStep): FileTabKey {
+/** Default file to focus when a workflow step changes. The chat
+ *  header's picker auto-opens this file when the user advances. */
+export function defaultFileForStep(step: WorkflowStep): CanvasFile {
   if (step === "product-setup" || step === "deep-research" || step === "kickoff")
     return "memory";
   if (step === "launch-plan" || step.endsWith("-plan") || step.endsWith("-clarify"))
@@ -124,115 +128,151 @@ function defaultTabForStep(step: WorkflowStep): FileTabKey {
   return "memory";
 }
 
+/**
+ * Right-pane canvas. Renders 1 or 2 file panes side-by-side, driven
+ * by the store's `canvasFiles` array (managed from the chat header).
+ * Each pane has a slim header with the filename and an X to close;
+ * closing the last pane collapses the whole canvas.
+ *
+ * Visual treatment: rounded floating card with shadow so the canvas
+ * reads as an overlay on top of the chat rather than a hard split.
+ */
 export function WorkflowPane() {
   const workflow = useSpotStore((s) => s.workflow);
+  const canvasFiles = useSpotStore((s) => s.canvasFiles);
+  const closeCanvasFile = useSpotStore((s) => s.closeCanvasFile);
   const toggleCanvas = useSpotStore((s) => s.toggleCanvas);
   const exitWorkflow = useSpotStore((s) => s.exitWorkflow);
+  const openCanvasFile = useSpotStore((s) => s.openCanvasFile);
 
-  // Active file tab — initialised from the workflow step, then
-  // user-controlled. We update whenever the step changes, so step
-  // transitions still pull the user to the relevant file.
-  const [activeTab, setActiveTab] = useState<FileTabKey>(() =>
-    workflow ? defaultTabForStep(workflow.step) : "memory",
-  );
+  // Auto-focus the most relevant file when the workflow step changes.
+  // If the user already has it open we no-op; otherwise we open it
+  // (which either adds it as a second pane or replaces the latest).
   useEffect(() => {
-    if (workflow) setActiveTab(defaultTabForStep(workflow.step));
+    if (!workflow) return;
+    const target = defaultFileForStep(workflow.step);
+    if (!canvasFiles.includes(target)) openCanvasFile(target);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workflow?.step]);
 
   if (!workflow) return null;
 
-  // Header verb adapts per workflow kind so the chrome reads correctly
-  // ("Scaling Guyju's JEE Crack" vs. "Launching Guyju's Spoken English").
-  const headerVerb =
-    workflow.kind === "scale"
-      ? "Scaling"
-      : workflow.kind === "optimize"
-        ? "Optimizing"
-        : workflow.kind === "test-angles"
-          ? "Testing angles ·"
-          : workflow.kind === "campaign-dive"
-            ? "Spot it ·"
-            : "Launching ·";
-  const headerTitle =
-    workflow.kind === "campaign-dive" ? workflow.entityName : workflow.productName;
-
   // While the user is mid-card on the left (any sub-step of product
   // setup), nothing meaningful exists to preview yet on the right.
-  // Show a clean "awaiting input" pane instead, and hide the file
-  // picker. The state covers the whole product-setup step so there's
-  // no flicker between question-answer and deep-research kickoff.
+  // Show a clean "awaiting input" pane covering the whole canvas.
   const isAwaitingSetup =
     workflow.kind === "launch-campaign" &&
     workflow.step === "product-setup";
 
+  // Empty canvas defensively · the chat header's "Close canvas"
+  // button calls closeCanvasFile until the list is empty + sets
+  // canvasOpen=false, but if for some reason we render with 0 panes
+  // we just show the awaiting state.
+  const panes: CanvasFile[] = canvasFiles.length > 0 ? canvasFiles : ["memory"];
+
   return (
     <div className="h-full flex flex-col bg-white">
-      {/* Header — product context + file picker dropdown + canvas controls */}
-      <div className="border-b border-border-subtle bg-surface-page">
-        <div className="px-5 py-3 flex items-center gap-2.5">
-          <div className="flex-1 min-w-0">
-            <div className="text-[11px] text-text-tertiary leading-tight">
-              {headerVerb} {headerTitle}
-            </div>
-            <div className="text-[14px] font-semibold text-text-primary leading-tight truncate">
-              {isAwaitingSetup
-                ? "New product workspace"
-                : `memory / ${slugFor(workflow.productId, workflow.productName)}`}
-            </div>
-          </div>
-          {/* File picker · Claude-Code-style preview dropdown.
-              Hidden during product-setup (no files yet). */}
-          {!isAwaitingSetup && (
-            <FilePickerDropdown activeTab={activeTab} onChange={setActiveTab} />
-          )}
-          <button
-            type="button"
-            onClick={toggleCanvas}
-            title="Minimize canvas — chat stays full-width; workflow state is preserved."
-            className="inline-flex items-center justify-center h-7 w-7 rounded-button text-text-secondary hover:bg-surface-secondary hover:text-text-primary"
-          >
-            <PanelRightClose size={14} strokeWidth={1.6} />
-          </button>
-          <button
-            type="button"
-            onClick={exitWorkflow}
-            title="Close workflow — abandons progress and returns to Spot."
-            className="inline-flex items-center justify-center h-7 w-7 rounded-button text-text-secondary hover:bg-surface-secondary hover:text-text-primary"
-          >
-            <X size={14} strokeWidth={1.6} />
-          </button>
-        </div>
-      </div>
+      {/* File panes — 1 or 2 columns side-by-side */}
+      <div className="flex-1 flex min-h-0">
+        {panes.map((tab, idx) => {
+          const meta = FILE_TABS.find((t) => t.key === tab) ?? FILE_TABS[0];
+          const Icon = meta.icon;
+          const canClose = panes.length > 1;
+          const isLast = idx === panes.length - 1;
+          return (
+            <div
+              key={tab}
+              className={`flex-1 min-w-0 flex flex-col ${
+                idx > 0 ? "border-l border-border-subtle" : ""
+              }`}
+            >
+              {/* Pane header · slim, just the filename + close (if 2 panes) */}
+              <div className="px-4 py-2.5 border-b border-border-subtle bg-surface-page flex items-center gap-2">
+                <Icon size={12} strokeWidth={1.7} className="text-text-secondary" />
+                <span className="text-[12px] font-medium text-text-primary">
+                  {meta.label}
+                </span>
+                <span className="text-[10.5px] font-mono text-text-tertiary">
+                  {meta.file}
+                </span>
+                <span className="flex-1" />
+                {canClose && (
+                  <button
+                    type="button"
+                    onClick={() => closeCanvasFile(tab)}
+                    title="Close this pane"
+                    className="inline-flex items-center justify-center h-5 w-5 rounded text-text-tertiary hover:bg-surface-secondary hover:text-text-primary"
+                  >
+                    <X size={11} strokeWidth={1.8} />
+                  </button>
+                )}
+                {/* Global controls anchored to the rightmost pane header
+                    so they don't compete with per-pane close buttons. */}
+                {isLast && !canClose && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={toggleCanvas}
+                      title="Minimize canvas — chat stays full-width; workflow state is preserved."
+                      className="inline-flex items-center justify-center h-5 w-5 rounded text-text-tertiary hover:bg-surface-secondary hover:text-text-primary"
+                    >
+                      <PanelRightClose size={11} strokeWidth={1.7} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={exitWorkflow}
+                      title="Close workflow — abandons progress and returns to Spot."
+                      className="inline-flex items-center justify-center h-5 w-5 rounded text-text-tertiary hover:bg-surface-secondary hover:text-text-primary"
+                    >
+                      <X size={11} strokeWidth={1.8} />
+                    </button>
+                  </>
+                )}
+                {isLast && canClose && (
+                  <>
+                    <span className="w-px h-3 bg-border-subtle mx-0.5" />
+                    <button
+                      type="button"
+                      onClick={toggleCanvas}
+                      title="Minimize canvas — chat stays full-width."
+                      className="inline-flex items-center justify-center h-5 w-5 rounded text-text-tertiary hover:bg-surface-secondary hover:text-text-primary"
+                    >
+                      <PanelRightClose size={11} strokeWidth={1.7} />
+                    </button>
+                  </>
+                )}
+              </div>
 
-      {/* Body — either the awaiting-input loader or the active file */}
-      <div className="flex-1 overflow-y-auto">
-        {isAwaitingSetup ? (
-          <AwaitingInputCanvas />
-        ) : (
-          <FileBody workflow={workflow} tab={activeTab} />
-        )}
+              {/* Pane body */}
+              <div className="flex-1 overflow-y-auto">
+                {isAwaitingSetup && tab === "memory" ? (
+                  <AwaitingInputCanvas />
+                ) : (
+                  <FileBody workflow={workflow} tab={tab} />
+                )}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
 }
 
 /**
- * File picker dropdown · Claude-Code-style preview button. Click the
- * pill in the header to switch between memory.md / plan.md /
- * dashboard.html / assets/. Replaces the old tab row so the canvas
- * chrome stays minimal — files are a switchable view, not a
- * permanent navigation.
+ * FilePickerDropdown · lives in the chat header (LEFT panel). Lets
+ * the user open any of the four canvas files. The checkmark indicates
+ * which files are currently open; clicking an already-open file
+ * focuses (opens canvas if minimised); clicking a closed file opens
+ * it (max 2 panes total — opening a third replaces the latest).
  */
-function FilePickerDropdown({
-  activeTab,
-  onChange,
-}: {
-  activeTab: FileTabKey;
-  onChange: (k: FileTabKey) => void;
-}) {
+export function ChatHeaderFilePicker({ compact = false }: { compact?: boolean }) {
+  const canvasFiles = useSpotStore((s) => s.canvasFiles);
+  const canvasOpen = useSpotStore((s) => s.canvasOpen);
+  const openCanvasFile = useSpotStore((s) => s.openCanvasFile);
+  const setCanvasOpen = useSpotStore((s) => s.setCanvasOpen);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  const active = FILE_TABS.find((t) => t.key === activeTab) ?? FILE_TABS[0];
 
   useEffect(() => {
     if (!open) return;
@@ -243,38 +283,57 @@ function FilePickerDropdown({
     return () => window.removeEventListener("mousedown", handler);
   }, [open]);
 
-  const ActiveIcon = active.icon;
+  // Label · show the active (first) pane's filename when canvas is
+  // open; otherwise generic "Files" prompt.
+  const primary = canvasOpen && canvasFiles[0]
+    ? FILE_TABS.find((t) => t.key === canvasFiles[0]) ?? FILE_TABS[0]
+    : null;
+  const PrimaryIcon = primary?.icon ?? FileText;
 
   return (
     <div ref={ref} className="relative">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-button border border-border bg-white hover:border-border-hover text-[12px] text-text-primary"
-        title="Switch file"
+        className={`inline-flex items-center gap-1.5 rounded-button border border-border bg-white hover:border-border-hover text-text-primary ${
+          compact ? "h-7 px-2 text-[11.5px]" : "h-8 px-2.5 text-[12px]"
+        }`}
+        title={canvasOpen ? "Switch / add files" : "Open canvas files"}
       >
-        <ActiveIcon size={11} strokeWidth={1.7} className="text-text-secondary" />
-        <span className="font-mono text-[11px]">{active.file}</span>
+        <PrimaryIcon size={11} strokeWidth={1.7} className="text-text-secondary" />
+        {primary ? (
+          <span className="font-mono text-[11px]">{primary.file}</span>
+        ) : (
+          <span>Files</span>
+        )}
+        {canvasFiles.length === 2 && (
+          <span className="inline-flex items-center justify-center h-3.5 px-1 rounded-full bg-surface-secondary text-[9.5px] tabular text-text-tertiary">
+            2
+          </span>
+        )}
         <ChevronDown size={11} strokeWidth={1.8} className="text-text-tertiary" />
       </button>
       {open && (
         <div
-          className="absolute top-[calc(100%+4px)] right-0 z-50 bg-white border border-border rounded-card py-1 min-w-[220px]"
+          className="absolute top-[calc(100%+4px)] left-0 z-50 bg-white border border-border rounded-card py-1 min-w-[240px]"
           style={{ boxShadow: "0 8px 28px -8px rgba(0,0,0,0.14)" }}
         >
+          <div className="px-3 pt-1 pb-1.5 text-[10px] uppercase tracking-wider text-text-tertiary font-medium">
+            Canvas files · up to 2 side-by-side
+          </div>
           {FILE_TABS.map((t) => {
             const Icon = t.icon;
-            const isActive = t.key === activeTab;
+            const isOpen = canvasFiles.includes(t.key) && canvasOpen;
             return (
               <button
                 key={t.key}
                 type="button"
                 onClick={() => {
-                  onChange(t.key);
+                  openCanvasFile(t.key);
                   setOpen(false);
                 }}
                 className={`w-full text-left flex items-center gap-2 px-3 h-8 hover:bg-surface-secondary text-[12.5px] ${
-                  isActive ? "bg-surface-secondary/60" : ""
+                  isOpen ? "bg-surface-secondary/60" : ""
                 }`}
               >
                 <Icon size={11} strokeWidth={1.7} className="text-text-tertiary" />
@@ -282,12 +341,28 @@ function FilePickerDropdown({
                 <span className="text-[10.5px] font-mono text-text-tertiary ml-auto">
                   {t.file}
                 </span>
-                {isActive && (
+                {isOpen && (
                   <Check size={11} strokeWidth={2} className="text-text-primary ml-1" />
                 )}
               </button>
             );
           })}
+          {canvasOpen && (
+            <>
+              <div className="border-t border-border-subtle my-1" />
+              <button
+                type="button"
+                onClick={() => {
+                  setCanvasOpen(false);
+                  setOpen(false);
+                }}
+                className="w-full text-left flex items-center gap-2 px-3 h-8 hover:bg-surface-secondary text-[12.5px] text-text-secondary"
+              >
+                <PanelRightClose size={11} strokeWidth={1.7} />
+                <span>Close canvas</span>
+              </button>
+            </>
+          )}
         </div>
       )}
     </div>
@@ -343,7 +418,7 @@ function FileBody({
   tab,
 }: {
   workflow: SpotWorkflow;
-  tab: FileTabKey;
+  tab: CanvasFile;
 }) {
   // Campaign-dive keeps its dedicated single-pane view — it's tied to a
   // specific entity, not a product memory.

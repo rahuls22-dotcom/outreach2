@@ -8,6 +8,7 @@ import {
   stepIntroMessage,
   STEP_TOOL_CALL,
   type CampaignDiveWorkflow,
+  type CanvasFile,
   type DiagnosticWorkflow,
   type LaunchWorkflow,
   type ProductSetupAnswers,
@@ -44,6 +45,12 @@ type PanelState = {
   // preserved when this is false — the user just gets the chat wider
   // so they can read uninterrupted, like collapsing Claude's preview.
   canvasOpen: boolean;
+  // Files currently open in the canvas. Length 0..2 — closing the
+  // last one hides the canvas. Order = left-to-right pane order.
+  // Drives the multi-pane canvas (Claude-style "open two files side
+  // by side"). The picker dropdown lives in the chat header so the
+  // user opens / focuses files from the same side they type on.
+  canvasFiles: CanvasFile[];
   // When a workflow is active but the user has navigated back to the
   // Spot homepage (via the "Spot home" button), this is true. The
   // workflow is preserved; we just render the home view. Setting back
@@ -107,6 +114,12 @@ type PanelState = {
   setCanvasOpen: (open: boolean) => void;
   /** Convenience toggler used by the canvas open/close buttons. */
   toggleCanvas: () => void;
+  /** Open (or focus) a file in the canvas. If already open → no-op.
+   *  If 2 files are already open → replaces the second one. Opens
+   *  the canvas if it was collapsed. */
+  openCanvasFile: (file: CanvasFile) => void;
+  /** Close a single pane. If it was the last pane → canvas collapses. */
+  closeCanvasFile: (file: CanvasFile) => void;
   /** Park the workflow and render the homepage (workflow stays alive). */
   showHomeView: () => void;
   /** Resume the active workflow (homepage banner / past-chats click). */
@@ -222,6 +235,7 @@ export const useSpotStore = create<PanelState>((set) => ({
   toast: null,
   workflow: null,
   canvasOpen: true,
+  canvasFiles: ["memory"],
   viewHomeOverride: false,
   whatsAppConnected: false,
 
@@ -321,17 +335,19 @@ export const useSpotStore = create<PanelState>((set) => ({
     }, 4500);
   },
 
-  // Kicks off the new-product flow. The chat acknowledges the
-  // request, runs a "preparing intake form" tool-call (visible
-  // spinner), then ~1.4s later the bottom drawer slides up over
-  // the left chat panel. On submit, submitProductSetupForm mirrors
-  // the input as a user message and triggers deep research.
+  // Kicks off the new-product flow. The thread leads with a user
+  // bubble ("Let's start working on a new product.") so the
+  // conversation reads naturally from the top — Spot's response
+  // follows with the running intake tool-call. The inline question
+  // card slides into the thread ~1.4s later, after the tool-call
+  // resolves.
   startNewProductFlow: () => {
     const callId = `tc-form-${Date.now()}`;
     set(() => ({
       open: true,
       maximized: false,
       canvasOpen: true,
+      canvasFiles: ["memory"],
       viewHomeOverride: false,
       scope: { kind: "workspace", label: "New product" },
       pendingQuery: null,
@@ -350,18 +366,15 @@ export const useSpotStore = create<PanelState>((set) => ({
         productSetupAnswers: {},
         productSetupModalOpen: false,
       },
-      // Spot reacts immediately: a one-liner + a running tool-call
-      // so the user sees the agent doing something. The drawer
-      // arrives after the tool-call resolves.
       thread: [
+        { role: "user", text: "Let's start working on a new product." },
         {
           role: "spot",
           parts: [
-            { type: "headline", text: "Let's set up a new product.", verdict: "info" },
             {
               type: "text",
               text:
-                "Spinning up a quick intake — name, brand URL, any files you have. " +
+                "Got it — spinning up a quick intake. Name, brand URL, and any files you have. " +
                 "I'll pull what I can and write the memory.",
             },
             {
@@ -1052,6 +1065,33 @@ export const useSpotStore = create<PanelState>((set) => ({
 
   setCanvasOpen: (open) => set({ canvasOpen: open }),
   toggleCanvas: () => set((s) => ({ canvasOpen: !s.canvasOpen })),
+
+  openCanvasFile: (file) =>
+    set((s) => {
+      // Already open → focus by opening the canvas if needed.
+      if (s.canvasFiles.includes(file)) {
+        return { canvasOpen: true };
+      }
+      // 0 panes → open as first.
+      if (s.canvasFiles.length === 0) {
+        return { canvasOpen: true, canvasFiles: [file] };
+      }
+      // 1 pane → add as second (split view).
+      if (s.canvasFiles.length === 1) {
+        return { canvasOpen: true, canvasFiles: [...s.canvasFiles, file] };
+      }
+      // 2 panes → replace the second one (max 2 panes).
+      return { canvasOpen: true, canvasFiles: [s.canvasFiles[0], file] };
+    }),
+
+  closeCanvasFile: (file) =>
+    set((s) => {
+      const next = s.canvasFiles.filter((f) => f !== file);
+      if (next.length === 0) {
+        return { canvasFiles: [], canvasOpen: false };
+      }
+      return { canvasFiles: next };
+    }),
 
   showHomeView: () => set({ viewHomeOverride: true }),
   resumeWorkflow: () => set({ viewHomeOverride: false, canvasOpen: true }),
