@@ -627,15 +627,37 @@
   color: #67E8F9 !important;
 }
 
-/* Tinted signal-card rings used in AnalyzeStep · soften on dark */
-.diagnostic-dark .bg-\[\#F0FDF4\] { background: #0E2A1A !important; }
-.diagnostic-dark .bg-\[\#FEE2E2\] { background: #2A1010 !important; }
-.diagnostic-dark .bg-\[\#FEF3C7\] { background: #2A2210 !important; }
-.diagnostic-dark .bg-\[\#FAF8F2\] { background: #1F1B14 !important; }
+/* Tinted backgrounds used across AnalyzeStep / ClarifyStep / PlanStep.
+ * The Tailwind arbitrary-value class escapes are brittle across
+ * compilers, so we use [class*="<hex>"] attribute selectors which
+ * match the hex code as a substring of the class name — robust to
+ * however Tailwind chooses to output the class name. */
+.diagnostic-dark [class*="F0FDF4"] { background: #0E2A1A !important; }
+.diagnostic-dark [class*="FEE2E2"] { background: #2A1010 !important; }
+.diagnostic-dark [class*="FEF3C7"] { background: #2A2210 !important; }
+.diagnostic-dark [class*="FAF8F2"] { background: #1F1B14 !important; }
+.diagnostic-dark [class*="DCFCE7"] { background: #0E2A1A !important; }
+.diagnostic-dark [class*="FFFBEB"] { background: #2A2210 !important; }
 
-/* Action button primaries (black on light) need to invert to cream */
-.diagnostic-dark .bg-\[\#111\]  { background: #FAFAF8 !important; color: #0A0A09 !important; }
-.diagnostic-dark .text-\[\#FAFAF8\] { color: #0A0A09 !important; }
+/* Tinted border accents that pair with the cream cards above */
+.diagnostic-dark [class*="E8E3D5"] { border-color: #3A3530 !important; }
+.diagnostic-dark [class*="BBF7D0"] { border-color: #1A4D2A !important; }
+.diagnostic-dark [class*="FECACA"] { border-color: #4D1A1A !important; }
+.diagnostic-dark [class*="FCD34D"] { border-color: #4D3D1A !important; }
+
+/* Primary CTA black-on-cream inverts to cream-on-dark */
+.diagnostic-dark [class*="bg-[#111]"],
+.diagnostic-dark .bg-\[\#111\] {
+  background: #FAFAF8 !important;
+  color: #0A0A09 !important;
+}
+.diagnostic-dark [class*="FAFAF8"]:not([class*="bg-"]) { color: #0A0A09 !important; }
+
+/* Brand gold / green inline backgrounds also need dark variants */
+.diagnostic-dark [class*="15803D"] { color: #34D399 !important; }
+.diagnostic-dark [class*="B91C1C"] { color: #F87171 !important; }
+.diagnostic-dark [class*="8C6D33"] { color: #D4B566 !important; }
+.diagnostic-dark [class*="92400E"] { color: #F59E0B !important; }
 
 /* Tabular numerics in metric cards */
 .diagnostic-dark .tabular { color: inherit; }

@@ -24,7 +24,9 @@ import {
   Send,
   Bot,
   Check,
+  LogOut,
 } from "lucide-react";
+import { signOut } from "@/lib/auth";
 import { useDemoMode } from "@/lib/demo-mode";
 import { SpotMark } from "@/components/spot/spot-mark";
 import { RevspotLogo } from "@/components/layout/revspot-logo";
@@ -216,6 +218,7 @@ function RailItem({ item, active }: { item: NavItem; active: boolean }) {
 
 export function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
   const { isEmpty, toggle } = useDemoMode();
   const user = useCurrentUser();
 
@@ -274,16 +277,23 @@ export function Sidebar() {
         </button>
       </TooltipWrap>
 
-      {/* User avatar */}
-      <TooltipWrap label={user.name} description={user.email}>
+      {/* User avatar · click to sign out */}
+      <TooltipWrap label={`Sign out · ${user.name}`} description={user.email}>
         <button
           type="button"
-          className="relative flex items-center justify-center w-10 h-10"
+          onClick={() => {
+            signOut();
+            router.replace("/login");
+          }}
+          className="relative flex items-center justify-center w-10 h-10 group"
         >
-          <div className="w-[28px] h-[28px] rounded-full bg-surface-secondary flex items-center justify-center">
+          <div className="w-[28px] h-[28px] rounded-full bg-surface-secondary flex items-center justify-center group-hover:hidden">
             <span className="text-[10px] font-medium text-text-secondary">
               {user.name.split(" ").map((w) => w[0]).join("").slice(0, 2)}
             </span>
+          </div>
+          <div className="w-[28px] h-[28px] rounded-full bg-surface-secondary hidden group-hover:flex items-center justify-center text-text-secondary">
+            <LogOut size={13} strokeWidth={1.8} />
           </div>
         </button>
       </TooltipWrap>
