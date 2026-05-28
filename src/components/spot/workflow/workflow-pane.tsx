@@ -4,7 +4,7 @@
 // approval action lives in the left chat (via the step-cta part). This
 // pane just shows what Spot is working on.
 
-import { PanelRightClose, X, Users, Package, ChartPie, Sparkles, Megaphone, Layout as LayoutIcon, PartyPopper, CheckCircle2, Check, Wifi, WifiOff, Cog, ChevronRight, ChevronDown, Pencil, Search, ShieldAlert, TrendingUp, ExternalLink, Image as ImageIcon, Mic, MessageSquare, Phone, ArrowRight, Upload, FileText, Film as FilmIcon, Layers, Paperclip, Brain } from "lucide-react";
+import { PanelRightClose, X, Users, Package, ChartPie, Sparkles, Megaphone, Layout as LayoutIcon, PartyPopper, CheckCircle2, Check, Wifi, WifiOff, Cog, ChevronRight, ChevronDown, Pencil, Search, ShieldAlert, TrendingUp, ExternalLink, Image as ImageIcon, Mic, MessageSquare, Phone, ArrowRight, Upload, FileText, Film as FilmIcon, Layers, Paperclip, Brain, Home, Maximize2 } from "lucide-react";
 import { motion } from "framer-motion";
 import type { Variants } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
@@ -270,13 +270,14 @@ export function WorkflowPane() {
                 )}
               </div>
 
-              {/* Pane body · the awaiting-input and launch-building
-                  states take the whole pane over with their own
-                  full-bleed loader surfaces. */}
+              {/* Pane body · awaiting-input takes the memory pane;
+                  launch-building takes plan/dashboard/assets (the
+                  things actually being built) so the user can still
+                  view the already-finished memory via the picker. */}
               <div className="flex-1 overflow-y-auto">
                 {isAwaitingSetup && tab === "memory" ? (
                   <AwaitingInputCanvas />
-                ) : isBuilding ? (
+                ) : isBuilding && tab !== "memory" ? (
                   <LaunchBuildingLoader
                     productName={
                       workflow.kind === "launch-campaign"
@@ -1310,17 +1311,20 @@ const LAUNCH_BUILD_THOUGHTS = [
 
 /** Shared dark-Spot loader surface used by both PlanBuildingLoader
  *  and LaunchBuildingLoader · the only thing that changes is the
- *  set of cycling thoughts and the agent eyebrow label. */
+ *  set of cycling thoughts, the agent eyebrow label, and optional
+ *  action buttons rendered under the progress dots. */
 function DarkSpotLoader({
   agentLabel,
   title,
   thoughts,
   intervalMs = 1900,
+  actions,
 }: {
   agentLabel: string;
   title: React.ReactNode;
   thoughts: string[];
   intervalMs?: number;
+  actions?: React.ReactNode;
 }) {
   const [idx, setIdx] = useState(0);
   useEffect(() => {
@@ -1395,14 +1399,23 @@ function DarkSpotLoader({
           />
         ))}
       </div>
+
+      {/* Optional action row · used by the launch-building loader to
+          expose View memory / Spot homepage buttons. */}
+      {actions}
     </div>
   );
 }
 
 /** Launch-building canvas loader · the dark Spot pattern shown
- *  after the user approves the plan, while background agents
- *  spin up creatives, landing pages, forms, and campaigns. */
+ *  after the user approves the plan, while background agents spin
+ *  up creatives, landing pages, forms, and campaigns. Two actions
+ *  underneath: View project memory (focuses the memory pane so
+ *  the loader gets out of the way) and Back to Spot homepage
+ *  (parks the workflow). */
 function LaunchBuildingLoader({ productName }: { productName: string }) {
+  const focusCanvasFile = useSpotStore((s) => s.focusCanvasFile);
+  const showHomeView = useSpotStore((s) => s.showHomeView);
   return (
     <DarkSpotLoader
       agentLabel="Build Agent · live"
@@ -1424,6 +1437,31 @@ function LaunchBuildingLoader({ productName }: { productName: string }) {
       }
       thoughts={LAUNCH_BUILD_THOUGHTS}
       intervalMs={2200}
+      actions={
+        <div className="flex items-center gap-2 mt-8">
+          <button
+            type="button"
+            onClick={() => focusCanvasFile("memory")}
+            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-button text-[12px] font-medium transition-colors"
+            style={{
+              background: "#FAFAF8",
+              color: "#0A0A09",
+            }}
+          >
+            View project memory
+            <ArrowRight size={11} strokeWidth={1.8} />
+          </button>
+          <button
+            type="button"
+            onClick={showHomeView}
+            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-button text-[12px] transition-colors hover:bg-white/5"
+            style={{ color: "#A8A8A0" }}
+          >
+            <Home size={12} strokeWidth={1.7} />
+            Back to Spot homepage
+          </button>
+        </div>
+      }
     />
   );
 }
@@ -1877,26 +1915,59 @@ function AssetsFileView({
   const productSlug = files?.productId ?? "new-product";
 
   return (
-    <div className="relative">
+    <div className="relative" style={{ color: "#F5F4EF" }}>
       <div className="px-6 py-5">
         {/* Header */}
         <div className="mb-5">
-          <div className="text-[11px] text-text-tertiary mb-0.5">assets /</div>
-          <h1 className="text-[24px] font-semibold text-text-primary tracking-tight">
+          <div
+            className="text-[11px] mb-0.5"
+            style={{ color: "#8A8980" }}
+          >
+            assets /
+          </div>
+          <h1
+            className="text-[24px] font-semibold tracking-tight"
+            style={{ color: "#F5F4EF" }}
+          >
             {workflow.kind === "campaign-dive"
               ? workflow.productName
               : (workflow as LaunchWorkflow).productName || "New product"}
           </h1>
-          <div className="text-[12px] text-text-secondary mt-1">
-            <span className="font-medium text-text-primary">{creatives.length}</span> creatives ·{" "}
-            <span className="font-medium text-text-primary">{searchAds.length}</span> search ads ·{" "}
-            <span className="font-medium text-text-primary">{landingPages.length}</span> landing pages ·{" "}
-            <span className="font-medium text-text-primary">{forms.length}</span> forms
+          <div
+            className="text-[12px] mt-1"
+            style={{ color: "#A8A8A0" }}
+          >
+            <span style={{ color: "#F5F4EF", fontWeight: 500 }}>
+              {creatives.length}
+            </span>{" "}
+            creatives ·{" "}
+            <span style={{ color: "#F5F4EF", fontWeight: 500 }}>
+              {searchAds.length}
+            </span>{" "}
+            search ads ·{" "}
+            <span style={{ color: "#F5F4EF", fontWeight: 500 }}>
+              {landingPages.length}
+            </span>{" "}
+            landing pages ·{" "}
+            <span style={{ color: "#F5F4EF", fontWeight: 500 }}>
+              {forms.length}
+            </span>{" "}
+            forms
           </div>
           {!files && (
-            <div className="text-[11px] text-text-tertiary mt-2 leading-relaxed">
+            <div
+              className="text-[11px] mt-2 leading-relaxed"
+              style={{ color: "#8A8980" }}
+            >
               Placeholders below — drop real files into{" "}
-              <code className="text-[10.5px] font-mono bg-surface-page border border-border-subtle px-1 rounded">
+              <code
+                className="text-[10.5px] font-mono px-1 rounded"
+                style={{
+                  background: "#1F1F1D",
+                  border: "1px solid #2E2E2A",
+                  color: "#E8E0C8",
+                }}
+              >
                 /public/assets/creatives/
               </code>{" "}
               to replace.
@@ -1904,9 +1975,9 @@ function AssetsFileView({
           )}
         </div>
 
-        {/* Creatives grid */}
+        {/* Creatives grid · square thumbs, 4 per row, view-sizes per card */}
         <SectionHeading title="Creatives" count={creatives.length} />
-        <div className="grid grid-cols-3 gap-3 mb-7">
+        <div className="grid grid-cols-4 gap-3 mb-7">
           {creatives.map((c) => (
             <CreativeCard key={c.id} creative={c} productSlug={productSlug} />
           ))}
@@ -1943,18 +2014,31 @@ function AssetsFileView({
 
 function SectionHeading({ title, count }: { title: string; count: number }) {
   return (
-    <div className="flex items-baseline gap-2 mb-3 pb-1.5 border-b border-border-subtle">
-      <span className="w-1 h-1 rounded-full bg-[#C9A86A]" />
-      <span className="text-[14px] font-semibold text-text-primary">{title}</span>
-      <span className="text-[11px] text-text-tertiary">{count}</span>
+    <div
+      className="flex items-baseline gap-2 mb-3 pb-1.5"
+      style={{ borderBottom: "1px solid #262623" }}
+    >
+      <span
+        className="w-1 h-1 rounded-full"
+        style={{ background: "#C9A86A" }}
+      />
+      <span
+        className="text-[14px] font-semibold"
+        style={{ color: "#F5F4EF" }}
+      >
+        {title}
+      </span>
+      <span className="text-[11px]" style={{ color: "#8A8980" }}>
+        {count}
+      </span>
     </div>
   );
 }
 
-/** Creative card · placeholder gradient overlaid with the angle name
- *  and a size badge in the corner. If an actual image lives at
- *  `creative.src`, it loads on top (object-cover) — drop a file at
- *  /public/assets/creatives/{id}.png to replace any placeholder. */
+/** Creative card · dark-mode card with a square (1:1) thumbnail
+ *  showing the concept, regardless of the creative's source format.
+ *  A small "View sizes" pill in the corner opens a modal that
+ *  shows the creative rendered in every available size variant. */
 function CreativeCard({
   creative,
   productSlug,
@@ -1962,106 +2046,324 @@ function CreativeCard({
   creative: DummyCreative;
   productSlug: string;
 }) {
-  // Aspect ratios for the thumbnail wrapper.
-  const ratioStyle = (() => {
-    switch (creative.format) {
-      case "1:1":
-        return { paddingTop: "100%" };
-      case "4:5":
-        return { paddingTop: "125%" };
-      case "9:16":
-        return { paddingTop: "177.77%" };
-      case "16:9":
-        return { paddingTop: "56.25%" };
-    }
-  })();
-
-  const gradientBg = `linear-gradient(135deg, hsl(${creative.hue}, 70%, 92%) 0%, hsl(${creative.hue}, 60%, 78%) 60%, hsl(${(creative.hue + 30) % 360}, 65%, 70%) 100%)`;
+  const [sizesOpen, setSizesOpen] = useState(false);
+  const gradientBg = `linear-gradient(135deg, hsl(${creative.hue}, 65%, 70%) 0%, hsl(${creative.hue}, 55%, 55%) 60%, hsl(${(creative.hue + 30) % 360}, 60%, 45%) 100%)`;
 
   return (
-    <div className="group bg-white border border-border rounded-card overflow-hidden hover:border-border-hover transition-colors">
-      <div className="relative w-full" style={{ background: gradientBg }}>
-        <div style={ratioStyle} aria-hidden />
-        <div className="absolute inset-0 flex flex-col items-center justify-center p-4 text-center">
-          {/* Optional real image · falls through to gradient if file
-              doesn't exist (broken img stays transparent over the
-              gradient background). */}
-          {creative.src && (
-            <img
-              src={creative.src}
-              alt={creative.title}
-              className="absolute inset-0 w-full h-full object-cover"
-              onError={(e) => {
-                (e.target as HTMLImageElement).style.display = "none";
-              }}
-            />
-          )}
-          {/* Overlay text — sits on the gradient when no real image,
-              or fades on hover when image is present. */}
-          <div className="relative z-10 px-2">
-            <div className="text-[10.5px] uppercase tracking-wider font-semibold text-white/85 mb-1.5 drop-shadow-sm">
-              {creative.angle}
-            </div>
-            <div className="text-[13px] font-semibold text-white leading-snug drop-shadow-sm">
-              {creative.title}
+    <>
+      <div
+        className="group rounded-card overflow-hidden transition-colors"
+        style={{
+          background: "#1A1A18",
+          border: "1px solid #262623",
+        }}
+      >
+        {/* Always 1:1 thumbnail */}
+        <div className="relative w-full" style={{ background: gradientBg }}>
+          <div style={{ paddingTop: "100%" }} aria-hidden />
+          <div className="absolute inset-0 flex flex-col items-center justify-center p-4 text-center">
+            {creative.src && (
+              <img
+                src={creative.src}
+                alt={creative.title}
+                className="absolute inset-0 w-full h-full object-cover"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).style.display = "none";
+                }}
+              />
+            )}
+            <div className="relative z-10 px-2">
+              <div
+                className="text-[10px] uppercase tracking-wider font-semibold mb-1.5 drop-shadow-sm"
+                style={{ color: "rgba(255,255,255,0.88)" }}
+              >
+                {creative.angle}
+              </div>
+              <div
+                className="text-[13px] font-semibold leading-snug drop-shadow-sm"
+                style={{ color: "#FFFFFF" }}
+              >
+                {creative.title}
+              </div>
             </div>
           </div>
-        </div>
-        {/* Size + kind badges */}
-        <div className="absolute top-2 left-2 flex items-center gap-1">
-          <span className="inline-flex items-center h-5 px-1.5 rounded-full bg-black/50 backdrop-blur-sm text-white text-[10px] font-mono tabular">
-            {creative.format}
-          </span>
-          {creative.kind === "video" && (
-            <span className="inline-flex items-center h-5 px-1.5 rounded-full bg-black/50 backdrop-blur-sm text-white text-[10px] uppercase tracking-wider">
-              Video
-            </span>
+
+          {/* Kind badge (Video / Carousel) top-left */}
+          {creative.kind !== "image" && (
+            <div className="absolute top-2 left-2">
+              <span
+                className="inline-flex items-center h-5 px-1.5 rounded-full text-[9.5px] uppercase tracking-wider"
+                style={{
+                  background: "rgba(0,0,0,0.55)",
+                  color: "#FFFFFF",
+                  backdropFilter: "blur(4px)",
+                }}
+              >
+                {creative.kind}
+              </span>
+            </div>
           )}
-          {creative.kind === "carousel" && (
-            <span className="inline-flex items-center h-5 px-1.5 rounded-full bg-black/50 backdrop-blur-sm text-white text-[10px] uppercase tracking-wider">
-              Carousel
-            </span>
-          )}
-        </div>
-        {/* Status pill bottom-right */}
-        <div className="absolute bottom-2 right-2">
-          <span
-            className={`inline-flex items-center h-5 px-1.5 rounded-full text-[9.5px] uppercase tracking-wider font-semibold ${
-              creative.state === "ready"
-                ? "bg-[#15803D] text-white"
-                : "bg-white text-[#8C6D33] border border-[#E8E3D5]"
-            }`}
+
+          {/* View sizes pill · top-right · opens modal */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setSizesOpen(true);
+            }}
+            className="absolute top-2 right-2 inline-flex items-center gap-1 h-6 px-2 rounded-full text-[10px] font-medium transition-opacity"
+            style={{
+              background: "rgba(0,0,0,0.6)",
+              color: "#FFFFFF",
+              backdropFilter: "blur(6px)",
+            }}
+            title="View this creative in all available sizes"
           >
-            {creative.state}
-          </span>
+            <Maximize2 size={9} strokeWidth={1.8} />
+            {creative.sizes.length} sizes
+          </button>
+
+          {/* Status pill bottom-right */}
+          <div className="absolute bottom-2 right-2">
+            <span
+              className="inline-flex items-center h-5 px-1.5 rounded-full text-[9.5px] uppercase tracking-wider font-semibold"
+              style={
+                creative.state === "ready"
+                  ? { background: "#22C55E", color: "#0A1F14" }
+                  : {
+                      background: "#1A1A18",
+                      color: "#D4B566",
+                      border: "1px solid #3A3530",
+                    }
+              }
+            >
+              {creative.state}
+            </span>
+          </div>
+        </div>
+
+        {/* Card footer · dark surface, light text */}
+        <div
+          className="px-3 py-2.5"
+          style={{ borderTop: "1px solid #262623" }}
+        >
+          <div className="flex items-center gap-1.5 mb-1">
+            <span
+              className="text-[11px] font-medium truncate flex-1"
+              style={{ color: "#F5F4EF" }}
+            >
+              {creative.personaName}
+            </span>
+            <span
+              className="text-[10px] tabular flex-shrink-0"
+              style={{ color: "#8A8980" }}
+            >
+              {creative.channel}
+            </span>
+          </div>
+          <div
+            className="text-[9.5px] mt-0.5 font-mono truncate"
+            style={{ color: "#7A7970" }}
+          >
+            {productSlug}/{creative.id}
+          </div>
         </div>
       </div>
-      {/* Card footer · persona + channel + size variants */}
-      <div className="px-3 py-2.5 border-t border-border-subtle">
-        <div className="flex items-center gap-1.5 mb-1">
-          <span className="text-[11px] font-medium text-text-primary truncate flex-1">
-            {creative.personaName}
-          </span>
-          <span className="text-[10px] text-text-tertiary tabular flex-shrink-0">
-            {creative.channel}
-          </span>
-        </div>
-        <div className="flex items-center gap-1 flex-wrap">
-          {creative.sizes.map((sz) => (
-            <span
-              key={sz}
-              className={`inline-flex items-center h-4 px-1.5 rounded text-[9.5px] font-mono tabular ${
-                sz === creative.format
-                  ? "bg-text-primary text-[#FAFAF8]"
-                  : "bg-surface-page text-text-tertiary"
-              }`}
+
+      {sizesOpen && (
+        <CreativeSizesModal
+          creative={creative}
+          gradientBg={gradientBg}
+          productSlug={productSlug}
+          onClose={() => setSizesOpen(false)}
+        />
+      )}
+    </>
+  );
+}
+
+/** Modal showing one creative concept across all available size
+ *  variants side-by-side · square / portrait / story / landscape.
+ *  Dark backdrop, dark surface, gold accents to match the canvas. */
+function CreativeSizesModal({
+  creative,
+  gradientBg,
+  productSlug,
+  onClose,
+}: {
+  creative: DummyCreative;
+  gradientBg: string;
+  productSlug: string;
+  onClose: () => void;
+}) {
+  const ratioFor = (fmt: DummyCreative["format"]) => {
+    switch (fmt) {
+      case "1:1":
+        return "100%";
+      case "4:5":
+        return "125%";
+      case "9:16":
+        return "177.77%";
+      case "16:9":
+        return "56.25%";
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-8"
+      style={{
+        background: "rgba(0,0,0,0.7)",
+        backdropFilter: "blur(6px)",
+      }}
+      role="dialog"
+      aria-modal="true"
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-[1080px] max-h-[90vh] rounded-card overflow-hidden flex flex-col"
+        style={{
+          background: "#161614",
+          border: "1px solid #2A2A26",
+          boxShadow: "0 28px 64px -16px rgba(0,0,0,0.6)",
+        }}
+      >
+        {/* Modal header */}
+        <div
+          className="px-5 py-4 flex items-center gap-3"
+          style={{ borderBottom: "1px solid #262623" }}
+        >
+          <div className="flex-1 min-w-0">
+            <div
+              className="text-[10.5px] uppercase tracking-wider font-semibold"
+              style={{ color: "#C9A86A" }}
             >
-              {sz}
-            </span>
-          ))}
+              {creative.angle}
+            </div>
+            <div
+              className="text-[16px] font-semibold leading-snug"
+              style={{ color: "#F5F4EF" }}
+            >
+              {creative.title}
+            </div>
+            <div
+              className="text-[11px] mt-0.5"
+              style={{ color: "#8A8980" }}
+            >
+              {creative.personaName} · {creative.channel} ·{" "}
+              <span className="font-mono">
+                {productSlug}/{creative.id}
+              </span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex items-center justify-center h-7 w-7 rounded hover:bg-white/5"
+            style={{ color: "#A8A8A0" }}
+          >
+            <X size={14} strokeWidth={1.8} />
+          </button>
         </div>
-        <div className="text-[9.5px] text-text-tertiary mt-1.5 font-mono truncate">
-          {productSlug}/{creative.id}
+
+        {/* Sizes grid · variant tiles laid out by aspect ratio */}
+        <div
+          className="flex-1 overflow-y-auto px-5 py-5"
+          style={{ background: "#0F0F0E" }}
+        >
+          <div className="grid grid-cols-4 gap-4 items-start">
+            {creative.sizes.map((sz) => {
+              const isPrimary = sz === creative.format;
+              return (
+                <div
+                  key={sz}
+                  className="rounded-card overflow-hidden flex flex-col"
+                  style={{
+                    background: "#1A1A18",
+                    border: isPrimary
+                      ? "1px solid #C9A86A"
+                      : "1px solid #262623",
+                  }}
+                >
+                  <div className="relative w-full" style={{ background: gradientBg }}>
+                    <div style={{ paddingTop: ratioFor(sz) }} aria-hidden />
+                    <div className="absolute inset-0 flex flex-col items-center justify-center p-3 text-center">
+                      {creative.src && (
+                        <img
+                          src={creative.src}
+                          alt={creative.title}
+                          className="absolute inset-0 w-full h-full object-cover"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).style.display =
+                              "none";
+                          }}
+                        />
+                      )}
+                      <div className="relative z-10 px-1">
+                        <div
+                          className="text-[9px] uppercase tracking-wider font-semibold mb-1 drop-shadow-sm"
+                          style={{ color: "rgba(255,255,255,0.85)" }}
+                        >
+                          {creative.angle}
+                        </div>
+                        <div
+                          className="text-[11.5px] font-semibold leading-snug drop-shadow-sm"
+                          style={{ color: "#FFFFFF" }}
+                        >
+                          {creative.title}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="absolute top-1.5 left-1.5">
+                      <span
+                        className="inline-flex items-center h-5 px-1.5 rounded-full text-[10px] font-mono tabular"
+                        style={{
+                          background: "rgba(0,0,0,0.55)",
+                          color: "#FFFFFF",
+                          backdropFilter: "blur(4px)",
+                        }}
+                      >
+                        {sz}
+                      </span>
+                    </div>
+                  </div>
+                  <div
+                    className="px-2.5 py-2 flex items-center gap-1.5"
+                    style={{ borderTop: "1px solid #262623" }}
+                  >
+                    <span
+                      className="text-[10.5px] font-mono"
+                      style={{ color: "#A8A8A0" }}
+                    >
+                      {sz}
+                    </span>
+                    {isPrimary && (
+                      <span
+                        className="text-[9px] uppercase tracking-wider font-semibold"
+                        style={{ color: "#C9A86A" }}
+                      >
+                        primary
+                      </span>
+                    )}
+                    <span className="flex-1" />
+                    <span
+                      className="text-[10px] font-mono"
+                      style={{ color: "#7A7970" }}
+                    >
+                      {sz === "1:1"
+                        ? "1080×1080"
+                        : sz === "4:5"
+                          ? "1080×1350"
+                          : sz === "9:16"
+                            ? "1080×1920"
+                            : "1920×1080"}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
     </div>
@@ -2083,37 +2385,74 @@ function SearchAdRow({
   };
 }) {
   return (
-    <div className="bg-white border border-border rounded-card p-3.5">
+    <div
+      className="rounded-card p-3.5"
+      style={{
+        background: "#1A1A18",
+        border: "1px solid #262623",
+      }}
+    >
       <div className="flex items-center gap-1.5 mb-2">
-        <span className="inline-flex items-center h-4 px-1.5 rounded bg-[#FAF8F2] border border-[#E8E3D5] text-[9.5px] uppercase tracking-wider font-semibold text-[#8C6D33]">
+        <span
+          className="inline-flex items-center h-4 px-1.5 rounded text-[9.5px] uppercase tracking-wider font-semibold"
+          style={{
+            background: "#26261F",
+            border: "1px solid #3A3530",
+            color: "#D4B566",
+          }}
+        >
           {ad.campaign}
         </span>
         <span
-          className={`inline-flex items-center h-4 px-1.5 rounded text-[9.5px] uppercase tracking-wider font-semibold ${
+          className="inline-flex items-center h-4 px-1.5 rounded text-[9.5px] uppercase tracking-wider font-semibold"
+          style={
             ad.status === "live"
-              ? "bg-[#F0FDF4] border border-[#BBF7D0] text-[#15803D]"
-              : "bg-surface-page border border-border-subtle text-text-tertiary"
-          }`}
+              ? {
+                  background: "#0E2A1A",
+                  border: "1px solid #1A4D2A",
+                  color: "#34D399",
+                }
+              : {
+                  background: "#1F1F1D",
+                  border: "1px solid #2E2E2A",
+                  color: "#8A8980",
+                }
+          }
         >
           {ad.status}
         </span>
         <span className="flex-1" />
-        <span className="text-[9.5px] font-mono text-text-tertiary truncate max-w-[40%]">
+        <span
+          className="text-[9.5px] font-mono truncate max-w-[40%]"
+          style={{ color: "#7A7970" }}
+        >
           {ad.keywords}
         </span>
       </div>
       <div className="flex items-baseline gap-1.5 mb-1">
-        <span className="text-[10.5px] uppercase tracking-wider font-semibold text-text-tertiary">
+        <span
+          className="text-[10.5px] uppercase tracking-wider font-semibold"
+          style={{ color: "#8A8980" }}
+        >
           Ad
         </span>
-        <span className="text-[10.5px] text-text-tertiary truncate">
+        <span
+          className="text-[10.5px] truncate"
+          style={{ color: "#8A8980" }}
+        >
           guyju.com/spoken-english
         </span>
       </div>
-      <div className="text-[14.5px] text-[#1A0DAB] font-medium leading-snug hover:underline cursor-pointer">
+      <div
+        className="text-[14.5px] font-medium leading-snug hover:underline cursor-pointer"
+        style={{ color: "#93C5FD" }}
+      >
         {ad.primaryHeadline}
       </div>
-      <div className="text-[12.5px] text-text-secondary leading-relaxed mt-1">
+      <div
+        className="text-[12.5px] leading-relaxed mt-1"
+        style={{ color: "#B8B7B0" }}
+      >
         {ad.primaryDescription}
       </div>
     </div>
@@ -2134,41 +2473,82 @@ function LandingPageCard({
   };
 }) {
   return (
-    <div className="bg-white border border-border rounded-card overflow-hidden hover:border-border-hover transition-colors">
+    <div
+      className="rounded-card overflow-hidden transition-colors"
+      style={{
+        background: "#1A1A18",
+        border: "1px solid #262623",
+      }}
+    >
       <div
         className="relative h-32 px-3 py-3 flex flex-col gap-1.5"
         style={{
           background:
-            "linear-gradient(180deg, #FBF8F0 0%, #F5EFE0 50%, #EBE2C9 100%)",
+            "linear-gradient(180deg, #2A2520 0%, #1F1B16 50%, #15110D 100%)",
         }}
       >
-        <div className="h-2 w-3/4 rounded bg-white/80" />
-        <div className="h-3 w-5/6 rounded bg-white/80" />
-        <div className="h-6 w-full rounded bg-text-primary/80" />
+        <div
+          className="h-2 w-3/4 rounded"
+          style={{ background: "rgba(245, 244, 239, 0.18)" }}
+        />
+        <div
+          className="h-3 w-5/6 rounded"
+          style={{ background: "rgba(245, 244, 239, 0.22)" }}
+        />
+        <div
+          className="h-6 w-full rounded"
+          style={{ background: "rgba(201, 168, 106, 0.45)" }}
+        />
         <div className="grid grid-cols-3 gap-1 flex-1">
-          <div className="rounded bg-white/70" />
-          <div className="rounded bg-white/70" />
-          <div className="rounded bg-white/70" />
+          <div
+            className="rounded"
+            style={{ background: "rgba(245, 244, 239, 0.12)" }}
+          />
+          <div
+            className="rounded"
+            style={{ background: "rgba(245, 244, 239, 0.12)" }}
+          />
+          <div
+            className="rounded"
+            style={{ background: "rgba(245, 244, 239, 0.12)" }}
+          />
         </div>
         <span
-          className={`absolute top-2 right-2 inline-flex items-center h-4 px-1.5 rounded-full text-[9.5px] uppercase tracking-wider font-semibold ${
+          className="absolute top-2 right-2 inline-flex items-center h-4 px-1.5 rounded-full text-[9.5px] uppercase tracking-wider font-semibold"
+          style={
             page.status === "live"
-              ? "bg-[#15803D] text-white"
-              : "bg-white text-[#8C6D33] border border-[#E8E3D5]"
-          }`}
+              ? { background: "#22C55E", color: "#0A1F14" }
+              : {
+                  background: "#1A1A18",
+                  color: "#D4B566",
+                  border: "1px solid #3A3530",
+                }
+          }
         >
           {page.status}
         </span>
       </div>
-      <div className="px-3 py-2.5 border-t border-border-subtle">
-        <div className="text-[12.5px] font-medium text-text-primary truncate">
+      <div
+        className="px-3 py-2.5"
+        style={{ borderTop: "1px solid #262623" }}
+      >
+        <div
+          className="text-[12.5px] font-medium truncate"
+          style={{ color: "#F5F4EF" }}
+        >
           {page.title}
         </div>
         <div className="flex items-center gap-1.5 mt-0.5">
-          <span className="text-[11px] text-text-secondary truncate flex-1">
+          <span
+            className="text-[11px] truncate flex-1"
+            style={{ color: "#A8A8A0" }}
+          >
             {page.personaName}
           </span>
-          <span className="text-[10px] text-text-tertiary tabular">
+          <span
+            className="text-[10px] tabular"
+            style={{ color: "#7A7970" }}
+          >
             {page.sections} sections
           </span>
         </div>
@@ -2190,33 +2570,79 @@ function FormCard({
   };
 }) {
   return (
-    <div className="bg-white border border-border rounded-card overflow-hidden hover:border-border-hover transition-colors">
+    <div
+      className="rounded-card overflow-hidden transition-colors"
+      style={{
+        background: "#1A1A18",
+        border: "1px solid #262623",
+      }}
+    >
       <div
         className="px-4 py-4 flex items-start gap-3"
-        style={{ background: "linear-gradient(180deg, #FFFFFF 0%, #FAF8F2 100%)" }}
+        style={{
+          background:
+            "linear-gradient(180deg, #1F1F1D 0%, #17171500 100%)",
+        }}
       >
         {/* Phone frame */}
         <div className="w-16 flex-shrink-0">
-          <div className="bg-white border border-border-subtle rounded-md overflow-hidden p-1.5 space-y-1">
-            <div className="h-1.5 w-full rounded-sm bg-surface-page" />
-            <div className="h-2.5 w-full rounded-sm bg-surface-page" />
-            <div className="h-2.5 w-full rounded-sm bg-surface-page" />
-            <div className="h-2.5 w-full rounded-sm bg-surface-page" />
-            <div className="h-3 w-full rounded-sm bg-text-primary/80" />
+          <div
+            className="rounded-md overflow-hidden p-1.5 space-y-1"
+            style={{
+              background: "#26261F",
+              border: "1px solid #3A3530",
+            }}
+          >
+            <div
+              className="h-1.5 w-full rounded-sm"
+              style={{ background: "#1A1A18" }}
+            />
+            <div
+              className="h-2.5 w-full rounded-sm"
+              style={{ background: "#1A1A18" }}
+            />
+            <div
+              className="h-2.5 w-full rounded-sm"
+              style={{ background: "#1A1A18" }}
+            />
+            <div
+              className="h-2.5 w-full rounded-sm"
+              style={{ background: "#1A1A18" }}
+            />
+            <div
+              className="h-3 w-full rounded-sm"
+              style={{ background: "rgba(201, 168, 106, 0.6)" }}
+            />
           </div>
         </div>
         <div className="flex-1 min-w-0">
-          <div className="text-[12.5px] font-medium text-text-primary leading-snug">
+          <div
+            className="text-[12.5px] font-medium leading-snug"
+            style={{ color: "#F5F4EF" }}
+          >
             {form.title}
           </div>
-          <div className="text-[11px] text-text-secondary mt-0.5 truncate">
+          <div
+            className="text-[11px] mt-0.5 truncate"
+            style={{ color: "#A8A8A0" }}
+          >
             {form.personaName}
           </div>
           <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-            <span className="inline-flex items-center h-4 px-1.5 rounded-full bg-[#FAF8F2] border border-[#E8E3D5] text-[9.5px] uppercase tracking-wider font-semibold text-[#8C6D33]">
+            <span
+              className="inline-flex items-center h-4 px-1.5 rounded-full text-[9.5px] uppercase tracking-wider font-semibold"
+              style={{
+                background: "#26261F",
+                border: "1px solid #3A3530",
+                color: "#D4B566",
+              }}
+            >
               {form.kind.replace("-", " ")}
             </span>
-            <span className="text-[10px] text-text-tertiary tabular">
+            <span
+              className="text-[10px] tabular"
+              style={{ color: "#7A7970" }}
+            >
               {form.fields} fields
             </span>
           </div>

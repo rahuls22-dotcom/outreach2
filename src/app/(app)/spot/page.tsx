@@ -384,20 +384,6 @@ export default function SpotPage() {
                 />
               )}
 
-            {/* "Spot is working in the background" drawer · appears
-                when the plan was approved and execution agents are
-                running. The user can view memory or park to the
-                home view from here. */}
-            {workflow.kind === "launch-campaign" &&
-              workflow.step === "launch-building" && (
-                <SpotWorkingDrawer
-                  productName={workflow.productName}
-                  onViewMemory={() =>
-                    useSpotStore.getState().focusCanvasFile("memory")
-                  }
-                  onGoHome={() => showHomeView()}
-                />
-              )}
           </div>
           <div className="border-t border-border-subtle px-3 py-3 bg-white/50 backdrop-blur-sm">
             <Composer
