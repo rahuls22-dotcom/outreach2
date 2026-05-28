@@ -29,6 +29,7 @@ export type WorkflowStep =
   | "launch-plan"
   | "launch-building"
   | "launch-review"
+  | "launch-deploy"
   // Legacy launch step types — kept in the union so existing canvas
   // components keep compiling, but removed from STEP_ORDER. The new
   // flow folds all of these into launch-plan + launch-review.
@@ -78,6 +79,7 @@ export const STEP_ORDER: WorkflowStep[] = [
   "launch-plan",
   "launch-building",
   "launch-review",
+  "launch-deploy",
   "done",
 ];
 
@@ -90,6 +92,7 @@ export const STEP_LABELS: Record<WorkflowStep, string> = {
   "launch-plan": "Plan",
   "launch-building": "Spot working",
   "launch-review": "Review & deploy",
+  "launch-deploy": "Deploying",
   // legacy step labels — kept for type-completeness only
   personas: "Personas",
   "media-plan": "Plan",
@@ -122,6 +125,7 @@ export const VISIBLE_STEPS: WorkflowStep[] = [
   "launch-plan",
   "launch-building",
   "launch-review",
+  "launch-deploy",
 ];
 
 /** Per-kind step order. nextStep() reads this off the workflow kind. */
@@ -989,6 +993,13 @@ export const STEP_TOOL_CALL: Partial<Record<WorkflowStep, StepToolCall>> = {
     detail: "compiling preview · creatives, landing pages, lead forms, campaign tree…",
     delayMs: 2200,
   },
+  // Deploy step · pushes everything live to Meta + Google + WhatsApp.
+  "launch-deploy": {
+    agent: "deploy.execute",
+    detail:
+      "ads.publish · pages.deploy · forms.publish · pixels.activate · tracking.verify…",
+    delayMs: 14000,
+  },
   // Legacy steps below kept so any old in-flight workflow still narrates.
   personas: {
     agent: "personas.lookup",
@@ -1106,6 +1117,17 @@ export function stepIntroMessage(
             label: "Approve all · deploy live",
             helper: "I'll push to Meta + Google immediately and start the watchers.",
             refineHint: "or tell me which assets need a tweak",
+          },
+        ],
+      };
+    case "launch-deploy":
+      return {
+        role: "spot",
+        parts: [
+          {
+            type: "text",
+            text:
+              "Deploying to Meta + Google + WhatsApp now. ~14s end-to-end. Feel free to step away — I'll surface the final summary the moment it's live.",
           },
         ],
       };

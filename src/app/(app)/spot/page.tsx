@@ -1594,20 +1594,107 @@ function WorkflowParkBanner({
 }) {
   const isBuilding = workflow.step === "launch-building";
   const isReview = workflow.step === "launch-review";
+  const isDeploying = workflow.step === "launch-deploy";
 
-  // Progress bar fill animation while building.
+  // Progress bar fill animation while building OR deploying.
   const [progress, setProgress] = useState(0);
   useEffect(() => {
-    if (!isBuilding) return;
+    if (!isBuilding && !isDeploying) return;
     setProgress(8); // start visible
+    // Deploy completes in 14s, building runs longer · faster ramp for deploy.
+    const stepUp = isDeploying ? 12 : 6;
     const interval = setInterval(() => {
       setProgress((p) => {
-        if (p >= 92) return 92; // hold near full until step advances
-        return p + Math.random() * 6;
+        if (p >= 92) return 92;
+        return p + Math.random() * stepUp;
       });
-    }, 800);
+    }, isDeploying ? 500 : 800);
     return () => clearInterval(interval);
-  }, [isBuilding]);
+  }, [isBuilding, isDeploying]);
+
+  if (isDeploying) {
+    return (
+      <button
+        type="button"
+        onClick={onResume}
+        className="w-full mb-5 rounded-card p-4 relative overflow-hidden text-left transition-colors"
+        style={{
+          background:
+            "linear-gradient(135deg, #1F1B14 0%, #181612 50%, #131110 100%)",
+          border: "1px solid #3A3530",
+          boxShadow:
+            "0 12px 32px -12px rgba(0,0,0,0.45), 0 0 0 1px rgba(201,168,106,0.12) inset",
+        }}
+      >
+        <div
+          aria-hidden
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background:
+              "radial-gradient(ellipse 60% 60% at 100% 0%, rgba(201, 168, 106, 0.28) 0%, transparent 70%)",
+          }}
+        />
+        <div className="absolute -top-2 -right-2 opacity-[0.12]">
+          <SpotMark size={64} />
+        </div>
+        <div className="relative">
+          <div className="flex items-start gap-3 mb-3">
+            <div className="flex-shrink-0 flex items-center justify-center w-12 h-12">
+              <SpotLoader mode="orbit" size={20} className="!gap-0" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-1.5 mb-0.5">
+                <span className="relative inline-flex w-1.5 h-1.5 rounded-full bg-[#C9A86A]">
+                  <span className="absolute inset-0 rounded-full bg-[#C9A86A] opacity-60 animate-ping" />
+                </span>
+                <span
+                  className="text-[10.5px] uppercase tracking-wider font-semibold"
+                  style={{ color: "#E0C083" }}
+                >
+                  Spot is deploying
+                </span>
+              </div>
+              <div
+                className="text-[14px] font-semibold leading-tight"
+                style={{ color: "#F5F4EF" }}
+              >
+                Pushing {workflow.productName} to Meta · Google · WhatsApp
+              </div>
+              <div
+                className="text-[12px] mt-1 leading-relaxed"
+                style={{ color: "#A8A8A0" }}
+              >
+                Ads, landing pages, lead forms, pixels and trackers going live
+                right now. I&apos;ll switch this to a launch summary the moment
+                it&apos;s done.
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <div
+              className="flex-1 h-1.5 rounded-full overflow-hidden"
+              style={{ background: "rgba(255,255,255,0.06)" }}
+            >
+              <div
+                className="h-full transition-all duration-300"
+                style={{
+                  width: `${progress}%`,
+                  background:
+                    "linear-gradient(90deg, #C9A86A 0%, #E0C083 60%, #22C55E 100%)",
+                }}
+              />
+            </div>
+            <span
+              className="text-[11px] tabular flex-shrink-0"
+              style={{ color: "#A8A8A0" }}
+            >
+              {Math.round(progress)}% · live in seconds
+            </span>
+          </div>
+        </div>
+      </button>
+    );
+  }
 
   if (isBuilding) {
     return (

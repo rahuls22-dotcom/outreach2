@@ -20,7 +20,8 @@
 //   performance.html  → Performance tab (interactive dashboard)
 //   assets/           → Assets tab (creatives + landing pages + forms)
 
-import { useState } from "react";
+import { useState, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   Brain,
   Package,
@@ -53,9 +54,35 @@ const TABS: { key: TabKey; label: string; icon: typeof FileText; file: string }[
 ];
 
 export default function MemoryPage() {
-  const [productId, setProductId] = useState(PRODUCTS[0]?.id ?? "");
+  return (
+    <Suspense fallback={<div />}>
+      <MemoryPageInner />
+    </Suspense>
+  );
+}
+
+function MemoryPageInner() {
+  const searchParams = useSearchParams();
+  // `?focus=<productId>` lets callers (eg. View Project Memory from the
+  // launch flow) open this page already scoped to a specific product.
+  // Demo: always lands on Spoken English for new product flows.
+  const initialId = (() => {
+    const focus = searchParams.get("focus");
+    if (focus && PRODUCTS.some((p) => p.id === focus)) return focus;
+    return PRODUCTS[0]?.id ?? "";
+  })();
+  const [productId, setProductId] = useState(initialId);
   const [tab, setTab] = useState<TabKey>("brief");
   const files = memoryFilesFor(productId);
+
+  // Keep URL → state in sync if the param changes (eg. back/forward nav).
+  useEffect(() => {
+    const focus = searchParams.get("focus");
+    if (focus && PRODUCTS.some((p) => p.id === focus) && focus !== productId) {
+      setProductId(focus);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   return (
     <div>
