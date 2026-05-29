@@ -1,4 +1,4 @@
-// Outreach mock data — voice agent CSV calling campaigns
+// Outreach mock data, voice agent CSV calling campaigns
 
 export type OutreachStatus = "in_progress" | "completed" | "paused" | "scheduled";
 export type ContactOutcome =
@@ -29,7 +29,7 @@ export interface OutreachListItem {
 export const outreachList: OutreachListItem[] = [
   {
     id: "out-1",
-    name: "Godrej Reflections — Lead Qualification",
+    name: "Godrej Reflections, Lead Qualification",
     voiceAgent: "Priya (Qualification Agent)",
     totalContacts: 487,
     called: 342,
@@ -44,7 +44,7 @@ export const outreachList: OutreachListItem[] = [
   },
   {
     id: "out-2",
-    name: "Godrej Eternity — Re-engagement",
+    name: "Godrej Eternity, Re-engagement",
     voiceAgent: "Arjun (Follow-up Agent)",
     totalContacts: 215,
     called: 215,
@@ -59,7 +59,7 @@ export const outreachList: OutreachListItem[] = [
   },
   {
     id: "out-3",
-    name: "Godrej Air — Site Visit Follow-up",
+    name: "Godrej Air, Site Visit Follow-up",
     voiceAgent: "Priya (Qualification Agent)",
     totalContacts: 64,
     called: 0,
@@ -90,7 +90,7 @@ export const outreachPurposes = [
 // Detail page data for "out-1"
 export const outreachDetail = {
   id: "out-1",
-  name: "Godrej Reflections — Lead Qualification",
+  name: "Godrej Reflections, Lead Qualification",
   voiceAgent: "Priya (Qualification Agent)",
   purpose: "Lead Qualification",
   status: "in_progress" as OutreachStatus,

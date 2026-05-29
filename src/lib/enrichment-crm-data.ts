@@ -59,7 +59,7 @@ export interface SingleInput {
   name?: string;
 }
 
-// Pricing — v1 placeholder. Real values come later.
+// Pricing, v1 placeholder. Real values come later.
 export const CREDITS_PER_LEAD: Record<EnrichmentType, number> = {
   professional: 1,
   financial: 1,
@@ -125,7 +125,7 @@ export interface EnrichedProfile {
   email_verification_status?: string;
   phone_verification_status?: string;
   valid_indian_name?: boolean;
-  // Original input the user typed — used as fallback header when no professional block.
+  // Original input the user typed, used as fallback header when no professional block.
   contact?: {
     name?: string;
     email?: string;
@@ -155,8 +155,8 @@ export interface RunRecord {
   finishedAt?: string;
   errorCode?: string;           // failed only
   errorMessage?: string;        // failed only
-  profile?: EnrichedProfile;    // single only (and crm — one profile per row)
-  leads?: EnrichedProfile[];    // bulk only — sample of enriched lead profiles
+  profile?: EnrichedProfile;    // single only (and crm, one profile per row)
+  leads?: EnrichedProfile[];    // bulk only, sample of enriched lead profiles
   // CRM-only fields
   crmOrigin?: CrmOriginRef;     // when source=crm
   crmSync?: CrmSyncState;       // for any run that was pushed back to CRM
@@ -176,7 +176,7 @@ export function varyProfile(seed: number): {
   const s = Math.abs(seed | 0);
   const pick = <T>(arr: readonly T[], salt: number) => arr[(s * 9301 + salt) % arr.length];
 
-  const TIERS = ["Unicorn", "Unicorn", "Mid-Market", "Mid-Market", "SMB", "Startup"] as const;
+  const TIERS = ["Tier 1", "Tier 1", "Tier 2", "Tier 2", "Tier 3", "Tier 4"] as const;
   const LOCATIONS = ["Metro", "Metro", "Metro", "Tier-2", "Tier-2", "Tier-3"] as const;
   const LEVELS = ["Senior", "Senior", "Mid", "Mid", "Exec", "Junior"] as const;
   const AGE_GROUPS = ["18-29", "30-39", "30-39", "30-39", "40-49", "50+"] as const;
@@ -267,7 +267,7 @@ export const sampleProfile: EnrichedProfile = {
     years_of_experience: 11,
     job_title: "Staff Software Engineer",
     company_name: "PhonePe",
-    company_tier: "Unicorn",
+    company_tier: "Tier 1",
     company_industry: "Fintech",
     university_tier: "Tier 1",
     iit_iim: true,
@@ -396,7 +396,7 @@ function buildCrmRuns(): RunRecord[] {
         tBucket === 3 ? ["professional", "financial"] :
         ["professional"];
 
-      // Outcome buckets — calibrated to ~65% enriched SLA, near-zero system failures:
+      // Outcome buckets, calibrated to ~65% enriched SLA, near-zero system failures:
       //   0..62  → fully enriched   (63%)
       //   63..69 → partial enriched (7%)   → still counts as "enriched" in KPI
       //   70..98 → zero enrichment  (29%) → status=done, no public data found
@@ -478,7 +478,7 @@ function buildCrmRuns(): RunRecord[] {
 const crmRuns = buildCrmRuns();
 
 // Generate a sample slice of enriched lead profiles for a bulk run. Caps at
-// 50 — drawer doesn't need every row, just enough to feel real.
+// 50, drawer doesn't need every row, just enough to feel real.
 function buildBulkLeads(
   successCount: number,
   failedCount: number,
@@ -531,6 +531,23 @@ function buildBulkLeads(
 }
 
 const mockRuns: RunRecord[] = [
+  {
+    id: "run-0",
+    source: "bulk",
+    filename: "prestige-tech-park-may.csv",
+    types: ["professional", "financial"],
+    status: "done",
+    leadsTotal: 640,
+    leadsSuccess: 512,
+    leadsFailed: 108,
+    leadsSkipped: 20,
+    creditsBlocked: 1280,
+    creditsCharged: 1024,
+    creditsRefunded: 256,
+    startedAt: "2026-05-27T09:30:00Z",
+    finishedAt: "2026-05-27T11:05:00Z",
+    leads: buildBulkLeads(512, 108, ["professional", "financial"], 7),
+  },
   {
     id: "run-1",
     source: "bulk",
@@ -622,7 +639,7 @@ const mockRuns: RunRecord[] = [
 // ── Sample CSV files (download links) ────────────────────────────────────
 
 // Picks the right static sample file based on enrichment types.
-// Files live under public/sample-csvs/ — ~50 demo leads each so an uploaded
+// Files live under public/sample-csvs/, ~50 demo leads each so an uploaded
 // run shows real chart variation across tiers / industries / income bands.
 
 export function sampleCsvFilename(types: EnrichmentType[]): string {
@@ -754,12 +771,12 @@ export const useEnrichmentCrmStore = create<EnrichmentStore>((set, get) => ({
       const next = s.runs.map((r) => {
         if (r.status !== "in_progress") return r;
         const cur = r.progressPct ?? 0;
-        // Bumps of 3–9% per tick — feels organic, not linear.
+        // Bumps of 3–9% per tick, feels organic, not linear.
         const bump = 3 + Math.floor(Math.random() * 7);
         const np = Math.min(100, cur + bump);
         changed = true;
         if (np >= 100) {
-          // Settle the run: 92% success, ~6% skipped, ~2% failed — realistic-ish.
+          // Settle the run: 92% success, ~6% skipped, ~2% failed, realistic-ish.
           const total = r.leadsTotal ?? 0;
           const success = Math.round(total * 0.92);
           const skipped = Math.round(total * 0.06);

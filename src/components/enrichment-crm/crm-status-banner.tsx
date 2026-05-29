@@ -9,7 +9,7 @@ interface BannerProps {
 }
 
 // Small horizontal status strip that sits above the tabs.
-// Assumes the CRM is connected, mapped, and pre-configured — this is read-only.
+// Assumes the CRM is connected, mapped, and pre-configured, this is read-only.
 export function CrmStatusBanner({ onViewMapping, mappingOpen }: BannerProps = {}) {
   const conn = useEnrichmentCrmStore((s) => s.crmConnection);
 

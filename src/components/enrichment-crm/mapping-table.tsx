@@ -1,6 +1,6 @@
 "use client";
 
-// Mapping table — required-fields-first view.
+// Mapping table, required-fields-first view.
 // One row per field we need (Name/Phone/Email/LinkedIn/Lead Id).
 // Each row shows which CSV column we auto-mapped to it, sample values, and
 // status. User can change the source column from a dropdown of file headers.

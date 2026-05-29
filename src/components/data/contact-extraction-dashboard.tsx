@@ -1,6 +1,6 @@
 "use client";
 
-// Base/landing view for the Contact extraction module. Demo placeholder — the
+// Base/landing view for the Contact extraction module. Demo placeholder, the
 // real product hasn't shipped yet, but this matches the Enrichment dashboard
 // shape (KPI strip + volume strip) so the layout reads as a real module.
 

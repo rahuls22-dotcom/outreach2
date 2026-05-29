@@ -8,7 +8,7 @@
 import type { FilterDim, ChartCardId, LeadProfile } from "./types";
 
 export type DimType = "enum" | "range_money" | "range_number" | "bool";
-export type ChartKind = "donut" | "column";
+export type ChartKind = "donut" | "column" | "hbar";
 
 export interface DimConfig {
   id: FilterDim;
@@ -57,18 +57,40 @@ function avgEarnings(p: LeadProfile): number | null {
   return null;
 }
 
+// Salary range, in lakhs INR.
 export function incomeBucket(p: LeadProfile): string | null {
   const v = avgEarnings(p);
   if (v == null) return null;
-  if (v >= 10_000_000) return "> 1Cr";
-  if (v >= 5_000_000) return "50L - 1Cr";
-  if (v >= 2_500_000) return "25L - 50L";
-  return "< 25L";
+  if (v < 500_000) return "1-5 L";
+  if (v < 1_000_000) return "5-10 L";
+  if (v < 2_000_000) return "10-20 L";
+  if (v < 3_000_000) return "20-30 L";
+  if (v < 5_000_000) return "30-50 L";
+  if (v < 10_000_000) return "50L - 1Cr";
+  return "1Cr+";
 }
 
-export const INCOME_BUCKETS = ["> 1Cr", "50L - 1Cr", "25L - 50L", "< 25L"];
+export const INCOME_BUCKETS = ["1-5 L", "5-10 L", "10-20 L", "20-30 L", "30-50 L", "50L - 1Cr", "1Cr+"];
 
-// Generic range bucketer — exclusive upper, last bucket catches the rest.
+// Net worth. Mock data has no net-worth field, derive a synthetic from salary
+// (avg annual earnings × 5) so the demo chart is plausible without inventing
+// a whole new column. Real backend would replace this with a stored value.
+const NET_WORTH_BUCKETS = ["0-50 L", "50L - 1Cr", "1-2 Cr", "2-5 Cr", "5 Cr+"];
+function netWorthValue(p: LeadProfile): number | null {
+  const v = avgEarnings(p);
+  return v == null ? null : v * 5;
+}
+function netWorthBucket(p: LeadProfile): string | null {
+  const v = netWorthValue(p);
+  if (v == null) return null;
+  if (v < 5_000_000) return "0-50 L";
+  if (v < 10_000_000) return "50L - 1Cr";
+  if (v < 20_000_000) return "1-2 Cr";
+  if (v < 50_000_000) return "2-5 Cr";
+  return "5 Cr+";
+}
+
+// Generic range bucketer, exclusive upper, last bucket catches the rest.
 // Returns null when the underlying value is missing, so breakdownByDim
 // skips the lead instead of producing an "Unknown" bucket.
 function bucketRange(
@@ -81,17 +103,17 @@ function bucketRange(
   return topLabel;
 }
 
-const YOE_BUCKETS = ["0-2 yrs", "3-5 yrs", "6-10 yrs", "11-15 yrs", "15+ yrs"];
+const YOE_BUCKETS = ["0-2 years", "3-5 years", "6-10 years", "11-20 years", "20+ years"];
 function yoeBucket(p: LeadProfile): string | null {
   return bucketRange(
     p.profile?.professional?.years_of_experience,
     [
-      { upTo: 3, label: "0-2 yrs" },
-      { upTo: 6, label: "3-5 yrs" },
-      { upTo: 11, label: "6-10 yrs" },
-      { upTo: 16, label: "11-15 yrs" },
+      { upTo: 3, label: "0-2 years" },
+      { upTo: 6, label: "3-5 years" },
+      { upTo: 11, label: "6-10 years" },
+      { upTo: 21, label: "11-20 years" },
     ],
-    "15+ yrs",
+    "20+ years",
   );
 }
 
@@ -187,7 +209,7 @@ export const DIM_REGISTRY: Record<FilterDim, DimConfig> = {
   },
   location_type: {
     id: "location_type",
-    label: "Geography",
+    label: "Location",
     type: "enum",
     group: "Professional",
     chartKind: "donut",
@@ -208,7 +230,7 @@ export const DIM_REGISTRY: Record<FilterDim, DimConfig> = {
     type: "enum",
     group: "Professional",
     chartKind: "donut",
-    values: ["Unicorn", "Mid-Market", "SMB", "Startup"],
+    values: ["Tier 1", "Tier 2", "Tier 3", "Tier 4"],
     bucket: (p) => p.profile?.professional?.company_tier ?? null,
   },
   industry: {
@@ -234,6 +256,7 @@ export const DIM_REGISTRY: Record<FilterDim, DimConfig> = {
     label: "Age",
     type: "enum",
     group: "Professional",
+    chartKind: "hbar",
     values: ["18-29", "30-39", "40-49", "50+"],
     bucket: (p) => p.profile?.professional?.age_group ?? null,
   },
@@ -305,12 +328,24 @@ export const DIM_REGISTRY: Record<FilterDim, DimConfig> = {
   },
   annual_earnings: {
     id: "annual_earnings",
-    label: "Annual earnings",
+    label: "Salary range (₹L)",
     type: "range_money",
     group: "Financial",
     values: INCOME_BUCKETS,
     bucket: incomeBucket,
     numeric: avgEarnings,
+    unitHint: "L",
+    inputScale: 100_000,
+  },
+  net_worth: {
+    id: "net_worth",
+    label: "Net worth",
+    type: "range_money",
+    group: "Financial",
+    chartKind: "donut",
+    values: NET_WORTH_BUCKETS,
+    bucket: netWorthBucket,
+    numeric: netWorthValue,
     unitHint: "L",
     inputScale: 100_000,
   },
@@ -389,17 +424,21 @@ export const DIM_REGISTRY: Record<FilterDim, DimConfig> = {
 
 /** Default preset cards mapped to a dim. */
 export const CHART_CARD_TO_DIM: Record<ChartCardId, FilterDim> = {
+  location: "location_type",
+  years_of_experience: "years_of_experience",
   company_tier: "company_tier",
-  seniority: "seniority",
-  geography: "location_type",
-  income_range: "annual_earnings",
+  age_group: "age_group",
+  net_worth: "net_worth",
+  salary_range: "annual_earnings",
 };
 
 export const CHART_CARD_LABEL: Record<ChartCardId, string> = {
+  location: "Location",
+  years_of_experience: "Years of experience",
   company_tier: "Company tier",
-  seniority: "Seniority",
-  geography: "Geography",
-  income_range: "Income range",
+  age_group: "Age",
+  net_worth: "Net worth",
+  salary_range: "Salary range (₹L)",
 };
 
 /** Group dims for the chart-builder slice picker. */

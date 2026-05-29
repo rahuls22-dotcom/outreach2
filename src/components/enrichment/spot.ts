@@ -1,4 +1,4 @@
-// Spot nudge engine — pure function.
+// Spot nudge engine, pure function.
 // Inputs: which enrichment types are picked + which fields have a value.
 // Output: optional upgrade line + optional name-quality note.
 // Spot stays silent when (a) required fields aren't filled, or (b) the user already
@@ -57,7 +57,7 @@ export function computeSpot({ types, available }: SpotInput): SpotMessage | null
 
   // Required met. Decide if Pro upgrade also fires.
   if (has("linkedin") || has("email")) {
-    // Pro path already strong enough — name note only
+    // Pro path already strong enough, name note only
     return { nameNote: true };
   }
 
@@ -70,7 +70,7 @@ export function computeSpot({ types, available }: SpotInput): SpotMessage | null
 }
 
 // Static instruction shown when required fields aren't filled.
-// Renders in the footer area (not in Spot bubble) — it's a hard requirement, not a tip.
+// Renders in the footer area (not in Spot bubble), it's a hard requirement, not a tip.
 export function staticInstruction(types: EnrichmentType[]): string | null {
   const hasPro = types.includes("professional");
   const hasFin = types.includes("financial");

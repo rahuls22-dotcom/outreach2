@@ -37,9 +37,15 @@ import type { SourceFilter } from "./source-filter-pills";
 interface Props {
   onOpenRun?: (r: RunRecord) => void;
   forceEmpty?: boolean;
+  /** Slim mode for the no-storage variant. Renders only the enrichment-rate
+   *  KPI card — no breakdowns, no demographics, no charts. */
+  slim?: boolean;
+  /** When true, drop the "crm" source from all feeds (used in no-CRM variant
+   *  where CRM-sourced rows would be a lie). */
+  dropCrmSource?: boolean;
 
   // Controlled header filters. When provided, the dashboard does NOT render
-  // its own time/source pills — the page wrapper does that via headerAction.
+  // its own time/source pills, the page wrapper does that via headerAction.
   range?: TimeRange;
   customStart?: Date | null;
   customEnd?: Date | null;
@@ -50,6 +56,8 @@ interface Props {
 
 export function EnrichmentDashboard({
   forceEmpty = false,
+  slim = false,
+  dropCrmSource = false,
   range: rangeProp,
   customStart: customStartProp,
   customEnd: customEndProp,
@@ -61,7 +69,7 @@ export function EnrichmentDashboard({
   const { isEmpty: demoEmpty } = useDemoMode();
   const isEmpty = forceEmpty || demoEmpty;
 
-  // Internal fallback state — used if the parent doesn't control the filters.
+  // Internal fallback state, used if the parent doesn't control the filters.
   const [internalRange, setInternalRange] = useState<TimeRange>("30d");
   const [internalCustomStart, setInternalCustomStart] = useState<Date | null>(null);
   const [internalCustomEnd, setInternalCustomEnd] = useState<Date | null>(null);
@@ -84,7 +92,7 @@ export function EnrichmentDashboard({
     setHydrated(true);
   }, []);
 
-  // Persist after hydration only — otherwise we'd wipe storage on first render.
+  // Persist after hydration only, otherwise we'd wipe storage on first render.
   useEffect(() => {
     if (!hydrated) return;
     saveDashboardState({ defaultCards, customCards });
@@ -106,8 +114,12 @@ export function EnrichmentDashboard({
     return { startMs: bounds.startMs - span, endMs: bounds.startMs };
   }, [bounds]);
 
-  // Empty-mode override: treat the demo's "empty" state as no runs.
-  const effectiveRuns = isEmpty ? [] : runs;
+  // Empty-mode override: treat the demo's "empty" state as no runs. No-CRM
+  // variant additionally strips crm-sourced runs from the feed.
+  const effectiveRuns = useMemo(() => {
+    if (isEmpty) return [];
+    return dropCrmSource ? runs.filter((r) => r.source !== "crm") : runs;
+  }, [isEmpty, dropCrmSource, runs]);
 
   // All profiles in the active time range (unfiltered by source).
   const allProfiles: LeadProfile[] = useMemo(
@@ -147,7 +159,7 @@ export function EnrichmentDashboard({
     </div>
   );
 
-  // Empty state — no enriched leads in the active range.
+  // Empty state, no enriched leads in the active range.
   if (profiles.length === 0) {
     const allTime = flattenRunsToLeadProfiles(effectiveRuns);
     const description =
@@ -180,12 +192,17 @@ export function EnrichmentDashboard({
         range={range}
         bounds={bounds}
       />
-      <LeadExplorer
-        profiles={profiles}
-        defaultCards={defaultCards}
-        customCards={customCards}
-        onCustomCardsChange={setCustomCards}
-      />
+      {/* Demographics breakdowns require per-lead persistence — hide under
+          no-storage where rows are processed in-flight and never saved. */}
+      {!slim && (
+        <LeadExplorer
+          profiles={profiles}
+          defaultCards={defaultCards}
+          customCards={customCards}
+          onCustomCardsChange={setCustomCards}
+        />
+      )}
     </div>
   );
 }
+

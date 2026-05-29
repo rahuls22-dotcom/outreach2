@@ -256,7 +256,7 @@ function ActionBtn({ onClick, children, primary }: { onClick: () => void; childr
 }
 
 function download(run: RunRecord, format: "csv" | "xlsx") {
-  const content = `# Enriched export — ${format.toUpperCase()}\n# Run: ${run.id}\n# File: ${run.filename}\n# Leads: ${run.leadsSuccess}/${run.leadsTotal}\n# Backend wires real export.\n`;
+  const content = `# Enriched export, ${format.toUpperCase()}\n# Run: ${run.id}\n# File: ${run.filename}\n# Leads: ${run.leadsSuccess}/${run.leadsTotal}\n# Backend wires real export.\n`;
   const mime = format === "csv" ? "text/csv" : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
   const blob = new Blob([content], { type: mime });
   const url = URL.createObjectURL(blob);

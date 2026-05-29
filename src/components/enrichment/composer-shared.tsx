@@ -51,7 +51,7 @@ export function useComposerState() {
   const toggleType = useCallback((t: EnrichmentType) => {
     setTypes((cur) => {
       const has = cur.includes(t);
-      // Block unticking the last remaining type — at least one must stay on.
+      // Block unticking the last remaining type, at least one must stay on.
       if (has && cur.length === 1) return cur;
       return has ? cur.filter((x) => x !== t) : [...cur, t];
     });
@@ -277,7 +277,7 @@ export type ComposerState = ReturnType<typeof useComposerState>;
 // ── Sub-components ──────────────────────────────────────────────
 
 export function TabSwitcher({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
-  // Prominent segmented pill — bigger surface, stronger active contrast, icon hint.
+  // Prominent segmented pill, bigger surface, stronger active contrast, icon hint.
   return (
     <div className="inline-flex items-center bg-surface-page border border-border rounded-[10px] p-1">
       {(["bulk", "single"] as Tab[]).map((t) => {
@@ -334,8 +334,44 @@ export function TypeCheckboxes({
   );
 }
 
+// Right-aligned per-lead cost summary for the top strip. Shown so the
+// user knows the unit price up front, before they pick a tab or drop a
+// file. Each type is dimmed when not currently selected so the active
+// cost stack reads as the live total.
+export function TypeCostInfo({ types }: { types: EnrichmentType[] }) {
+  const pro = CREDITS_PER_LEAD.professional;
+  const fin = CREDITS_PER_LEAD.financial;
+  const hasPro = types.includes("professional");
+  const hasFin = types.includes("financial");
+  return (
+    <div className="flex items-center gap-3 text-[11.5px] tabular-nums">
+      <span
+        className={`inline-flex items-center gap-1 ${
+          hasPro ? "text-text-secondary" : "text-text-tertiary"
+        }`}
+      >
+        <span>Professional</span>
+        <span className="text-text-tertiary">
+          · {pro} credit{pro === 1 ? "" : "s"}/lead
+        </span>
+      </span>
+      <span className="w-px h-3 bg-border-subtle" />
+      <span
+        className={`inline-flex items-center gap-1 ${
+          hasFin ? "text-text-secondary" : "text-text-tertiary"
+        }`}
+      >
+        <span>Financial</span>
+        <span className="text-text-tertiary">
+          · {fin} credit{fin === 1 ? "" : "s"}/lead
+        </span>
+      </span>
+    </div>
+  );
+}
+
 function CheckboxPill({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) {
-  // Quiet checkbox — no border, no fill. Just box + label. Active just darkens the text.
+  // Quiet checkbox, no border, no fill. Just box + label. Active just darkens the text.
   return (
     <button
       onClick={onClick}
@@ -357,7 +393,7 @@ function CheckboxPill({ active, label, onClick }: { active: boolean; label: stri
   );
 }
 
-// "Fields needed" reference card — adapts to checkbox selection
+// "Fields needed" reference card, adapts to checkbox selection
 export function FieldsNeededCard({ hasPro, hasFin }: { hasPro: boolean; hasFin: boolean }) {
   if (!hasPro && !hasFin) {
     return (
@@ -387,7 +423,7 @@ export function FieldsNeededCard({ hasPro, hasFin }: { hasPro: boolean; hasFin: 
   );
 }
 
-// Single-mode input set — fields appear/disappear based on selection
+// Single-mode input set, fields appear/disappear based on selection
 export function SingleInputsAdaptive({
   hasPro,
   hasFin,

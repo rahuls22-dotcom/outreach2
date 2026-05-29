@@ -2,9 +2,9 @@
 
 // Module-level tab strip shared by every top-level Tools module (Enrichment,
 // Contact extraction, ...). Three tabs by convention:
-//   Dashboard  — analytics view (the module's base route)
-//   Operations — where the user does work (composers, CRM sync, etc.)
-//   Database   — the resulting record store for that module
+//   Dashboard , analytics view (the module's base route)
+//   Operations, where the user does work (composers, CRM sync, etc.)
+//   Database  , the resulting record store for that module
 //
 // Each link is a real route so URLs are shareable and the active tab survives
 // reload. Pass `basePath` (e.g. "/enrichment") and the currently active key.

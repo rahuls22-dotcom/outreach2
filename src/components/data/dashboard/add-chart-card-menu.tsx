@@ -2,7 +2,7 @@
 
 // Dashed "+ Build a chart" tile at the end of the grid. Clicking it opens
 // the ChartBuilderDialog (state lives in the parent so the same modal can
-// also handle "edit existing"). Intentionally dumb — purely a visual CTA.
+// also handle "edit existing"). Intentionally dumb, purely a visual CTA.
 
 import { Plus } from "lucide-react";
 

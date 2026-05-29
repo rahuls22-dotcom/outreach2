@@ -5,7 +5,7 @@
 //   - Top status banner is replaced with the amber "Connect CRM" nudge banner.
 //   - Activity tab swaps the live activity dashboard for a hero card explaining
 //     what enrichment is and pushing the user to connect.
-//   - Bulk + Single tabs still work — those don't need a CRM.
+//   - Bulk + Single tabs still work, those don't need a CRM.
 // Switch back to the connected view via the toggle in the header.
 
 import { useEffect, useRef, useState } from "react";
@@ -95,7 +95,7 @@ export default function EnrichmentEmptyPage() {
   }, [isEmpty, setRuns]);
 
   const openConnectFlow = () => {
-    // Demo handler — in real product this would open the OAuth/credential flow.
+    // Demo handler, in real product this would open the OAuth/credential flow.
     window.dispatchEvent(
       new CustomEvent("enrichment-crm:toast", {
         detail: { title: "Connect CRM (demo)", description: "Real flow opens the integrations setup. Not wired in this prototype." },
@@ -146,7 +146,7 @@ export default function EnrichmentEmptyPage() {
               <EmptyState
                 illustration={<IllustrationEnrichment />}
                 title="No bulk uploads yet"
-                description="Upload a CSV to enrich up to thousands of leads at once. Push the result back to your CRM when it lands."
+                description="Upload a CSV to enrich in bulk. Push the result back to your CRM when it lands."
                 action={
                   <a
                     href={sampleCsvDataUrl([])}

@@ -47,22 +47,22 @@ const audiences: Audience[] = [
     status: "active", description: "High net-worth individuals in Whitefield, aged 30-55, income ₹25L+",
   },
   {
-    id: "aud-2", name: "IT Corridor — Sarjapur", source: "revspot_db",
+    id: "aud-2", name: "IT Corridor, Sarjapur", source: "revspot_db",
     size: 14200, createdAt: "2026-03-05", usedIn: ["Godrej Air Phase 3"],
     status: "active", description: "IT professionals along Sarjapur Road corridor, aged 28-45",
   },
   {
-    id: "aud-3", name: "Website Visitors — Last 30d", source: "website_visitors",
+    id: "aud-3", name: "Website Visitors, Last 30d", source: "website_visitors",
     size: 3850, createdAt: "2026-03-15", usedIn: ["Godrej Eternity"],
     status: "active", description: "Users who visited property pages in the last 30 days",
   },
   {
-    id: "aud-4", name: "CRM Lookalike — Buyers", source: "crm_lookalike",
+    id: "aud-4", name: "CRM Lookalike, Buyers", source: "crm_lookalike",
     size: 22000, createdAt: "2026-02-28", usedIn: [],
     status: "draft", description: "Lookalike of converted buyers from CRM, 1% similarity",
   },
   {
-    id: "aud-5", name: "NRI Investors — UAE+US", source: "csv_upload",
+    id: "aud-5", name: "NRI Investors, UAE+US", source: "csv_upload",
     size: 1240, createdAt: "2026-03-18", usedIn: ["Godrej Reserve"],
     status: "active", description: "NRI investors based in UAE and US, uploaded from broker network CSV",
   },
@@ -243,7 +243,7 @@ function AudiencesPageInner() {
   }, [fromEnrichment]);
 
   // Lightweight banner that confirms the enrichment handoff. Kept narrow on
-  // purpose — the modal carries the bulk of the UX.
+  // purpose, the modal carries the bulk of the UX.
   const enrichmentBanner = useMemo(() => {
     if (!fromEnrichment) return null;
     return (
@@ -253,7 +253,7 @@ function AudiencesPageInner() {
           <span className="text-text-tertiary tabular-nums">#{enrichmentRunId}</span>
         )}
         <span className="text-text-secondary">
-          — saving these enriched leads as a new audience.
+         , saving these enriched leads as a new audience.
         </span>
       </div>
     );

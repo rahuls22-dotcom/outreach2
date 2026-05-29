@@ -1,6 +1,6 @@
 "use client";
 
-// /enrichment-empty/operations — Operations tab in the "no CRM" demo variant.
+// /enrichment-empty/operations, Operations tab in the "no CRM" demo variant.
 
 import { DataPageShell } from "@/components/data/data-page-shell";
 import { EnrichmentSection } from "@/components/data/enrichment-section";

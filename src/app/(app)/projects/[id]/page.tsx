@@ -49,7 +49,7 @@ export default function ProjectDetailPage() {
   const defaultTab: Tab = hasActivity ? "dashboard" : "personas";
   const [tab, setTab] = useState<Tab>(defaultTab);
 
-  // Library sub-tab — used by the Forms-readiness banner to deeplink
+  // Library sub-tab, used by the Forms-readiness banner to deeplink
   // straight into the Forms sub-section without forcing the user to
   // click through Creatives / Images first.
   const [librarySub, setLibrarySub] = useState<LibrarySubTab | undefined>(
@@ -85,7 +85,7 @@ export default function ProjectDetailPage() {
       if (detail.tab === "library" && detail.sub === "forms") {
         setLibrarySub("forms");
       }
-      // Block Dashboard switch when it's hidden — fall back to Personas.
+      // Block Dashboard switch when it's hidden, fall back to Personas.
       if (detail.tab === "dashboard" && !hasActivity) {
         setTab("personas");
         return;

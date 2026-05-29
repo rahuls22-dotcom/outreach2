@@ -1,9 +1,9 @@
 "use client";
 
-// Enrichment composer — single shape.
+// Enrichment composer, single shape.
 // Top: Bulk/Single tabs + Professional/Financial checkboxes.
 // Bulk body: pre-drop = "Fields needed" card + drop zone. Post-drop = file pill + mapping table.
-// Single body: 60/40 split — adaptive inputs on the left, result panel on the right.
+// Single body: 60/40 split, adaptive inputs on the left, result panel on the right.
 // Footer: Spot tip area + cost + submit.
 
 import { useEffect, useState } from "react";
@@ -11,6 +11,7 @@ import {
   useComposerState,
   TabSwitcher,
   TypeCheckboxes,
+  TypeCostInfo,
   FieldsNeededCard,
   SingleInputsAdaptive,
   FileCard,
@@ -21,7 +22,7 @@ import {
 } from "./composer-shared";
 import { MappingTable } from "./mapping-table";
 import { computeSpot, staticInstruction, SPOT_NAME_NOTE } from "./spot";
-import { SpotInlineCallout } from "@/components/project/shared/spot-callout";
+import { TipCallout } from "@/components/project/shared/spot-callout";
 import { LeadProfileCard } from "@/components/lead/lead-profile-card";
 import { AlertTriangle } from "lucide-react";
 import { IllustrationEnrichment, IllustrationSearchEmpty } from "@/components/illustrations/empty-states";
@@ -40,12 +41,13 @@ export function EnrichmentComposer({ mode }: { mode?: "bulk" | "single" } = {}) 
             {!mode && <div className="w-px h-5 bg-border-subtle" />}
             <TypeCheckboxes types={state.types} toggle={state.toggleType} />
           </div>
+          <TypeCostInfo types={state.types} />
         </div>
 
         {/* Body */}
         {tab === "bulk" ? <BulkBody state={state} /> : <SingleBody state={state} />}
 
-        {/* Footer — only Bulk shows the global footer (after a file is dropped).
+        {/* Footer, only Bulk shows the global footer (after a file is dropped).
             Single mode owns its own actions inside the left column. */}
         {tab === "bulk" && state.file && <Footer state={state} />}
       </div>
@@ -63,6 +65,8 @@ function BulkBody({ state }: { state: ReturnType<typeof useComposerState> }) {
         <DropZone
           fileInputRef={state.fileInputRef}
           onChosen={state.onFileChosen}
+          hasPro={state.hasPro}
+          hasFin={state.hasFin}
           sampleHref={state.sampleHref}
           sampleName={state.sampleName}
         />
@@ -116,7 +120,7 @@ function SingleBody({ state }: { state: ReturnType<typeof useComposerState> }) {
     <div className="grid grid-cols-2 divide-x divide-border-subtle">
       {/* Left: inputs + actions */}
       <div className="px-5 pt-5 pb-4 flex flex-col min-h-[440px]">
-        {/* Instruction line — sits above inputs so the ask is visible before fields */}
+        {/* Instruction line, sits above inputs so the ask is visible before fields */}
         {topInstruction && (
           <p className="text-[12px] text-text-secondary mb-3">{topInstruction}</p>
         )}
@@ -134,8 +138,7 @@ function SingleBody({ state }: { state: ReturnType<typeof useComposerState> }) {
         {/* Push the actions block to the bottom of the column */}
         <div className="mt-auto pt-4 space-y-3">
           {spot && (
-            <SpotInlineCallout
-              label="Spot's tip"
+            <TipCallout
               body={[spot.primary, spot.nameNote ? SPOT_NAME_NOTE : null]
                 .filter(Boolean)
                 .join("\n\n")}
@@ -239,7 +242,7 @@ function FailedState() {
   );
 }
 
-// Stepped progress while a single enrichment is "running" — feels like real work.
+// Stepped progress while a single enrichment is "running", feels like real work.
 function EnrichingSkeleton({ types }: { types: ReturnType<typeof useComposerState>["types"] }) {
   const hasPro = types.includes("professional");
   const hasFin = types.includes("financial");
@@ -324,12 +327,11 @@ function Footer({ state }: { state: ReturnType<typeof useComposerState> }) {
 
   return (
     <div className="border-t border-border-subtle">
-      {/* Spot / instruction area */}
+      {/* Tip / instruction area */}
       {!preDrop && (spot || instruction) && (
         <div className="px-5 pt-4 pb-1">
           {spot ? (
-            <SpotInlineCallout
-              label="Spot's tip"
+            <TipCallout
               body={[spot.primary, spot.nameNote ? SPOT_NAME_NOTE : null]
                 .filter(Boolean)
                 .join("\n\n")}

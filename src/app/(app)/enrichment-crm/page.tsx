@@ -30,7 +30,7 @@ export default function EnrichmentPage() {
   const toastTimerRef = useRef<number | null>(null);
   const [tab, setTab] = useState<CrmTabKey>("activity");
 
-  // History per tab — bulk tab shows bulk runs only, single tab shows single runs only.
+  // History per tab, bulk tab shows bulk runs only, single tab shows single runs only.
   // CRM-sourced runs live inside the CRM activity tab and are excluded everywhere else.
   const bulkRuns   = isEmpty ? [] : runs.filter((r) => r.source === "bulk");
   const singleRuns = isEmpty ? [] : runs.filter((r) => r.source === "single");
@@ -90,7 +90,7 @@ export default function EnrichmentPage() {
   // Demo: if empty mode toggled mid-session, snapshot to empty
   useEffect(() => {
     if (isEmpty) {
-      // Don't actually wipe — empty state is rendered conditionally below.
+      // Don't actually wipe, empty state is rendered conditionally below.
       // Real demo-empty wipe would call setRuns([]); skipping to preserve mock data.
     }
   }, [isEmpty, setRuns]);
@@ -134,7 +134,7 @@ export default function EnrichmentPage() {
               <EmptyState
                 illustration={<IllustrationEnrichment />}
                 title="No bulk uploads yet"
-                description="Upload a CSV to enrich up to thousands of leads at once. Push the result back to your CRM when it lands."
+                description="Upload a CSV to enrich in bulk. Push the result back to your CRM when it lands."
                 action={
                   <a
                     href={sampleCsvDataUrl([])}
@@ -186,7 +186,7 @@ export default function EnrichmentPage() {
         onBuildAudience={onBuildAudience}
       />
 
-      {/* Toast — sonner-style */}
+      {/* Toast, sonner-style */}
       <AnimatePresence>
         {toast && (
           <motion.div

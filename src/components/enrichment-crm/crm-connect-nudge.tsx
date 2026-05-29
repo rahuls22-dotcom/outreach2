@@ -1,21 +1,45 @@
 "use client";
 
-// Shown on /enrichment-crm-empty — the "no CRM connected" flow.
+// Shown on /enrichment-crm-empty, the "no CRM connected" flow.
 // Two pieces:
 //   - CrmConnectBanner: amber strip at the top of the page, replaces CrmStatusBanner.
 //   - CrmConnectHero:  big card inside the Activity tab, replaces CrmActivity.
 // Both nudge the user toward connecting a CRM. Bulk + Single tabs still work below.
 
-import { ArrowRight, Briefcase, CircleDollarSign, PlugZap, Sparkles, Upload, UserSearch, Zap } from "lucide-react";
+import { ArrowRight, Briefcase, CheckCircle2, CircleDollarSign, PlugZap, Sparkles, Upload, UserSearch, Zap } from "lucide-react";
 
 interface NudgeProps {
   onConnect: () => void;
   onManual?: () => void; // switch to bulk/single tab
+  /** When true, banner shows the post-submit "we're on it" state instead of CTA. */
+  pending?: boolean;
 }
 
 // ── Top banner ───────────────────────────────────────────────────────────
 
-export function CrmConnectBanner({ onConnect }: NudgeProps) {
+export function CrmConnectBanner({ onConnect, pending = false }: NudgeProps) {
+  // Pending state: request submitted, support team is the next mover.
+  if (pending) {
+    return (
+      <div className="flex items-start sm:items-center gap-3 flex-wrap bg-gradient-to-r from-[#F0FDF4] to-[#DCFCE7] border border-[#BBF7D0] rounded-card px-4 py-3 mb-4">
+        <span className="inline-flex items-center justify-center w-9 h-9 rounded-button bg-white border border-[#BBF7D0] flex-shrink-0">
+          <CheckCircle2 size={15} strokeWidth={1.75} className="text-[#15803D]" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="text-[13px] font-semibold text-text-primary">
+            Your CRM connect request is in
+          </div>
+          <div className="text-[12px] text-text-secondary mt-0.5">
+            Action on your side is complete. Our team will reach out to wire up the integration. Bulk and single lookup still work in the meantime.
+          </div>
+        </div>
+        <span className="inline-flex items-center gap-1.5 h-7 px-2.5 text-[11.5px] font-medium text-[#15803D] bg-white border border-[#BBF7D0] rounded-button flex-shrink-0">
+          Request submitted
+        </span>
+      </div>
+    );
+  }
+
   return (
     <div className="flex items-start sm:items-center gap-3 flex-wrap bg-gradient-to-r from-[#FFFBEB] to-[#FEF3C7] border border-[#FDE68A] rounded-card px-4 py-3 mb-4">
       <span className="inline-flex items-center justify-center w-9 h-9 rounded-button bg-white border border-[#FDE68A] flex-shrink-0">
@@ -23,10 +47,10 @@ export function CrmConnectBanner({ onConnect }: NudgeProps) {
       </span>
       <div className="min-w-0 flex-1">
         <div className="text-[13px] font-semibold text-text-primary">
-          Your CRM isn’t connected yet
+          Your CRM isn&rsquo;t connected yet
         </div>
         <div className="text-[12px] text-text-secondary mt-0.5">
-          Connect Salesforce, HubSpot, Zoho, LeadSquared, or a custom webhook to enrich leads automatically the moment they hit your CRM — and write the enriched data back to the same record.
+          Connect Salesforce, HubSpot, Zoho, LeadSquared, or a custom webhook to enrich leads automatically the moment they hit your CRM, and write the enriched data back to the same record.
         </div>
       </div>
       <button
@@ -115,7 +139,7 @@ export function CrmConnectHero({ onConnect, onManual }: NudgeProps) {
             n={1}
             icon={<UserSearch size={13} strokeWidth={1.75} />}
             title="Lead lands in CRM"
-            body="Web form, API, native entry, chat, or import — Revspot watches every channel."
+            body="Web form, API, native entry, chat, or import, Revspot watches every channel."
           />
           <Step
             n={2}

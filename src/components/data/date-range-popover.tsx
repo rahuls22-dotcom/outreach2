@@ -1,7 +1,7 @@
 "use client";
 
 // Custom date range popover. Same calendar visuals as the global dashboard
-// date-range-selector, trimmed to a single calendar + apply/cancel — no
+// date-range-selector, trimmed to a single calendar + apply/cancel, no
 // compare period UI. Anchors to its trigger button (positioned by caller).
 
 import { useEffect, useRef, useState } from "react";

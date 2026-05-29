@@ -1,6 +1,6 @@
 "use client";
 
-// /contact-extraction/operations — where extraction actually happens (demo).
+// /contact-extraction/operations, where extraction actually happens (demo).
 
 import { useRouter } from "next/navigation";
 

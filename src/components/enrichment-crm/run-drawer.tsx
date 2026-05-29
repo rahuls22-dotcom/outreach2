@@ -12,7 +12,12 @@ import {
   useEnrichmentCrmStore,
   type RunRecord,
 } from "@/lib/enrichment-crm-data";
+import { useDemoMode } from "@/lib/demo-mode";
 import { LeadProfileCard } from "@/components/lead/lead-profile-card";
+
+// No-storage variant treats runs older than this many days as expired:
+// downloads, CRM push, audience build all disappear.
+const NO_STORAGE_EXPIRY_DAYS = 3;
 
 interface RunDrawerProps {
   run: RunRecord | null;
@@ -29,6 +34,12 @@ export function RunDrawer({ run: runProp, onClose, onBuildAudience }: RunDrawerP
     runProp ? s.runs.find((r) => r.id === runProp.id) ?? runProp : null,
   );
   const run = liveRun;
+
+  const { isEnrichmentNoStorage } = useDemoMode();
+  const expired =
+    run != null &&
+    isEnrichmentNoStorage &&
+    (Date.now() - new Date(run.startedAt).getTime()) / 86_400_000 > NO_STORAGE_EXPIRY_DAYS;
 
   useEffect(() => {
     if (!run) return;
@@ -78,14 +89,22 @@ export function RunDrawer({ run: runProp, onClose, onBuildAudience }: RunDrawerP
               <LeadsSection run={run} />
               <Divider />
               <CreditsSection run={run} />
-              {run.status === "done" && (
+              {run.status === "done" && !expired && (
                 <>
                   <Divider />
                   <PushToCrmSection run={run} />
                 </>
               )}
-              <Divider />
-              <ActionsSection run={run} onBuildAudience={() => onBuildAudience(run)} />
+              {!expired && (
+                <>
+                  <Divider />
+                  <ActionsSection
+                    run={run}
+                    onBuildAudience={() => onBuildAudience(run)}
+                    noStorage={isEnrichmentNoStorage}
+                  />
+                </>
+              )}
             </>
           )}
 
@@ -247,7 +266,7 @@ function PushToCrmSection({ run }: { run: RunRecord }) {
       <SectionLabel>Push to CRM</SectionLabel>
 
       {!sync || sync.status === "not_pushed" ? (
-        // Idle — primary CTA
+        // Idle, primary CTA
         <>
           <p className="text-[12px] text-text-secondary mt-2 leading-snug">
             Send {run.leadsSuccess.toLocaleString("en-IN")} enriched leads to {providerLabel} ({conn.accountName}).
@@ -261,7 +280,7 @@ function PushToCrmSection({ run }: { run: RunRecord }) {
           </div>
         </>
       ) : isPending ? (
-        // Pending — disabled button + spinner pill
+        // Pending, disabled button + spinner pill
         <>
           <div className="flex items-center gap-2 mt-2">
             <span className="inline-flex items-center gap-1.5 text-[12px] font-medium px-2.5 py-1 rounded-badge bg-[#EFF6FF] text-[#1D4ED8]">
@@ -274,7 +293,7 @@ function PushToCrmSection({ run }: { run: RunRecord }) {
           </p>
         </>
       ) : isSynced ? (
-        // Synced — success pill + counts + re-push
+        // Synced, success pill + counts + re-push
         <>
           <div className="flex items-center gap-2 mt-2">
             <span className="inline-flex items-center gap-1.5 text-[12px] font-medium px-2.5 py-1 rounded-badge bg-[#F0FDF4] text-[#15803D]">
@@ -300,7 +319,7 @@ function PushToCrmSection({ run }: { run: RunRecord }) {
           </div>
         </>
       ) : isFailed ? (
-        // Failed — error state + retry
+        // Failed, error state + retry
         <>
           <div className="flex items-center gap-2 mt-2">
             <span className="inline-flex items-center gap-1.5 text-[12px] font-medium px-2.5 py-1 rounded-badge bg-[#FEF2F2] text-[#DC2626]">
@@ -334,7 +353,15 @@ function policyLabel(p: string): string {
   return p;
 }
 
-function ActionsSection({ run, onBuildAudience }: { run: RunRecord; onBuildAudience: () => void }) {
+function ActionsSection({
+  run,
+  onBuildAudience,
+  noStorage,
+}: {
+  run: RunRecord;
+  onBuildAudience: () => void;
+  noStorage: boolean;
+}) {
   if (run.status !== "done") return null;
   return (
     <section className="p-5">
@@ -353,6 +380,11 @@ function ActionsSection({ run, onBuildAudience }: { run: RunRecord; onBuildAudie
           Build audience
         </ActionBtn>
       </div>
+      {noStorage && (
+        <p className="text-[11.5px] text-text-tertiary mt-3 leading-snug">
+          Available for 7 days from the time enrichment completes.
+        </p>
+      )}
     </section>
   );
 }
@@ -426,7 +458,7 @@ function ActionBtn({ onClick, children, primary }: { onClick: () => void; childr
 }
 
 function download(run: RunRecord, format: "csv" | "xlsx") {
-  const content = `# Enriched export — ${format.toUpperCase()}\n# Run: ${run.id}\n# File: ${run.filename}\n# Leads: ${run.leadsSuccess}/${run.leadsTotal}\n# Backend wires real export.\n`;
+  const content = `# Enriched export, ${format.toUpperCase()}\n# Run: ${run.id}\n# File: ${run.filename}\n# Leads: ${run.leadsSuccess}/${run.leadsTotal}\n# Backend wires real export.\n`;
   const mime = format === "csv" ? "text/csv" : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
   const blob = new Blob([content], { type: mime });
   const url = URL.createObjectURL(blob);

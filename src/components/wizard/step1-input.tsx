@@ -226,7 +226,7 @@ export function Step1CampaignInput({ onNext }: Step1Props) {
           <p className="text-[12px] text-text-secondary mt-0.5">Help the AI understand your product with offer, campaign brief, and brochures.</p>
         </div>
 
-        {/* Campaign Brief — required */}
+        {/* Campaign Brief, required */}
         <TextAreaField label="Campaign Brief" required
           placeholder="Describe the campaign: target audience, positioning, key messages, competitors to beat..."
           value={campaignBrief} onChange={setCampaignBrief} rows={4} />
@@ -259,7 +259,7 @@ export function Step1CampaignInput({ onNext }: Step1Props) {
           )}
         </div>
 
-        {/* 5. Project Website — required */}
+        {/* 5. Project Website, required */}
         <TextField label="Project Website" required
           placeholder="https://godrejproperties.com/godrej-air" value={websiteUrl} onChange={setWebsiteUrl}
           helper="Used as context for AI to understand the project better" />
@@ -268,7 +268,7 @@ export function Step1CampaignInput({ onNext }: Step1Props) {
         <TextField label="Offer" placeholder="e.g., Godrej Reflections Habitat, 3BHK Launch Offer"
           value={offer} onChange={setOffer} />
 
-        {/* 7. RERA Number — optional */}
+        {/* 7. RERA Number, optional */}
         <TextField label="RERA Number" placeholder="e.g., PRM/KA/RERA/1251/446/PR/170730/001234"
           value={reraNumber} onChange={setReraNumber}
           helper="Optional. Shown on ads where legally required." />

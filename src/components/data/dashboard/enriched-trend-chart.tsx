@@ -1,7 +1,10 @@
 "use client";
 
-// Stacked area: number of enriched vs not-enriched/failed leads per
-// bucket. Bucketing (daily vs weekly) decided by trend-bucketing.pickBucketing().
+// Overlapping areas: total leads submitted for enrichment per bucket vs
+// the subset that actually got enriched. Submitted = enriched + failed +
+// not_enriched (everything that came in). Enriched = succeeded. The
+// enriched area sits inside the submitted area, the gap visually = the
+// not-yet-enriched / failed bucket. Bucketing decided by pickBucketing().
 
 import { useMemo } from "react";
 import {
@@ -26,10 +29,9 @@ interface Props {
 interface TrendPoint {
   bucket: string;
   date: string;
+  submitted: number;
   enriched: number;
-  failed: number;
   enrichedPct: number;
-  failedPct: number;
 }
 
 export function EnrichedTrendChart({ profiles, range, bounds }: Props) {
@@ -71,25 +73,29 @@ export function EnrichedTrendChart({ profiles, range, bounds }: Props) {
           }}
           formatter={(value, name) => [
             (value as number).toLocaleString("en-IN"),
-            name === "enriched" ? "Enriched" : "Not enriched / Failed",
+            name === "submitted" ? "Submitted" : "Enriched",
           ]}
           labelFormatter={(label) => label}
+          // Force order: Submitted on top, Enriched below.
+          itemSorter={(item) => (item.dataKey === "submitted" ? 0 : 1)}
         />
+        {/* Outer envelope = total leads given for enrichment */}
+        <Area
+          type="monotone"
+          dataKey="submitted"
+          stroke="#D4B96A"
+          fill="#D4B96A"
+          fillOpacity={0.3}
+          strokeWidth={1.5}
+        />
+        {/* Inner = subset that actually got enriched */}
         <Area
           type="monotone"
           dataKey="enriched"
-          stackId="1"
-          stroke="#22C55E"
-          fill="#22C55E"
-          fillOpacity={0.55}
-        />
-        <Area
-          type="monotone"
-          dataKey="failed"
-          stackId="1"
-          stroke="#F59E0B"
-          fill="#F59E0B"
-          fillOpacity={0.55}
+          stroke="#5BA3A3"
+          fill="#5BA3A3"
+          fillOpacity={0.65}
+          strokeWidth={1.5}
         />
       </AreaChart>
     </ResponsiveContainer>
@@ -102,32 +108,30 @@ function buildTrend(
   bounds: RangeBounds,
 ): TrendPoint[] {
   const mode = pickBucketing(range, bounds);
-  const byBucket = new Map<string, { enriched: number; failed: number }>();
+  const byBucket = new Map<string, { submitted: number; enriched: number }>();
   for (const p of profiles) {
     const ts = new Date(p.startedAt).getTime();
     if (Number.isNaN(ts)) continue;
     const k = bucketKey(ts, mode);
     let row = byBucket.get(k);
     if (!row) {
-      row = { enriched: 0, failed: 0 };
+      row = { submitted: 0, enriched: 0 };
       byBucket.set(k, row);
     }
+    // Every record that came in counts as "submitted for enrichment".
+    row.submitted++;
     if (p.status === "enriched") row.enriched++;
-    else if (p.status === "failed" || p.status === "not_enriched") row.failed++;
   }
 
   const points: TrendPoint[] = [];
   for (const [k, v] of byBucket) {
-    const total = v.enriched + v.failed;
-    const enrichedPct = total === 0 ? 0 : Math.round((v.enriched / total) * 100);
-    const failedPct = total === 0 ? 0 : 100 - enrichedPct;
+    const enrichedPct = v.submitted === 0 ? 0 : Math.round((v.enriched / v.submitted) * 100);
     points.push({
       bucket: k,
       date: formatBucketLabel(k),
+      submitted: v.submitted,
       enriched: v.enriched,
-      failed: v.failed,
       enrichedPct,
-      failedPct,
     });
   }
   points.sort((a, b) => a.bucket.localeCompare(b.bucket));

@@ -1,17 +1,16 @@
 "use client";
 
-// Sub-tabs under the Enrichment primary tab. Three input modes only:
-//   CRM         — connected CRM activity / connect flow
-//   Bulk upload — CSV upload composer + history
-//   Single      — single-lead lookup composer + history
+// Sub-tabs under the Enrichment primary tab. Two input modes:
+//   Bulk upload, CSV upload composer + history
+//   Single     , single-lead lookup composer + history
 //
 // The unified "Enriched leads" output DB lives on its own route at
 // /data/enrichment/leads (linked from the page header's primary action), so it
 // stays out of this tab strip and scales when more tools get their own DBs.
 
-import { Activity, Search, Upload, type LucideIcon } from "lucide-react";
+import { Search, Upload, type LucideIcon } from "lucide-react";
 
-export type EnrichSubTabKey = "crm" | "bulk" | "single";
+export type EnrichSubTabKey = "bulk" | "single";
 
 interface TabDef {
   key: EnrichSubTabKey;
@@ -20,7 +19,6 @@ interface TabDef {
 }
 
 const TABS: TabDef[] = [
-  { key: "crm",    label: "CRM",         icon: Activity },
   { key: "bulk",   label: "Bulk upload", icon: Upload },
   { key: "single", label: "Single",      icon: Search },
 ];

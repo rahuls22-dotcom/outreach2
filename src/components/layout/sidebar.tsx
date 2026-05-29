@@ -24,14 +24,28 @@ import {
   Database,
   ScanLine,
   ListChecks,
+  Lock,
+  PhoneCall,
 } from "lucide-react";
 import { useDemoMode } from "@/lib/demo-mode";
+import { usePlanMode } from "@/lib/plan-mode";
 import { useSpotStore } from "@/lib/spot/store";
 import { SpotMark } from "@/components/spot/spot-mark";
 import { WorkspaceSwitcher, UserRolePill } from "@/components/layout/workspace-switcher";
 import { useCurrentUser } from "@/lib/workspace-store";
 
 const dashboardItem = { name: "Dashboard", href: "/dashboard", icon: LayoutGrid };
+
+// When enrichment-only plan is on, only these hrefs survive in the Tools nav.
+// All other sections (Lead Generation, CRM, Workspace) are hidden entirely.
+const ENRICHMENT_ONLY_HREFS = new Set(["/enrichment", "/contact-extraction", "/agents-mvp"]);
+
+// Extra section appended in enrichment-only mode. Routes exist but content is
+// stub'd (someone else is building these out).
+const ENRICHMENT_ONLY_EXTRAS = [
+  { name: "Settings",     href: "/settings",     icon: Settings },
+  { name: "Integrations", href: "/integrations", icon: Plug },
+];
 
 const navSections = [
   {
@@ -55,8 +69,9 @@ const navSections = [
         href: "/enrichment",
         icon: UserSearch,
         children: [
-          { name: "Enrich",         href: "/enrichment/operations", icon: Activity },
-          { name: "Enriched leads", href: "/enrichment/database",   icon: Database },
+          { name: "Dashboard",          href: "/enrichment",            icon: LayoutGrid },
+          { name: "Enrich",             href: "/enrichment/operations", icon: Activity },
+          { name: "Enrichment records", href: "/enrichment/database",   icon: Database },
         ],
       },
       {
@@ -69,7 +84,7 @@ const navSections = [
         ],
       },
       { name: "Creatives", href: "/creatives", icon: ImageIcon },
-      { name: "Agents", href: "/agents-mvp", icon: Zap },
+      { name: "AI calling agents", href: "/agents-mvp", icon: PhoneCall },
       { name: "Audiences", href: "/audiences", icon: Globe, comingSoon: true },
       { name: "Integrations", href: "/integrations", icon: Plug, comingSoon: true },
     ],
@@ -84,7 +99,8 @@ const navSections = [
 
 export function Sidebar() {
   const pathname = usePathname() || "";
-  const { isEmpty, toggle } = useDemoMode();
+  const { isEmpty, toggle, enrichmentVariant, setEnrichmentVariant } = useDemoMode();
+  const { enrichmentOnly, toggle: togglePlan } = usePlanMode();
   const askSpot = useSpotStore((s) => s.askSpot);
   const spotOpen = useSpotStore((s) => s.open);
   const user = useCurrentUser();
@@ -109,11 +125,17 @@ export function Sidebar() {
     return pathname === href;
   };
 
-  // Parent gets "active" treatment for any sub-route — including its children —
+  // Parent gets "active" treatment for any sub-route, including its children —
   // EXCEPT we want the parent's row not to look pressed while a child is the
   // current page. So highlight parent only when exactly on it.
   const isActiveForParent = (item: { href: string; children?: { href: string }[] }) => {
-    if (item.children && item.children.length > 0) return isExactlyAt(item.href);
+    if (item.children && item.children.length > 0) {
+      // If a child shares the parent's href (parent doubles as a child route),
+      // let that child own the active highlight, don't double-highlight.
+      const childOwnsParentRoute = item.children.some((c) => c.href === item.href);
+      if (childOwnsParentRoute) return false;
+      return isExactlyAt(item.href);
+    }
     return isUnder(item.href);
   };
 
@@ -126,7 +148,7 @@ export function Sidebar() {
 
   return (
     <aside className="fixed left-0 top-0 h-screen w-sidebar bg-white border-r border-border flex flex-col z-50">
-      {/* Workspace switcher — sits in the brand row; the workspace mark IS
+      {/* Workspace switcher, sits in the brand row; the workspace mark IS
           the brand mark in this product (Revspot is implicit). */}
       <div className="px-2 pt-3 pb-2 border-b border-border-subtle">
         <WorkspaceSwitcher />
@@ -134,7 +156,8 @@ export function Sidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto px-3 py-1 pb-2">
-        {/* Dashboard + Spot — standalone at top */}
+        {/* Dashboard + Spot, standalone at top. Hidden in enrichment-only mode. */}
+        {!enrichmentOnly && (
         <div className="mb-3 space-y-0.5">
           <Link href={dashboardItem.href} className={navLinkClass(isUnder(dashboardItem.href))} style={{ fontSize: "13.5px" }}>
             <dashboardItem.icon size={16} strokeWidth={1.5} />
@@ -162,13 +185,44 @@ export function Sidebar() {
             />
           </button>
         </div>
+        )}
 
         {/* Sections */}
-        {navSections.map((section) => (
+        {navSections.map((section) => {
+          const items = enrichmentOnly
+            ? section.items.filter((it) => ENRICHMENT_ONLY_HREFS.has(it.href))
+            : section.items;
+          if (items.length === 0) return null;
+          return (
           <div key={section.label} className="mb-3">
             <div className="label-section px-2 mb-1">{section.label}</div>
             <div className="space-y-0.5">
-              {section.items.map((item) => {
+              {items.map((item) => {
+                const lockedHref =
+                  enrichmentOnly && item.href === "/contact-extraction"
+                    ? "/locked/contact-extraction"
+                    : enrichmentOnly && item.href === "/agents-mvp"
+                    ? "/locked/ai-calling-agents"
+                    : null;
+                if (lockedHref) {
+                  const locked = isUnder(lockedHref);
+                  return (
+                    <Link
+                      key={item.href}
+                      href={lockedHref}
+                      className={`relative flex items-center gap-2.5 px-2 h-8 rounded-[6px] transition-colors duration-150 ${
+                        locked
+                          ? "bg-surface-secondary text-text-primary font-medium"
+                          : "text-text-tertiary hover:bg-surface-secondary/60 hover:text-text-secondary"
+                      }`}
+                      style={{ fontSize: "13.5px" }}
+                    >
+                      <item.icon size={16} strokeWidth={1.5} />
+                      <span>{item.name}</span>
+                      <Lock size={11} strokeWidth={1.75} className="ml-auto text-text-tertiary" aria-label="Locked" />
+                    </Link>
+                  );
+                }
                 const cs = "comingSoon" in item && item.comingSoon;
                 if (cs) {
                   return (
@@ -223,8 +277,27 @@ export function Sidebar() {
                     </Link>
                     {hasChildren && isExpanded && (
                       <div className="mt-0.5 mb-1 ml-[14px] pl-3 border-l border-border-subtle space-y-0.5">
-                        {children!.map((child) => {
-                          const childActive = isUnder(child.href);
+                        {children!
+                          .filter((child) => {
+                            // No-storage clients have no persistent records DB,
+                            // so the "Enrichment records" sub-tab is hidden.
+                            // The route still exists as a fallback for direct
+                            // links and renders an explainer empty state.
+                            if (
+                              enrichmentVariant === "no-storage" &&
+                              child.href === "/enrichment/database"
+                            ) {
+                              return false;
+                            }
+                            return true;
+                          })
+                          .map((child) => {
+                          // When child shares the parent's href, use exact match
+                          // so it doesn't stay highlighted on sibling sub-routes.
+                          const childActive =
+                            child.href === item.href
+                              ? pathname === child.href
+                              : isUnder(child.href);
                           return (
                             <Link
                               key={child.href}
@@ -248,11 +321,36 @@ export function Sidebar() {
               })}
             </div>
           </div>
-        ))}
+          );
+        })}
+
+        {/* Enrichment-only extras, Settings + Integrations sit below the Tools
+            section. Both routes currently render an "in development" stub. */}
+        {enrichmentOnly && (
+          <div className="mb-3">
+            <div className="label-section px-2 mb-1">Workspace</div>
+            <div className="space-y-0.5">
+              {ENRICHMENT_ONLY_EXTRAS.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={navLinkClass(isUnder(item.href))}
+                    style={{ fontSize: "13.5px" }}
+                  >
+                    <Icon size={16} strokeWidth={1.5} />
+                    <span>{item.name}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </nav>
 
-      {/* Demo mode toggle */}
-      <div className="px-3 pb-2">
+      {/* Demo mode toggles */}
+      <div className="px-3 pb-2 space-y-1.5">
         <button
           onClick={toggle}
           className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-[6px] text-[11px] font-medium transition-all duration-150 ${
@@ -264,6 +362,49 @@ export function Sidebar() {
           {isEmpty ? <EyeOff size={12} strokeWidth={2} /> : <Eye size={12} strokeWidth={2} />}
           {isEmpty ? "Empty State Mode ON" : "Preview Empty States"}
         </button>
+        <button
+          onClick={togglePlan}
+          className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-[6px] text-[11px] font-medium transition-all duration-150 ${
+            enrichmentOnly
+              ? "bg-[#EEF2FF] text-[#3730A3] border border-[#C7D2FE]"
+              : "bg-surface-secondary text-text-tertiary hover:text-text-secondary"
+          }`}
+        >
+          <Lock size={12} strokeWidth={2} />
+          {enrichmentOnly ? "Enrichment-only Plan ON" : "Preview Enrichment-only Plan"}
+        </button>
+
+        {/* Enrichment demo view (4 independent radio chips). Drives every
+            /enrichment tab from one place so the user can A/B states without
+            leaving the sidebar. */}
+        <div className="pt-1">
+          <div className="px-1 pb-1 text-[9.5px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">
+            Enrichment demo view
+          </div>
+          <div className="grid grid-cols-2 gap-1">
+            {[
+              { key: "populated",  label: "Populated" },
+              { key: "empty",      label: "Empty" },
+              { key: "no-crm",     label: "No CRM" },
+              { key: "no-storage", label: "No storage" },
+            ].map((opt) => {
+              const active = enrichmentVariant === opt.key;
+              return (
+                <button
+                  key={opt.key}
+                  onClick={() => setEnrichmentVariant(opt.key as typeof enrichmentVariant)}
+                  className={`px-2 py-1.5 rounded-[6px] text-[11px] font-medium transition-all duration-150 ${
+                    active
+                      ? "bg-text-primary text-white"
+                      : "bg-surface-secondary text-text-tertiary hover:text-text-secondary"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
       {/* User section */}

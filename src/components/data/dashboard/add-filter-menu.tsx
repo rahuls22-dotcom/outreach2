@@ -13,7 +13,7 @@ interface Props {
   open: boolean;
   onClose: () => void;
   onApply: (clause: FilterClause) => void;
-  /** Dims already in the active filter set — disabled in the picker. */
+  /** Dims already in the active filter set, disabled in the picker. */
   activeDims: FilterDim[];
 }
 

@@ -10,7 +10,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Briefcase, Calendar, ChevronDown, ChevronLeft, ChevronRight, CircleDollarSign, FileSpreadsheet, Search, Upload, X } from "lucide-react";
+import { Briefcase, Calendar, ChevronDown, ChevronLeft, ChevronRight, CircleDollarSign, Database, FileSpreadsheet, Search, Upload, X } from "lucide-react";
+import Link from "next/link";
 
 import {
   CRM_NAMES_POOL,
@@ -47,19 +48,26 @@ interface LeadRow {
 interface Props {
   /** @deprecated rows now open a lead-profile drawer; prop kept for caller back-compat. */
   onOpenRun?: (run: RunRecord) => void;
+  /** When true, drop the "crm" source from rows and hide the CRM filter option
+   *  (used by the No-CRM variant). */
+  dropCrmSource?: boolean;
 }
 
 const PAGE_SIZE = 50;
 
-// Lead is the only column with content variance, so give it the most growth.
-// Enrichment also gets a small fr so wide viewports distribute extra space
-// instead of pooling it all in the Lead column. Status needs ~128px so the
-// "Not enriched" pill stays single-line; Started stays tight.
+// Every column gets an fr weight so wide viewports distribute slack evenly
+// across all cells instead of pooling whitespace in one spot. Weights
+// roughly match content needs: LEAD widest (name + email), ENRICHMENT
+// medium (two pills), STATUS/STARTED/SOURCE/LEAD ID equal small.
 const TABLE_COLS =
-  "grid-cols-[64px_128px_minmax(220px,2fr)_minmax(140px,1fr)_128px_84px]";
+  "grid-cols-[minmax(72px,1fr)_minmax(128px,1.4fr)_minmax(220px,1.6fr)_minmax(180px,1.8fr)_minmax(120px,1.2fr)_minmax(80px,0.9fr)]";
 
-export function EnrichedLeads({ onOpenRun: _onOpenRun }: Props) {
-  const runs = useEnrichmentCrmStore((s) => s.runs);
+export function EnrichedLeads({ onOpenRun: _onOpenRun, dropCrmSource = false }: Props) {
+  const allRuns = useEnrichmentCrmStore((s) => s.runs);
+  const runs = useMemo(
+    () => (dropCrmSource ? allRuns.filter((r) => r.source !== "crm") : allRuns),
+    [allRuns, dropCrmSource],
+  );
   const [selectedLead, setSelectedLead] = useState<LeadRow | null>(null);
 
   const [range, setRange] = useState<DateRange>("14d");
@@ -117,9 +125,13 @@ export function EnrichedLeads({ onOpenRun: _onOpenRun }: Props) {
     setSelectedLead(lead);
   };
 
+  if (allLeads.length === 0) {
+    return <EnrichedLeadsEmpty />;
+  }
+
   return (
     <div className="space-y-5">
-      {/* Page-level filter bar — drives both KPIs and the table below */}
+      {/* Page-level filter bar, drives both KPIs and the table below */}
       <div>
         <div className="flex items-center gap-2 flex-wrap">
           {/* Search */}
@@ -152,7 +164,7 @@ export function EnrichedLeads({ onOpenRun: _onOpenRun }: Props) {
             onChange={setUploadF}
             options={[
               { v: "any",    l: "Any" },
-              { v: "crm",    l: "CRM" },
+              ...(dropCrmSource ? [] : [{ v: "crm" as const, l: "CRM" }]),
               { v: "bulk",   l: "Bulk" },
               { v: "single", l: "Single" },
             ]}
@@ -257,7 +269,7 @@ export function EnrichedLeads({ onOpenRun: _onOpenRun }: Props) {
         )}
       </div>
 
-      {/* KPI strip — reflects current filters */}
+      {/* KPI strip, reflects current filters */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Kpi label="Total leads"  value={totalLeads.toLocaleString()}    tint="neutral" />
         <Kpi label="Enriched"     value={enrichedC.toLocaleString()}     tint="good" />
@@ -267,7 +279,7 @@ export function EnrichedLeads({ onOpenRun: _onOpenRun }: Props) {
 
       {/* Table */}
       <div className="bg-white border border-border rounded-card overflow-hidden">
-        <div className={`grid ${TABLE_COLS} gap-6 px-5 py-3 text-[10.5px] font-medium uppercase tracking-[0.4px] text-text-tertiary bg-surface-page/40 border-b border-border-subtle`}>
+        <div className={`grid ${TABLE_COLS} gap-4 px-5 py-3 text-[10.5px] font-medium uppercase tracking-[0.4px] text-text-tertiary bg-surface-page/40 border-b border-border-subtle`}>
           <div>Source</div>
           <div>Lead ID</div>
           <div>Lead</div>
@@ -287,7 +299,7 @@ export function EnrichedLeads({ onOpenRun: _onOpenRun }: Props) {
               <li
                 key={l.id}
                 onClick={() => openLead(l)}
-                className={`grid ${TABLE_COLS} gap-6 px-5 py-3.5 items-center cursor-pointer hover:bg-surface-page/40 transition-colors`}
+                className={`grid ${TABLE_COLS} gap-4 px-5 py-3.5 items-center cursor-pointer hover:bg-surface-page/40 transition-colors`}
               >
                 <div>
                   <SourcePill source={l.source} />
@@ -355,6 +367,64 @@ export function EnrichedLeads({ onOpenRun: _onOpenRun }: Props) {
   );
 }
 
+export function EnrichedLeadsEmpty() {
+  return (
+    <div className="bg-white border border-border rounded-card px-6 py-14">
+      <div className="max-w-[520px] mx-auto text-center">
+        <div className="w-12 h-12 rounded-card bg-surface-secondary border border-border-subtle flex items-center justify-center mx-auto mb-4">
+          <Database size={20} strokeWidth={1.5} className="text-text-secondary" />
+        </div>
+        <h3 className="text-[15px] font-semibold text-text-primary mb-1.5">
+          No enrichment records yet
+        </h3>
+        <p className="text-[12.5px] text-text-secondary leading-relaxed mb-6">
+          Records show up here as soon as a lead is enriched, from your CRM, a bulk upload, or a single lookup.
+        </p>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-left">
+          <Link
+            href="/enrichment/operations"
+            className="group flex items-start gap-3 p-3.5 bg-white border border-border rounded-card hover:border-text-primary/40 hover:shadow-[0_1px_3px_rgba(15,15,15,0.04)] transition-all"
+          >
+            <div className="w-8 h-8 rounded-[6px] bg-surface-secondary flex items-center justify-center flex-shrink-0">
+              <Upload size={14} strokeWidth={1.75} className="text-text-secondary" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-[12.5px] font-semibold text-text-primary mb-0.5">
+                Bulk upload
+              </div>
+              <div className="text-[11.5px] text-text-tertiary leading-snug">
+                Drop a CSV of leads to enrich in one go.
+              </div>
+            </div>
+          </Link>
+
+          <Link
+            href="/enrichment/operations"
+            className="group flex items-start gap-3 p-3.5 bg-white border border-border rounded-card hover:border-text-primary/40 hover:shadow-[0_1px_3px_rgba(15,15,15,0.04)] transition-all"
+          >
+            <div className="w-8 h-8 rounded-[6px] bg-surface-secondary flex items-center justify-center flex-shrink-0">
+              <Search size={14} strokeWidth={1.75} className="text-text-secondary" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-[12.5px] font-semibold text-text-primary mb-0.5">
+                Single lookup
+              </div>
+              <div className="text-[11.5px] text-text-tertiary leading-snug">
+                Enrich one lead by name, email, or phone.
+              </div>
+            </div>
+          </Link>
+        </div>
+
+        <div className="mt-5 pt-5 border-t border-border-subtle text-[11.5px] text-text-tertiary">
+          Connected CRM? New leads auto-enrich and land here within minutes.
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Flatten runs to per-lead rows ─────────────────────────────────────────
 // NOTE: Indexing scheme (seed=hashCode(run.id), step=i*7) is mirrored in
 // src/lib/dashboard/flatten-leads.ts so the dashboard and this table show
@@ -398,7 +468,7 @@ function flattenRunsToLeads(runs: RunRecord[]): LeadRow[] {
       continue;
     }
 
-    // Bulk — synthesize one row per lead from the deterministic name pool.
+    // Bulk, synthesize one row per lead from the deterministic name pool.
     // ~70% of bulk leads get a lead_id after write-back; the rest don't (pending push, mapping miss).
     const total = r.leadsTotal || 0;
     const success = Math.min(total, r.leadsSuccess || 0);

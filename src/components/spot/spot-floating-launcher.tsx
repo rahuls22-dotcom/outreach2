@@ -8,7 +8,7 @@ export function SpotFloatingLauncher() {
   const open = useSpotStore((s) => s.open);
   const askSpot = useSpotStore((s) => s.askSpot);
   const pathname = usePathname();
-  // Hide Ask Spot launcher inside Data products — they're operational dashboards,
+  // Hide Ask Spot launcher inside Data products, they're operational dashboards,
   // not coach-driven flows.
   if (pathname?.startsWith("/data")) return null;
   if (open) return null;

@@ -74,7 +74,7 @@ export default function CreateOutreachPage() {
           Set up a voice agent outreach campaign to call your contacts
         </p>
 
-        {/* Section 1 — Basics */}
+        {/* Section 1, Basics */}
         <div className="bg-white border border-border rounded-card p-6 mb-5">
           <h2 className="text-card-title text-text-primary mb-4">Basics</h2>
           <div className="space-y-4">
@@ -86,7 +86,7 @@ export default function CreateOutreachPage() {
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="e.g., Godrej Reflections — Lead Qualification"
+                placeholder="e.g., Godrej Reflections, Lead Qualification"
                 className="w-full h-10 px-3 text-[13px] border border-border rounded-input bg-white text-text-primary focus:outline-none focus:border-accent transition-colors duration-150 placeholder:text-text-tertiary"
               />
             </div>
@@ -135,7 +135,7 @@ export default function CreateOutreachPage() {
           </div>
         </div>
 
-        {/* Section 2 — Contacts */}
+        {/* Section 2, Contacts */}
         <div className="bg-white border border-border rounded-card p-6 mb-5">
           <h2 className="text-card-title text-text-primary mb-4">Contacts</h2>
 
@@ -224,7 +224,7 @@ export default function CreateOutreachPage() {
           )}
         </div>
 
-        {/* Section 3 — Scheduling */}
+        {/* Section 3, Scheduling */}
         <div className="bg-white border border-border rounded-card p-6 mb-6">
           <h2 className="text-card-title text-text-primary mb-4">Scheduling</h2>
           <div className="space-y-5">

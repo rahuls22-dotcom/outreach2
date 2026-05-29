@@ -1,6 +1,6 @@
 "use client";
 
-// /contact-extraction — base/Dashboard tab for the Contact extraction module.
+// /contact-extraction, base/Dashboard tab for the Contact extraction module.
 // Demo placeholder for the second data product.
 
 import { DataPageShell } from "@/components/data/data-page-shell";

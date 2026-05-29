@@ -1,14 +1,17 @@
 "use client";
 
-// Chart grid. The 5 preset cards (Source / Company tier / Seniority /
-// Geography / Income range) come first, followed by any user-built custom
-// cards, followed by the "+ Build a chart" tile that opens the dialog.
+// Chart grid. Two fixed rows of preset cards:
+//   Row 1, 3-up: Location · Years of experience · Company tier
+//   Row 2, 2-up: Net worth · Salary range
+// Followed by user-built custom cards, then the "+ Build a chart" tile.
 
 import { useState } from "react";
-import type {
-  ChartCardId,
-  CustomChartCard,
-  LeadProfile,
+import {
+  DEMOGRAPHIC_EXTRA_CARDS,
+  FINANCIAL_CHART_CARDS,
+  type ChartCardId,
+  type CustomChartCard,
+  type LeadProfile,
 } from "@/lib/dashboard/types";
 
 import { BreakdownChartCard } from "./breakdown-chart-card";
@@ -56,7 +59,8 @@ export function LeadExplorer({
   };
 
   return (
-    <section>
+    <section className="space-y-3">
+      {/* Demographic 3-up */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {defaultCards.map((cardId) => (
           <BreakdownChartCard
@@ -66,6 +70,34 @@ export function LeadExplorer({
             profiles={profiles}
           />
         ))}
+      </div>
+
+      {/* Age — single full-width horizontal bar row */}
+      <div className="grid grid-cols-1 gap-3">
+        {DEMOGRAPHIC_EXTRA_CARDS.map((cardId) => (
+          <BreakdownChartCard
+            key={cardId}
+            mode="preset"
+            cardId={cardId}
+            profiles={profiles}
+          />
+        ))}
+      </div>
+
+      {/* Financial 2-up: Net worth + Salary range */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {FINANCIAL_CHART_CARDS.map((cardId) => (
+          <BreakdownChartCard
+            key={cardId}
+            mode="preset"
+            cardId={cardId}
+            profiles={profiles}
+          />
+        ))}
+      </div>
+
+      {/* Custom-built cards + the add-tile */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {customCards.map((card) => (
           <BreakdownChartCard
             key={card.id}

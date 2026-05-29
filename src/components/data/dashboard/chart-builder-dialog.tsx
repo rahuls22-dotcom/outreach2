@@ -24,7 +24,7 @@ import { BreakdownChartCard } from "./breakdown-chart-card";
 interface Props {
   open: boolean;
   onClose: () => void;
-  /** All profiles in the active time/source window — for the live preview. */
+  /** All profiles in the active time/source window, for the live preview. */
   profiles: LeadProfile[];
   /** Existing card to edit (optional). When set, dialog opens pre-filled. */
   existing?: CustomChartCard;
@@ -140,7 +140,7 @@ export function ChartBuilderDialog({ open, onClose, profiles, existing, onSave }
               <div className="flex flex-wrap items-center gap-2">
                 {filters.length === 0 && (
                   <span className="text-[12px] text-text-tertiary">
-                    No filters — slice covers all leads in the active window.
+                    No filters, slice covers all leads in the active window.
                   </span>
                 )}
                 {filters.map((c, i) => (

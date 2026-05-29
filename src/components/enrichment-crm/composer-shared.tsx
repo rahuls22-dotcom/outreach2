@@ -5,7 +5,7 @@
 // single-mode inputs, bulk-mode file + column map, derived flags.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Upload, X, FileSpreadsheet } from "lucide-react";
+import { Upload, X, FileSpreadsheet, Download } from "lucide-react";
 import {
   CREDITS_PER_LEAD,
   type EnrichmentType,
@@ -51,7 +51,7 @@ export function useComposerState(initialTab: Tab = "bulk") {
   const toggleType = useCallback((t: EnrichmentType) => {
     setTypes((cur) => {
       const has = cur.includes(t);
-      // Block unticking the last remaining type — at least one must stay on.
+      // Block unticking the last remaining type, at least one must stay on.
       if (has && cur.length === 1) return cur;
       return has ? cur.filter((x) => x !== t) : [...cur, t];
     });
@@ -277,7 +277,7 @@ export type ComposerState = ReturnType<typeof useComposerState>;
 // ── Sub-components ──────────────────────────────────────────────
 
 export function TabSwitcher({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
-  // Prominent segmented pill — bigger surface, stronger active contrast, icon hint.
+  // Prominent segmented pill, bigger surface, stronger active contrast, icon hint.
   return (
     <div className="inline-flex items-center bg-surface-page border border-border rounded-[10px] p-1">
       {(["bulk", "single"] as Tab[]).map((t) => {
@@ -334,8 +334,44 @@ export function TypeCheckboxes({
   );
 }
 
+// Right-aligned per-lead cost summary for the top strip. Shown so the
+// user knows the unit price up front, before they pick a tab or drop a
+// file. Each type is dimmed when not currently selected so the active
+// cost stack reads as the live total.
+export function TypeCostInfo({ types }: { types: EnrichmentType[] }) {
+  const pro = CREDITS_PER_LEAD.professional;
+  const fin = CREDITS_PER_LEAD.financial;
+  const hasPro = types.includes("professional");
+  const hasFin = types.includes("financial");
+  return (
+    <div className="flex items-center gap-3 text-[11.5px] tabular-nums">
+      <span
+        className={`inline-flex items-center gap-1 ${
+          hasPro ? "text-text-secondary" : "text-text-tertiary"
+        }`}
+      >
+        <span>Professional</span>
+        <span className="text-text-tertiary">
+          · {pro} credit{pro === 1 ? "" : "s"}/lead
+        </span>
+      </span>
+      <span className="w-px h-3 bg-border-subtle" />
+      <span
+        className={`inline-flex items-center gap-1 ${
+          hasFin ? "text-text-secondary" : "text-text-tertiary"
+        }`}
+      >
+        <span>Financial</span>
+        <span className="text-text-tertiary">
+          · {fin} credit{fin === 1 ? "" : "s"}/lead
+        </span>
+      </span>
+    </div>
+  );
+}
+
 function CheckboxPill({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) {
-  // Quiet checkbox — no border, no fill. Just box + label. Active just darkens the text.
+  // Quiet checkbox, no border, no fill. Just box + label. Active just darkens the text.
   return (
     <button
       onClick={onClick}
@@ -357,8 +393,16 @@ function CheckboxPill({ active, label, onClick }: { active: boolean; label: stri
   );
 }
 
-// "Fields needed" reference card — adapts to checkbox selection
-export function FieldsNeededCard({ hasPro, hasFin }: { hasPro: boolean; hasFin: boolean }) {
+// "Fields needed" reference card, adapts to checkbox selection.
+// The variable "Download sample CSV" link lives inside the DropZone now,
+// not here, this card is purely a field-requirements reference.
+export function FieldsNeededCard({
+  hasPro,
+  hasFin,
+}: {
+  hasPro: boolean;
+  hasFin: boolean;
+}) {
   if (!hasPro && !hasFin) {
     return (
       <div className="p-4 bg-surface-page border border-border-subtle rounded-card">
@@ -367,7 +411,7 @@ export function FieldsNeededCard({ hasPro, hasFin }: { hasPro: boolean; hasFin: 
     );
   }
   return (
-    <div className="p-4 bg-surface-page border border-border-subtle rounded-card space-y-3">
+    <div className="p-4 bg-surface-page border border-border-subtle rounded-card flex flex-col gap-3">
       <div className="text-[11px] font-medium uppercase tracking-[0.4px] text-text-tertiary">
         Fields needed
       </div>
@@ -387,7 +431,7 @@ export function FieldsNeededCard({ hasPro, hasFin }: { hasPro: boolean; hasFin: 
   );
 }
 
-// Single-mode input set — fields appear/disappear based on selection
+// Single-mode input set, fields appear/disappear based on selection
 export function SingleInputsAdaptive({
   hasPro,
   hasFin,
@@ -509,15 +553,28 @@ export function FileCard({ file, rowCount, onClear }: { file: File; rowCount: nu
 export function DropZone({
   fileInputRef,
   onChosen,
+  hasPro,
+  hasFin,
   sampleHref,
   sampleName,
 }: {
   fileInputRef: React.MutableRefObject<HTMLInputElement | null>;
   onChosen: (f: File) => void;
-  sampleHref: string;
-  sampleName: string;
+  // Optional sample-CSV link rendered inside the dropbox. Label adapts to
+  // the selected enrichment types so the user grabs the right template.
+  hasPro?: boolean;
+  hasFin?: boolean;
+  sampleHref?: string;
+  sampleName?: string;
 }) {
   const [dragging, setDragging] = useState(false);
+  const showSample = sampleHref && sampleName && (hasPro || hasFin);
+  const sampleLabel =
+    hasPro && hasFin
+      ? "Download Professional + Financial sample CSV"
+      : hasFin
+      ? "Download Financial sample CSV"
+      : "Download Professional sample CSV";
   return (
     <div
       onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
@@ -540,14 +597,17 @@ export function DropZone({
         Drop CSV here or <span className="underline underline-offset-2">click to browse</span>
       </p>
       <p className="text-[11px] text-text-tertiary mt-1">CSV, XLSX, XLS up to 50 MB</p>
-      <a
-        href={sampleHref}
-        download={sampleName}
-        onClick={(e) => e.stopPropagation()}
-        className="text-[11px] text-text-secondary hover:text-text-primary underline underline-offset-2 mt-3"
-      >
-        Download sample CSV
-      </a>
+      {showSample && (
+        <a
+          href={sampleHref}
+          download={sampleName}
+          onClick={(e) => e.stopPropagation()}
+          className="mt-3 inline-flex items-center gap-1.5 text-[11.5px] text-text-secondary hover:text-text-primary underline underline-offset-2"
+        >
+          <Download size={11} strokeWidth={1.75} />
+          {sampleLabel}
+        </a>
+      )}
 
       <input
         ref={fileInputRef}

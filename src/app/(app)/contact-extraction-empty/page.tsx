@@ -1,6 +1,6 @@
 "use client";
 
-// /contact-extraction-empty — Dashboard tab in the "no CRM" demo variant.
+// /contact-extraction-empty, Dashboard tab in the "no CRM" demo variant.
 
 import { DataPageShell } from "@/components/data/data-page-shell";
 import { ContactExtractionDashboard } from "@/components/data/contact-extraction-dashboard";

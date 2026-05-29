@@ -42,12 +42,13 @@ export type FilterDim =
   | "company_tier"
   | "industry"
   | "annual_earnings"
+  | "net_worth"
   | "potential_tier"
   | "age_group"
   | "employed"
   | "iit_iim"
   | "mba"
-  // Expanded — enables richer chart builder.
+  // Expanded, enables richer chart builder.
   | "university_tier"
   | "engineer"
   | "years_of_experience"
@@ -68,21 +69,32 @@ export interface FilterClause {
 
 // ── Chart cards ───────────────────────────────────────────────────────────
 
-/** Default presets that ship in every dashboard. */
+/** Default presets that ship in every dashboard.
+ *  `location`, `years_of_experience`, `company_tier` render in the top 3-up grid.
+ *  `net_worth` and `salary_range` render in a dedicated 2-up financial row. */
 export type ChartCardId =
+  | "location"
+  | "years_of_experience"
   | "company_tier"
-  | "seniority"
-  | "geography"
-  | "income_range";
+  | "age_group"
+  | "net_worth"
+  | "salary_range";
 
+/** Top 3-up grid of demographic charts. */
 export const DEFAULT_CHART_CARDS: ChartCardId[] = [
+  "location",
+  "years_of_experience",
   "company_tier",
-  "seniority",
-  "geography",
-  "income_range",
 ];
 
-/** User-built chart card — pick any dim, scope with filters, give it a name. */
+/** Wide single-card row beneath the 3-up demographics. Renders as a
+ *  horizontal bar — visually distinct from the donut + column above. */
+export const DEMOGRAPHIC_EXTRA_CARDS: ChartCardId[] = ["age_group"];
+
+/** Financial 2-up row, rendered as a separate band beneath the defaults. */
+export const FINANCIAL_CHART_CARDS: ChartCardId[] = ["net_worth", "salary_range"];
+
+/** User-built chart card, pick any dim, scope with filters, give it a name. */
 export interface CustomChartCard {
   id: string;            // uuid
   name: string;          // user-supplied title
@@ -91,12 +103,12 @@ export interface CustomChartCard {
   createdAt: string;
 }
 
-/** Card slot in the grid — either one of the 5 presets or a custom build. */
+/** Card slot in the grid, either one of the 5 presets or a custom build. */
 export type DashboardChart =
   | { kind: "default"; id: ChartCardId }
   | { kind: "custom"; card: CustomChartCard };
 
-// ── Saved views (legacy — kept for storage migration) ─────────────────────
+// ── Saved views (legacy, kept for storage migration) ─────────────────────
 
 export interface SavedView {
   id: string;

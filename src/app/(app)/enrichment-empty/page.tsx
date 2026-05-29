@@ -1,6 +1,6 @@
 "use client";
 
-// /enrichment-empty — base/Dashboard tab for the Enrichment module
+// /enrichment-empty, base/Dashboard tab for the Enrichment module
 // in the "no CRM connected" demo variant.
 
 import { useState } from "react";
@@ -17,7 +17,7 @@ export default function EnrichmentEmptyDashboardPage() {
   const [customEnd, setCustomEnd] = useState<Date | null>(null);
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
 
-  // Empty variant — no profiles, counts default to 0.
+  // Empty variant, no profiles, counts default to 0.
   const headerAction = (
     <div className="flex items-center gap-2 flex-wrap justify-end">
       <SourceFilterPills value={sourceFilter} onChange={setSourceFilter} profiles={[]} />

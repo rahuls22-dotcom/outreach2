@@ -1,6 +1,6 @@
 "use client";
 
-// Recent runs table — single + bulk, unified.
+// Recent runs table, single + bulk, unified.
 // Columns: Run · Type · Status · Enriched · Credits · Started · (open)
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -21,15 +21,22 @@ interface HistoryTableProps {
   onView: (run: RunRecord) => void;
   /** When set, the source-filter chip is hidden and runs are locked to this source. */
   forceSource?: RunSource;
-  /** Title override — default "Enrichment history". */
+  /** Title override, default "Enrichment history". */
   title?: string;
+  /** Past-retention mode: hide Download + Build audience, keep the row as a
+   *  summary (file, enriched count, credits). Used in no-storage variant. */
+  summaryOnly?: boolean;
+  /** Per-row expiry. Rows older than this many days are treated as summaryOnly
+   *  (downloads + audience build no longer available). Used in no-storage to
+   *  mix recent actionable rows with older expired ones. */
+  summaryAfterDays?: number;
 }
 
 type TypeFilter = "all" | "professional" | "financial" | "both";
 type StatusFilter = "all" | RunStatus;
 type SourceFilter = "all" | RunSource;
 
-export function HistoryTable({ onView, forceSource, title }: HistoryTableProps) {
+export function HistoryTable({ onView, forceSource, title, summaryOnly = false, summaryAfterDays }: HistoryTableProps) {
   const runs = useEnrichmentCrmStore((s) => s.runs);
   const router = useRouter();
 
@@ -183,14 +190,20 @@ export function HistoryTable({ onView, forceSource, title }: HistoryTableProps) 
             )}
           </div>
         ) : (
-          filtered.map((run) => (
-            <Row
-              key={run.id}
-              run={run}
-              onView={() => onView(run)}
-              onBuildAudience={() => onBuildAudience(run)}
-            />
-          ))
+          filtered.map((run) => {
+            const ageDays = (Date.now() - new Date(run.startedAt).getTime()) / 86_400_000;
+            const expired = summaryAfterDays != null && ageDays > summaryAfterDays;
+            return (
+              <Row
+                key={run.id}
+                run={run}
+                onView={() => onView(run)}
+                onBuildAudience={() => onBuildAudience(run)}
+                summaryOnly={summaryOnly || expired}
+                expired={expired}
+              />
+            );
+          })
         )}
       </div>
     </div>
@@ -199,7 +212,7 @@ export function HistoryTable({ onView, forceSource, title }: HistoryTableProps) 
 
 // ── Row ─────────────────────────────────────────────────────────────
 
-function Row({ run, onView, onBuildAudience }: { run: RunRecord; onView: () => void; onBuildAudience: () => void }) {
+function Row({ run, onView, onBuildAudience, summaryOnly = false, expired = false }: { run: RunRecord; onView: () => void; onBuildAudience: () => void; summaryOnly?: boolean; expired?: boolean }) {
   const isInProgress = run.status === "in_progress";
   const enrichedNow = isInProgress
     ? Math.round((run.progressPct || 0) * run.leadsTotal / 100)
@@ -259,14 +272,14 @@ function Row({ run, onView, onBuildAudience }: { run: RunRecord; onView: () => v
 
       {/* Action: kebab menu */}
       <div onClick={(e) => e.stopPropagation()} className="flex items-center justify-end">
-        <RowMenu run={run} onView={onView} onBuildAudience={onBuildAudience} />
+        <RowMenu run={run} onView={onView} onBuildAudience={onBuildAudience} summaryOnly={summaryOnly} />
       </div>
     </div>
   );
 }
 
 function TypePill({ types }: { types: EnrichmentType[] }) {
-  // One tag per type — full name, color-coded.
+  // One tag per type, full name, color-coded.
   return (
     <div className="flex flex-wrap items-center gap-1">
       {types.map((t) => (
@@ -329,10 +342,12 @@ function RowMenu({
   run,
   onView,
   onBuildAudience,
+  summaryOnly = false,
 }: {
   run: RunRecord;
   onView: () => void;
   onBuildAudience: () => void;
+  summaryOnly?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -353,8 +368,10 @@ function RowMenu({
     };
   }, [open]);
 
-  const canDownload = run.status === "done" && run.source === "bulk";
-  const canBuildAudience = run.status === "done" && run.source === "bulk";
+  // In summary-only mode the workspace's storage window has passed, so
+  // download links and CRM-writeback actions are gone — we only show details.
+  const canDownload = !summaryOnly && run.status === "done" && run.source === "bulk";
+  const canBuildAudience = !summaryOnly && run.status === "done" && run.source === "bulk";
 
   return (
     <div ref={wrapRef} className="relative">

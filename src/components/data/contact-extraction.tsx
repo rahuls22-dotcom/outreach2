@@ -84,7 +84,7 @@ export function ContactExtraction({ onBack }: { onBack?: () => void }) {
       <section className="bg-white border border-border rounded-card overflow-hidden">
         <div className="px-5 py-3.5 border-b border-border-subtle">
           <div className="text-[10.5px] font-medium uppercase tracking-[0.4px] text-text-tertiary">Recent extractions</div>
-          <div className="text-[13px] font-semibold text-text-primary mt-0.5">Demo data — wired to real crawler in next release</div>
+          <div className="text-[13px] font-semibold text-text-primary mt-0.5">Demo data, wired to real crawler in next release</div>
         </div>
         <ul className="divide-y divide-border-subtle">
           <Row title="sobha.com" found={48} verified={38} when="4 hr ago" />

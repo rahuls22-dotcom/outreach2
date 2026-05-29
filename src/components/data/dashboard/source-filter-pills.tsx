@@ -14,9 +14,11 @@ interface Props {
   value: SourceFilter;
   onChange: (v: SourceFilter) => void;
   profiles: LeadProfile[];
+  /** Hide the CRM option entirely (No-CRM variant). */
+  dropCrmSource?: boolean;
 }
 
-const OPTIONS: { v: SourceFilter; l: string }[] = [
+const ALL_OPTIONS: { v: SourceFilter; l: string }[] = [
   { v: "all", l: "All sources" },
   { v: "crm", l: "CRM" },
   { v: "bulk", l: "Bulk" },
@@ -30,9 +32,10 @@ const SHORT_LABEL: Record<SourceFilter, string> = {
   single: "Single",
 };
 
-export function SourceFilterPills({ value, onChange, profiles }: Props) {
+export function SourceFilterPills({ value, onChange, profiles, dropCrmSource = false }: Props) {
   const counts: Record<SourceFilter, number> = { all: profiles.length, crm: 0, bulk: 0, single: 0 };
   for (const p of profiles) counts[p.source]++;
+  const OPTIONS = dropCrmSource ? ALL_OPTIONS.filter((o) => o.v !== "crm") : ALL_OPTIONS;
 
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);

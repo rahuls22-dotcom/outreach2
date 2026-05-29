@@ -97,7 +97,7 @@ function KpiStrip({
         <Tile
           label="Not enriched"
           value={notEnriched}
-          sub={pct(notEnriched, incoming) + "% — data unavailable"}
+          sub={pct(notEnriched, incoming) + "%, data unavailable"}
           accent="neutral"
           hint="Lead processed but no public data found for these contacts. Expected baseline."
         />
@@ -105,7 +105,7 @@ function KpiStrip({
           <Tile
             label="Failed"
             value={failed}
-            sub={pct(failed, incoming) + "% — system error"}
+            sub={pct(failed, incoming) + "%, system error"}
             accent="bad"
             hint="System-side failures (timeouts, API errors). Target is zero."
           />
@@ -247,7 +247,7 @@ function LineChart({
   max: number;
   granularity: Granularity;
 }) {
-  const W = 1000; // viewBox width — actual width is responsive
+  const W = 1000; // viewBox width, actual width is responsive
   const H = 180;
   const PADDING_Y = 8;
   const innerH = H - PADDING_Y * 2;
@@ -322,7 +322,7 @@ function LineChart({
         {/* Enriched fill */}
         <path d={fillPath(sEnriched)} fill="#22C55E" opacity={0.08} />
 
-        {/* Lines — draw failed first (least frequent, on top of others rarely),
+        {/* Lines, draw failed first (least frequent, on top of others rarely),
             then not-enriched, then enriched on top so the dominant series wins. */}
         {hasFailed && (
           <path
@@ -372,7 +372,7 @@ function LineChart({
         )}
       </svg>
 
-      {/* Tooltip (DOM, not SVG — so sizing isn't stretched by preserveAspectRatio) */}
+      {/* Tooltip (DOM, not SVG, so sizing isn't stretched by preserveAspectRatio) */}
       {tip && (
         <div
           className="absolute pointer-events-none z-20"
@@ -404,7 +404,7 @@ function LineChart({
         </div>
       )}
 
-      {/* X-axis labels — thinned by bucket count. */}
+      {/* X-axis labels, thinned by bucket count. */}
       <div className="flex mt-2">
         {bucketDefs.map((d, i) => {
           const show = shouldShowAxisLabel(i, bucketDefs.length, granularity);

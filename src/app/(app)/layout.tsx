@@ -3,12 +3,13 @@
 import { useEffect, useRef } from "react";
 import { Sidebar } from "@/components/layout/sidebar";
 import { DemoModeProvider } from "@/lib/demo-mode";
+import { PlanModeProvider } from "@/lib/plan-mode";
 import { SpotRoot } from "@/components/spot/spot-root";
 import { useSpotStore } from "@/lib/spot/store";
 import { useCurrentScope, useCurrentWorkspaceLabel } from "@/lib/workspace-store";
 
 /**
- * Watches workspace scope and resets Spot whenever it changes — the
+ * Watches workspace scope and resets Spot whenever it changes, the
  * panel scope and the conversation thread are about the workspace the
  * user just left, not the one they're now in. Keeps Spot in lock-step
  * with the sidebar switcher (per the workspace-switch spec).
@@ -18,7 +19,7 @@ function SpotWorkspaceSync() {
   const wsLabel = useCurrentWorkspaceLabel();
   const setSpotScope = useSpotStore((s) => s.setScope);
   const setThread = useSpotStore((s) => s.setThread);
-  // Only react to actual scope changes — not the initial mount, since
+  // Only react to actual scope changes, not the initial mount, since
   // Spot already has a sensible default at boot.
   const initialised = useRef(false);
   const lastKey = useRef<string>("");
@@ -33,7 +34,7 @@ function SpotWorkspaceSync() {
     if (key === lastKey.current) return;
     lastKey.current = key;
     // Re-scope Spot + clear the thread. Floating launcher / open state
-    // are deliberately untouched — the panel stays open if it was open.
+    // are deliberately untouched, the panel stays open if it was open.
     setSpotScope({
       kind: "workspace",
       label: wsLabel,
@@ -49,6 +50,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const spotOpen = useSpotStore((s) => s.open);
   return (
     <DemoModeProvider>
+      <PlanModeProvider>
       <div className="min-h-screen bg-surface-page">
         <Sidebar />
         <main
@@ -63,6 +65,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <SpotRoot />
         <SpotWorkspaceSync />
       </div>
+      </PlanModeProvider>
     </DemoModeProvider>
   );
 }

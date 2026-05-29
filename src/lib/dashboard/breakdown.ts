@@ -1,5 +1,5 @@
 // Group profiles by a dimension's bucket. Returns sorted rows with counts +
-// percentages relative to the input set (NOT all leads — already-filtered).
+// percentages relative to the input set (NOT all leads, already-filtered).
 
 import { DIM_REGISTRY, CHART_CARD_TO_DIM } from "./dim-registry";
 import type { BreakdownRow, ChartCardId, FilterDim, LeadProfile } from "./types";
@@ -46,7 +46,7 @@ export function breakdownByDim(
   return rows;
 }
 
-/** Default preset cards still address by ChartCardId — thin wrapper. */
+/** Default preset cards still address by ChartCardId, thin wrapper. */
 export function breakdownByCard(
   profiles: LeadProfile[],
   cardId: ChartCardId,

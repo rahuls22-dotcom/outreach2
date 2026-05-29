@@ -27,6 +27,8 @@ import {
   syncLog,
 } from "@/lib/integrations-data";
 import type { AdAccount, AutoSyncRule } from "@/lib/integrations-data";
+import { usePlanMode } from "@/lib/plan-mode";
+import { InDevelopment } from "@/components/locked/in-development";
 
 const stagger: Variants = {
   hidden: {},
@@ -187,7 +189,17 @@ function AdAccountCard({ account }: { account: AdAccount }) {
 type Tab = "ad-accounts" | "crm" | "enrichment" | "notifications";
 
 export default function IntegrationsPage() {
+  const { enrichmentOnly } = usePlanMode();
   const [activeTab, setActiveTab] = useState<Tab>("ad-accounts");
+
+  if (enrichmentOnly) {
+    return (
+      <InDevelopment
+        title="Integrations"
+        blurb="CRM, enrichment APIs, and notification channels will live here."
+      />
+    );
+  }
   const [syncRules, setSyncRules] = useState(initialSyncRules);
 
   // Notification state

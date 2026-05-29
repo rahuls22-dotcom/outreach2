@@ -19,6 +19,7 @@ import { ArrowLeft, Loader2, X } from "lucide-react";
 
 import { useEnrichmentCrmStore, type RunRecord } from "@/lib/enrichment-crm-data";
 import { RunDrawer } from "@/components/enrichment-crm/run-drawer";
+import { CrmConnectModal } from "@/components/enrichment-crm/crm-connect-modal";
 
 interface BreadcrumbCrumb {
   label: string;
@@ -29,9 +30,9 @@ interface ShellProps {
   variant: "connected" | "empty";
   title: string;
   description: ReactNode;
-  /** @deprecated breadcrumbs removed — prop kept for back-compat, ignored. */
+  /** @deprecated breadcrumbs removed, prop kept for back-compat, ignored. */
   breadcrumb?: string;
-  /** @deprecated breadcrumbs removed — prop kept for back-compat, ignored. */
+  /** @deprecated breadcrumbs removed, prop kept for back-compat, ignored. */
   breadcrumbTrail?: BreadcrumbCrumb[];
   /** Optional back-arrow href shown left of the title. */
   backHref?: string;
@@ -70,6 +71,7 @@ export function DataPageShell({
 
   const [selectedRun, setSelectedRun] = useState<RunRecord | null>(null);
   const [toast, setToast] = useState<ToastPayload | null>(null);
+  const [crmModalOpen, setCrmModalOpen] = useState(false);
   const toastTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -120,16 +122,10 @@ export function DataPageShell({
     router.push(`/audiences?source=enrichment&runId=${encodeURIComponent(run.id)}`);
   };
 
-  const openConnectFlow = () => {
-    window.dispatchEvent(
-      new CustomEvent("enrichment-crm:toast", {
-        detail: {
-          title: "Connect CRM (demo)",
-          description: "Real flow opens the integrations setup. Not wired in this prototype.",
-        },
-      }),
-    );
-  };
+  // Open the support-handoff modal. Real product would launch the OAuth /
+  // integrations flow; for the prototype we collect the request and reach
+  // out from the support side.
+  const openConnectFlow = () => setCrmModalOpen(true);
 
   return (
     <motion.div
@@ -173,6 +169,9 @@ export function DataPageShell({
         onClose={() => setSelectedRun(null)}
         onBuildAudience={onBuildAudience}
       />
+
+      {/* Shared CRM connect modal (support-handoff flow) */}
+      <CrmConnectModal open={crmModalOpen} onClose={() => setCrmModalOpen(false)} />
 
       {/* Shared toast */}
       <AnimatePresence>

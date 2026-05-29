@@ -2,7 +2,7 @@
 
 // Primary tabs for the /data shell:
 //   Data dashboard (combined metrics across products)
-//   Enrichment    (CRM / Bulk / Single / Enriched leads — sub-tabs inside)
+//   Enrichment    (CRM / Bulk / Single / Enriched leads, sub-tabs inside)
 //   Contact extraction (coming soon demo)
 
 import { LayoutDashboard, UserSearch, ContactRound, type LucideIcon } from "lucide-react";

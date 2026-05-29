@@ -1,6 +1,6 @@
 "use client";
 
-// Recent runs table — single + bulk, unified.
+// Recent runs table, single + bulk, unified.
 // Columns: Run · Type · Status · Enriched · Credits · Started · (open)
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -255,7 +255,7 @@ function Row({ run, onView, onBuildAudience }: { run: RunRecord; onView: () => v
 }
 
 function TypePill({ types }: { types: EnrichmentType[] }) {
-  // One tag per type — full name, color-coded.
+  // One tag per type, full name, color-coded.
   return (
     <div className="flex flex-wrap items-center gap-1">
       {types.map((t) => (

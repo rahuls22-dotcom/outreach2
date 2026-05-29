@@ -1,7 +1,7 @@
 "use client";
 
 // Read-only view of how the connected CRM's fields map to Revspot's enrichment fields.
-// Demo only — real product would let users edit the mapping. Here we just show the table
+// Demo only, real product would let users edit the mapping. Here we just show the table
 // so the user can see what gets read in and what gets written back.
 
 import { ArrowRight, Briefcase, CircleDollarSign, Database, Pencil } from "lucide-react";

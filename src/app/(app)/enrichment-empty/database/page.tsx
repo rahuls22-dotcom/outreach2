@@ -1,6 +1,6 @@
 "use client";
 
-// /enrichment-empty/database — enriched leads DB in the "no CRM" demo.
+// /enrichment-empty/database, enriched leads DB in the "no CRM" demo.
 // Bulk + Single runs still flow into this view even when CRM isn't connected.
 
 import { CrmConnectBanner } from "@/components/enrichment-crm/crm-connect-nudge";
@@ -11,14 +11,14 @@ export default function EnrichmentEmptyDatabasePage() {
   return (
     <DataPageShell
       variant="empty"
-      title="Enriched leads"
+      title="Enrichment records"
       rootLabel="Enrichment"
       rootHref="/enrichment-empty"
       breadcrumbTrail={[
         { label: "Enrichment", href: "/enrichment-empty" },
-        { label: "Enriched leads" },
+        { label: "Enrichment records" },
       ]}
-      description="Every lead enriched through bulk upload or single lookup. Connect your CRM to backfill leads from there too."
+      description="Every lead processed through bulk upload or single lookup, enriched, partial, or failed. Connect your CRM to backfill leads from there too."
     >
       {({ openRun, openConnectFlow }) => (
         <div className="space-y-6">

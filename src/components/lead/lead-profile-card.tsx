@@ -31,7 +31,7 @@ import type { EnrichedProfile } from "@/lib/enrichment-data";
 interface LeadProfileCardProps {
   profile: EnrichedProfile;
   // When inline (single-mode result) we want a slimmer chrome.
-  // When in a drawer we already have its own chrome — let parent decide.
+  // When in a drawer we already have its own chrome, let parent decide.
   variant?: "inline" | "drawer";
   // Optional: when present, an expand icon appears next to the tabs.
   // Inline result hands this in to pop open the side drawer.
@@ -151,7 +151,7 @@ function ProfileTab({ profile }: { profile: EnrichedProfile }) {
 
   return (
     <div className="p-5 space-y-5">
-      {/* Header — avatar + name + title + summary + LinkedIn pill */}
+      {/* Header, avatar + name + title + summary + LinkedIn pill */}
       {(pro || contact) && (
         <div className="flex items-start gap-4">
           <Avatar name={headerName} url={pro?.photo_url} />
@@ -222,7 +222,7 @@ function ProfileTab({ profile }: { profile: EnrichedProfile }) {
         </div>
       )}
 
-      {/* Contact bar — email + phone with copy. LinkedIn lives in header above. */}
+      {/* Contact bar, email + phone with copy. LinkedIn lives in header above. */}
       <ContactBar
         email={contact?.email}
         phone={contact?.phone}
@@ -446,7 +446,7 @@ function DataCard({
   title: string;
   children: React.ReactNode;
 }) {
-  // Pro = blue, Fin = purple — same tokens as type tags throughout the app.
+  // Pro = blue, Fin = purple, same tokens as type tags throughout the app.
   const tone =
     accent === "pro"
       ? { chip: "bg-[#EFF6FF] text-[#1D4ED8]", strip: "bg-[#EFF6FF]" }

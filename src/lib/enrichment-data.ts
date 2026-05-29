@@ -28,7 +28,7 @@ export interface SingleInput {
   name?: string;
 }
 
-// Pricing — v1 placeholder. Real values come later.
+// Pricing, v1 placeholder. Real values come later.
 export const CREDITS_PER_LEAD: Record<EnrichmentType, number> = {
   professional: 1,
   financial: 1,
@@ -94,7 +94,7 @@ export interface EnrichedProfile {
   email_verification_status?: string;
   phone_verification_status?: string;
   valid_indian_name?: boolean;
-  // Original input the user typed — used as fallback header when no professional block.
+  // Original input the user typed, used as fallback header when no professional block.
   contact?: {
     name?: string;
     email?: string;
@@ -155,7 +155,7 @@ export const sampleProfile: EnrichedProfile = {
     years_of_experience: 11,
     job_title: "Staff Software Engineer",
     company_name: "PhonePe",
-    company_tier: "Unicorn",
+    company_tier: "Tier 1",
     company_industry: "Fintech",
     university_tier: "Tier 1",
     iit_iim: true,
@@ -371,12 +371,12 @@ export const useEnrichmentStore = create<EnrichmentStore>((set) => ({
       const next = s.runs.map((r) => {
         if (r.status !== "in_progress") return r;
         const cur = r.progressPct ?? 0;
-        // Bumps of 3–9% per tick — feels organic, not linear.
+        // Bumps of 3–9% per tick, feels organic, not linear.
         const bump = 3 + Math.floor(Math.random() * 7);
         const np = Math.min(100, cur + bump);
         changed = true;
         if (np >= 100) {
-          // Settle the run: 92% success, ~6% skipped, ~2% failed — realistic-ish.
+          // Settle the run: 92% success, ~6% skipped, ~2% failed, realistic-ish.
           const total = r.leadsTotal ?? 0;
           const success = Math.round(total * 0.92);
           const skipped = Math.round(total * 0.06);

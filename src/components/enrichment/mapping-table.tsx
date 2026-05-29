@@ -1,6 +1,6 @@
 "use client";
 
-// Mapping table — shows uploaded file's columns with a dropdown above each
+// Mapping table, shows uploaded file's columns with a dropdown above each
 // to map it to a target field (Name / Phone / Email / LinkedIn Link / Lead Id / Custom).
 // Auto-map runs on file drop; user can override here.
 
@@ -28,7 +28,7 @@ function visibleTargets(needName: boolean, needPro: boolean): MapTarget[] {
   if (needPro) {
     t.push("email", "phone", "linkedin");
   } else {
-    // Financial-only — phone still needed
+    // Financial-only, phone still needed
     t.push("phone");
   }
   t.push("leadId");
@@ -55,7 +55,7 @@ export function MappingTable({
 
   const onPick = (header: string, target: MapTarget) => {
     // If another column already maps to this target (excluding custom/leadId),
-    // reset it to custom — we only allow one mapping per target field.
+    // reset it to custom, we only allow one mapping per target field.
     const unique = target !== "custom" && target !== "leadId";
     const next: ColumnMap = { ...columnMap };
     if (unique) {

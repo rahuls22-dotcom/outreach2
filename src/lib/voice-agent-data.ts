@@ -1,6 +1,6 @@
-// Agent mock data — unified (voice + whatsapp)
+// Agent mock data, unified (voice + whatsapp)
 // NOTE: Legacy types (AgentItem, AgentChannel, etc.) kept for backward compat.
-// New types are in ./types/agent.ts — use AgentListItem and Agent for new pages.
+// New types are in ./types/agent.ts, use AgentListItem and Agent for new pages.
 
 import type { AgentListItem, Agent, Objective, VoiceOption } from "./types/agent";
 
@@ -25,7 +25,7 @@ export interface AgentItem {
 export const agentsList: AgentItem[] = [
   {
     id: "va-1",
-    name: "Priya — Qualification Agent",
+    name: "Priya, Qualification Agent",
     channel: "voice",
     template: "qualifying",
     languages: ["English", "Hindi", "Kannada"],
@@ -38,7 +38,7 @@ export const agentsList: AgentItem[] = [
   },
   {
     id: "va-2",
-    name: "Arjun — Follow-up Agent",
+    name: "Arjun, Follow-up Agent",
     channel: "voice",
     template: "qualifying",
     languages: ["English", "Hindi"],
@@ -51,7 +51,7 @@ export const agentsList: AgentItem[] = [
   },
   {
     id: "va-3",
-    name: "Neha — Survey Agent",
+    name: "Neha, Survey Agent",
     channel: "voice",
     template: "blank",
     languages: ["English"],
@@ -287,7 +287,7 @@ export const defaultObjectives: Objective[] = [
 export const newAgentsList: AgentListItem[] = [
   {
     id: "va-1",
-    name: "Priya — Qualification Agent",
+    name: "Priya, Qualification Agent",
     description: "Qualifies inbound leads for luxury real estate properties in Bangalore",
     template: "qualifying",
     status: "active",
@@ -303,7 +303,7 @@ export const newAgentsList: AgentListItem[] = [
   },
   {
     id: "va-2",
-    name: "Arjun — Follow-up Agent",
+    name: "Arjun, Follow-up Agent",
     description: "Re-engages cold leads and handles follow-up conversations",
     template: "follow_up",
     status: "active",
@@ -319,7 +319,7 @@ export const newAgentsList: AgentListItem[] = [
   },
   {
     id: "va-3",
-    name: "Neha — Survey Agent",
+    name: "Neha, Survey Agent",
     description: "Conducts satisfaction surveys and collects feedback",
     template: "survey",
     status: "draft",
@@ -338,7 +338,7 @@ export const newAgentsList: AgentListItem[] = [
 /** Full agent detail (objective-based) for Priya */
 export const newAgentDetail: Agent = {
   id: "va-1",
-  name: "Priya — Qualification Agent",
+  name: "Priya, Qualification Agent",
   description: "Qualifies inbound leads for luxury real estate properties in Bangalore",
   status: "active",
   template: "qualifying",
@@ -382,7 +382,7 @@ export const newAgentDetail: Agent = {
     quick_replies: ["Yes, tell me more", "Schedule a site visit", "Send brochure", "Not interested"],
     reply_timeout_hours: 24,
     rich_media: [
-      { type: "image", url: "/assets/godrej-hero.jpg", caption: "Godrej Reflections — Luxury Villas" },
+      { type: "image", url: "/assets/godrej-hero.jpg", caption: "Godrej Reflections, Luxury Villas" },
       { type: "document", url: "/assets/brochure.pdf", caption: "Download Brochure" },
     ],
   },
@@ -418,7 +418,7 @@ export const newVoiceOptions: VoiceOption[] = [
 ];
 
 // ═══════════════════════════════════════════════════════════════════
-// Agents MVP — Qualification Criteria types & mock data
+// Agents MVP, Qualification Criteria types & mock data
 // ═══════════════════════════════════════════════════════════════════
 
 export const POST_CALL_METRICS = [
@@ -502,7 +502,7 @@ const defaultQualificationCriteria: QualificationCriteriaConfig = {
 };
 
 // ═══════════════════════════════════════════════════════════════════
-// Agents MVP — Detail page mock data
+// Agents MVP, Detail page mock data
 // ═══════════════════════════════════════════════════════════════════
 
 export interface AgentMvpDetail {
@@ -529,7 +529,7 @@ export interface AgentMvpDetail {
 export const agentMvpDetails: Record<string, AgentMvpDetail> = {
   "amvp-1": {
     id: "amvp-1",
-    name: "Godrej Air — Lead Qualifier",
+    name: "Godrej Air, Lead Qualifier",
     status: "active",
     agentType: "AI Call",
     agentId: "livekit_godrej_air_outbound",
@@ -556,14 +556,14 @@ export const agentMvpDetails: Record<string, AgentMvpDetail> = {
   },
   "amvp-2": {
     id: "amvp-2",
-    name: "Godrej Reflections — Re-engagement",
+    name: "Godrej Reflections, Re-engagement",
     status: "active",
     agentType: "AI Call",
     agentId: "livekit_godrej_reflections_outbound",
     phoneNumber: "+918065481620",
     systemPrompt: "You are a friendly follow-up agent for Godrej Properties. You are calling leads who previously expressed interest in Godrej Reflections but haven't taken the next step. Your goal is to understand what held them back, address concerns, and help them move forward. Be empathetic and never pushy.",
     systemPromptSections: 15,
-    greetingTemplate: "Hi {{customer_name}}, this is Priya from Godrej Properties. We spoke earlier about Godrej Reflections — do you have a moment?",
+    greetingTemplate: "Hi {{customer_name}}, this is Priya from Godrej Properties. We spoke earlier about Godrej Reflections, do you have a moment?",
     voiceId: "v-1",
     voiceName: "Priya (Revspot)",
     llmConfig: { provider: "OpenAI", model: "GPT-4o", temperature: 0.3 },

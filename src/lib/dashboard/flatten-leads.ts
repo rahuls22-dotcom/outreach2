@@ -2,7 +2,7 @@
 //
 // CRM / Single  → 1 lead per run (uses run.profile)
 // Bulk          → 1 lead per row in run.leadsTotal (uses run.leads[i] when
-//                 seeded, else synthesizes from CRM_NAMES_POOL — kept in
+//                 seeded, else synthesizes from CRM_NAMES_POOL, kept in
 //                 sync with the per-lead drawer in enriched-leads.tsx)
 
 import {

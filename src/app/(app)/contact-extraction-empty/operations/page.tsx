@@ -1,6 +1,6 @@
 "use client";
 
-// /contact-extraction-empty/operations — Operations tab in the "no CRM" demo.
+// /contact-extraction-empty/operations, Operations tab in the "no CRM" demo.
 
 import { useRouter } from "next/navigation";
 
