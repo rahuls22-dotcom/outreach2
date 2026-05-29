@@ -2363,7 +2363,7 @@ A small-budget, persona-led launch to learn what wins before we scale. Personas 
 
 ## Revspot Audience · pre-built targeting
 
-I&apos;ve identified a matching audience from the Revspot graph — high-intent users who&apos;ve engaged with adjacent EdTech products in the last 90 days but haven&apos;t converted yet. We can push this directly to Meta and Google as a Custom Audience so every campaign starts on a warm cohort instead of cold-prospecting from scratch.
+I've identified a matching audience from the Revspot graph — high-intent users who've engaged with adjacent EdTech products in the last 90 days but haven't converted yet. We can push this directly to Meta and Google as a Custom Audience so every campaign starts on a warm cohort instead of cold-prospecting from scratch.
 
 - 🎯 **Revspot Audience** · ~ 480K matched users · refreshes weekly
 - 🔵 **Meta** · pushed as a Custom Audience + 1% lookalike seed

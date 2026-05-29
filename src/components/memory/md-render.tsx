@@ -166,7 +166,9 @@ type EnrichedBlock =
   | { type: "paragraph"; text: string }
   | { type: "list"; items: string[]; kind: SectionKind; ordered: boolean }
   | { type: "rule" }
-  | { type: "footer"; text: string }; // italic paragraph after final rule
+  | { type: "footer"; text: string } // italic paragraph after final rule
+  | { type: "crm-flowchart" } // ## CRM Workflow → custom diagram
+  | { type: "revspot-audience"; title: string; children: EnrichedBlock[] }; // ## Revspot Audience → highlighted callout
 
 function isItalicOnly(text: string): boolean {
   return /^_[^_]+_$/.test(text.trim());
@@ -179,7 +181,8 @@ function enrichWithSections(raw: RawBlock[]): EnrichedBlock[] {
   let sawTagline = false;
   let sawRule = false;
 
-  for (let i = 0; i < raw.length; i++) {
+  let i = 0;
+  while (i < raw.length) {
     const b = raw[i];
 
     if (b.type === "heading") {
@@ -188,20 +191,68 @@ function enrichWithSections(raw: RawBlock[]): EnrichedBlock[] {
         sawH1 = true;
         sawTagline = false;
         lastH2 = null;
+        i++;
         continue;
       }
       if (b.level === 2) {
+        const headingLower = b.text.toLowerCase();
+
+        // ── ## CRM Workflow · Qualifier Agent ──
+        // Render as a custom flowchart and skip the bullet content
+        // that would have described the steps.
+        if (headingLower.includes("crm workflow")) {
+          out.push({ type: "crm-flowchart" });
+          i++;
+          while (i < raw.length) {
+            const nxt = raw[i];
+            if (nxt.type === "heading" && nxt.level <= 2) break;
+            i++;
+          }
+          lastH2 = b.text;
+          continue;
+        }
+
+        // ── ## Revspot Audience · pre-built targeting ──
+        // Wrap the whole section in a highlighted callout. We collect
+        // the inner paragraph + list as `children` so the renderer can
+        // paint them inside the gold-bordered container.
+        if (headingLower.includes("revspot audience")) {
+          const children: EnrichedBlock[] = [];
+          i++;
+          while (i < raw.length) {
+            const nxt = raw[i];
+            if (nxt.type === "heading" && nxt.level <= 2) break;
+            if (nxt.type === "paragraph") {
+              children.push({ type: "paragraph", text: nxt.text });
+            } else if (nxt.type === "list") {
+              children.push({
+                type: "list",
+                items: nxt.items,
+                kind: "default",
+                ordered: nxt.ordered,
+              });
+            }
+            i++;
+          }
+          out.push({ type: "revspot-audience", title: b.text, children });
+          lastH2 = b.text;
+          continue;
+        }
+
         out.push({ type: "h2", text: b.text });
         lastH2 = b.text;
+        i++;
         continue;
       }
       out.push({ type: "h3", text: b.text });
+      i++;
       continue;
     }
 
     if (b.type === "rule") {
       out.push({ type: "rule" });
       sawRule = true;
+      i++;
       continue;
     }
 
@@ -212,12 +263,14 @@ function enrichWithSections(raw: RawBlock[]): EnrichedBlock[] {
           type: "properties",
           text: b.text.replace(/^_|_$/g, ""),
         });
+        i++;
         continue;
       }
       // First regular paragraph after H1 before any H2 → tagline callout.
       if (sawH1 && !sawTagline && lastH2 === null) {
         out.push({ type: "tagline", text: b.text });
         sawTagline = true;
+        i++;
         continue;
       }
       // Italic-only paragraph AFTER a horizontal rule → footer strip.
@@ -226,9 +279,11 @@ function enrichWithSections(raw: RawBlock[]): EnrichedBlock[] {
           type: "footer",
           text: b.text.replace(/^_|_$/g, ""),
         });
+        i++;
         continue;
       }
       out.push({ type: "paragraph", text: b.text });
+      i++;
       continue;
     }
 
@@ -240,8 +295,12 @@ function enrichWithSections(raw: RawBlock[]): EnrichedBlock[] {
         kind,
         ordered: b.ordered,
       });
+      i++;
       continue;
     }
+
+    // Defensive · unhandled block type, advance to avoid infinite loop.
+    i++;
   }
   return out;
 }
@@ -333,6 +392,16 @@ function renderBlock(b: EnrichedBlock, key: number) {
 
     case "list":
       return <SectionList key={key} items={b.items} kind={b.kind} />;
+
+    case "crm-flowchart":
+      return <CRMWorkflowDiagram key={key} />;
+
+    case "revspot-audience":
+      return (
+        <RevspotAudienceCallout key={key} title={b.title}>
+          {b.children.map((c, i) => renderBlock(c, i))}
+        </RevspotAudienceCallout>
+      );
   }
 }
 
@@ -769,4 +838,290 @@ function tokenizeInline(text: string): React.ReactNode[] {
       </code>
     );
   });
+}
+
+/* ─── Special blocks ─────────────────────────────────────────── */
+
+/** CRM workflow diagram · custom SVG flowchart styled to feel like a
+ *  Mermaid chart rendered on dark mode. The shape is fixed (matches
+ *  the Qualifier Agent narrative): inbound → enrichment → ICP
+ *  decision → high goes to live human patch; low gets agent-qualified
+ *  then dropped into a 10-day WhatsApp nurture, with a re-route to
+ *  sales whenever intent resurfaces. */
+function CRMWorkflowDiagram() {
+  // Shared box style helper — keeps every node visually consistent.
+  const node = (
+    label: React.ReactNode,
+    tone: "neutral" | "decision" | "success" | "info" | "warm",
+  ) => {
+    const palette = {
+      neutral: { bg: "#1A1A18", border: "#3A3A35", text: "#F5F4EF" },
+      decision: { bg: "#2A2210", border: "#4D3D1A", text: "#FCD34D" },
+      success: { bg: "#0E2A1A", border: "#1A4D2A", text: "#34D399" },
+      info: { bg: "#102A2A", border: "#1A4D4D", text: "#67E8F9" },
+      warm: { bg: "#2A1B10", border: "#4D2E1A", text: "#FB923C" },
+    }[tone];
+    return (
+      <div
+        className="rounded-card px-3.5 py-2.5 text-center"
+        style={{
+          background: palette.bg,
+          border: `1.5px solid ${palette.border}`,
+          color: palette.text,
+          fontWeight: 600,
+          fontSize: 12.5,
+          lineHeight: 1.35,
+        }}
+      >
+        {label}
+      </div>
+    );
+  };
+
+  const arrow = (label?: string, accent?: string) => (
+    <div className="flex flex-col items-center" style={{ gap: 2 }}>
+      {label && (
+        <span
+          className="text-[10px] uppercase tracking-wider font-semibold"
+          style={{ color: accent ?? "#8A8980" }}
+        >
+          {label}
+        </span>
+      )}
+      <svg
+        width="12"
+        height="22"
+        viewBox="0 0 12 22"
+        fill="none"
+        aria-hidden
+      >
+        <path
+          d="M6 0 V18"
+          stroke={accent ?? "#3A3A35"}
+          strokeWidth="1.5"
+        />
+        <path
+          d="M2 14 L6 20 L10 14"
+          stroke={accent ?? "#3A3A35"}
+          strokeWidth="1.5"
+          fill="none"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </div>
+  );
+
+  return (
+    <div className="my-7">
+      <div
+        className="rounded-card p-5"
+        style={{
+          background:
+            "linear-gradient(180deg, #131110 0%, #1A1A18 100%)",
+          border: "1px solid #2A2A26",
+          boxShadow: "0 12px 32px -12px rgba(0,0,0,0.45)",
+        }}
+      >
+        {/* Diagram header */}
+        <div className="flex items-center gap-2 mb-4 pb-3 border-b border-border-subtle">
+          <span className="text-[14px]" aria-hidden>
+            🔀
+          </span>
+          <span
+            className="text-[11px] uppercase tracking-wider font-semibold"
+            style={{ color: "#A8A8A0" }}
+          >
+            CRM workflow · Qualifier Agent · live diagram
+          </span>
+          <span className="flex-1" />
+          <span
+            className="text-[10px] font-mono"
+            style={{ color: "#7A7970" }}
+          >
+            flowchart.mmd
+          </span>
+        </div>
+
+        {/* Diagram body · single column with branches drawn as a 2-col
+            grid where needed */}
+        <div className="flex flex-col items-center max-w-[640px] mx-auto">
+          <div className="w-full max-w-[260px]">
+            {node("📥 Inbound lead", "neutral")}
+          </div>
+          {arrow()}
+          <div className="w-full max-w-[320px]">
+            {node("🔍 Revspot Enrichment · ICP score", "info")}
+          </div>
+          {arrow()}
+          <div className="w-full max-w-[280px]">
+            {node("⚖️ ICP match?", "decision")}
+          </div>
+
+          {/* Branch · high vs low */}
+          <div className="grid grid-cols-2 gap-5 w-full mt-1.5">
+            {/* High branch · sales patch */}
+            <div className="flex flex-col items-center">
+              {arrow("High match", "#22C55E")}
+              {node("📞 Patch to human Sales · within 90s", "success")}
+            </div>
+
+            {/* Low branch · agent qualifies → WhatsApp nurture */}
+            <div className="flex flex-col items-center">
+              {arrow("Lower match", "#FB923C")}
+              {node("🤖 Agent qualifies on call", "warm")}
+              {arrow()}
+              {node("💬 WhatsApp nurture · 10 days · 6 touches", "warm")}
+              {arrow()}
+              {node("📈 Intent resurfaces?", "decision")}
+              {/* Inner branch · yes → sales · no → archive */}
+              <div className="grid grid-cols-2 gap-3 w-full mt-1.5">
+                <div className="flex flex-col items-center">
+                  {arrow("Yes", "#22C55E")}
+                  {node("📞 Patch to Sales", "success")}
+                </div>
+                <div className="flex flex-col items-center">
+                  {arrow("No", "#7A7970")}
+                  {node("🗂️ Archive · revisit in 30d", "neutral")}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Legend */}
+        <div
+          className="mt-5 pt-3 border-t flex items-center flex-wrap gap-3 text-[10.5px]"
+          style={{ borderColor: "#262623", color: "#A8A8A0" }}
+        >
+          <span className="inline-flex items-center gap-1.5">
+            <span
+              className="inline-block w-2 h-2 rounded-sm"
+              style={{ background: "#34D399" }}
+            />
+            High-intent path
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span
+              className="inline-block w-2 h-2 rounded-sm"
+              style={{ background: "#FB923C" }}
+            />
+            Nurture path
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span
+              className="inline-block w-2 h-2 rounded-sm"
+              style={{ background: "#FCD34D" }}
+            />
+            Decision
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span
+              className="inline-block w-2 h-2 rounded-sm"
+              style={{ background: "#67E8F9" }}
+            />
+            Revspot Enrichment
+          </span>
+        </div>
+      </div>
+
+      {/* Footer · short narrative under the diagram so the user can
+          still skim the rules without reading the boxes individually */}
+      <div
+        className="mt-2 text-[11.5px] leading-relaxed"
+        style={{ color: "#8A8980" }}
+      >
+        High-ICP leads get a live human patch within 90s; lower-fit leads
+        are qualified by the agent on the call, then dropped into a
+        10-day WhatsApp sequence and re-routed to sales the moment
+        intent resurfaces.
+      </div>
+    </div>
+  );
+}
+
+/** Revspot Audience callout · the audience block gets a gold-edged
+ *  featured card so it stands out from the rest of the plan. The
+ *  children are the original heading + paragraph + list, rendered
+ *  inside the highlight container. */
+function RevspotAudienceCallout({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="my-7">
+      <div
+        className="relative rounded-card overflow-hidden"
+        style={{
+          background:
+            "linear-gradient(135deg, #1F1B14 0%, #181612 50%, #131110 100%)",
+          border: "1px solid #C9A86A",
+          boxShadow:
+            "0 12px 32px -12px rgba(201,168,106,0.25), 0 0 0 1px rgba(201,168,106,0.08) inset",
+        }}
+      >
+        {/* Gold radial glow underlay */}
+        <div
+          aria-hidden
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background:
+              "radial-gradient(ellipse 60% 50% at 100% 0%, rgba(201, 168, 106, 0.22) 0%, transparent 70%)",
+          }}
+        />
+
+        {/* Featured header strip */}
+        <div
+          className="relative px-5 py-2.5 flex items-center gap-2"
+          style={{
+            background: "rgba(201, 168, 106, 0.08)",
+            borderBottom: "1px solid rgba(201, 168, 106, 0.18)",
+          }}
+        >
+          <span className="text-[13px]" aria-hidden>
+            ✨
+          </span>
+          <span
+            className="text-[10.5px] uppercase tracking-wider font-semibold"
+            style={{
+              background:
+                "linear-gradient(135deg, #C9A86A 0%, #E0C083 100%)",
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+            }}
+          >
+            Featured · Revspot graph
+          </span>
+          <span className="flex-1" />
+          <span
+            className="text-[10px] font-mono"
+            style={{ color: "#A8A8A0" }}
+          >
+            audience.json
+          </span>
+        </div>
+
+        <div className="relative px-5 py-4">
+          <h2
+            className="text-[20px] font-semibold tracking-tight leading-tight mb-3"
+            style={{
+              background:
+                "linear-gradient(135deg, #F5F4EF 0%, #E0C083 100%)",
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+            }}
+          >
+            {title}
+          </h2>
+          {/* Override the inner h2 with display:none so we don't render
+              the title twice — the children include a duplicate h2 from
+              the original parser path. */}
+          <div className="md-revspot-children">{children}</div>
+        </div>
+      </div>
+    </div>
+  );
 }
