@@ -1,0 +1,12 @@
+<svg width="100" height="100" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Folder (centered) -->
+  <path d="M15 30 L15 70 Q15 74, 19 74 L81 74 Q85 74, 85 70 L85 34 Q85 30, 81 30 L50 30 L45 22 L19 22 Q15 22, 15 26 Z" fill="#F5F5F5" stroke="#9B9B9B" stroke-width="1.5"/>
+  <path d="M15 38 L85 38" stroke="#D4D4D4" stroke-width="1"/>
+  <!-- Lines -->
+  <path d="M27 48 L73 48" stroke="#E5E5E5" stroke-width="1.5" stroke-linecap="round"/>
+  <path d="M27 55 L63 55" stroke="#E5E5E5" stroke-width="1.5" stroke-linecap="round"/>
+  <path d="M27 62 L53 62" stroke="#E5E5E5" stroke-width="1.5" stroke-linecap="round"/>
+  <!-- Plus (bottom center) -->
+  <circle cx="50" cy="86" r="9" fill="white" stroke="#9B9B9B" stroke-width="1.5"/>
+  <path d="M50 82 L50 90 M46 86 L54 86" stroke="#9B9B9B" stroke-width="1.5" stroke-linecap="round"/>
+</svg>

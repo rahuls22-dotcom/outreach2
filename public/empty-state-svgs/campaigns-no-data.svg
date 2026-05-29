@@ -1,0 +1,16 @@
+<svg width="100" height="100" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Document card -->
+  <rect x="18" y="20" width="40" height="30" rx="4" fill="#F5F5F5" stroke="#E5E5E5" stroke-width="1"/>
+  <path d="M26 32 L50 32" stroke="#D4D4D4" stroke-width="2" stroke-linecap="round"/>
+  <path d="M26 38 L46 38" stroke="#D4D4D4" stroke-width="2" stroke-linecap="round"/>
+  <path d="M26 44 L40 44" stroke="#D4D4D4" stroke-width="2" stroke-linecap="round"/>
+  <!-- Megaphone -->
+  <path d="M62 28 L76 20 L76 54 L62 46 Z" fill="#F5F5F5" stroke="#9B9B9B" stroke-width="1.5" stroke-linejoin="round"/>
+  <rect x="56" y="28" width="7" height="18" rx="2" fill="#F5F5F5" stroke="#9B9B9B" stroke-width="1.5"/>
+  <!-- Sound waves -->
+  <path d="M80 30 Q84 37, 80 44" stroke="#D4D4D4" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+  <path d="M84 24 Q91 37, 84 50" stroke="#E5E5E5" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+  <!-- Plus circle -->
+  <circle cx="50" cy="72" r="10" fill="white" stroke="#9B9B9B" stroke-width="1.5"/>
+  <path d="M50 68 L50 76 M46 72 L54 72" stroke="#9B9B9B" stroke-width="1.5" stroke-linecap="round"/>
+</svg>
