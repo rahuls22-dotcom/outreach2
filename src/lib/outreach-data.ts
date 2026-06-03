@@ -408,7 +408,7 @@ export interface OutreachContact {
   phone: string;
   outcome: ContactOutcome;
   duration: number | null;
-  qualification: "qualified" | "not_qualified" | null;
+  qualification: "qualified" | "not_qualified" | "pending" | null;
   verified: boolean;
   keyNotes: string;
   calledAt: string | null;

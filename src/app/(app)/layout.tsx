@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { Sidebar } from "@/components/layout/sidebar";
 import { DemoModeProvider } from "@/lib/demo-mode";
+import { PlanModeProvider } from "@/lib/plan-mode";
 import { SpotRoot } from "@/components/spot/spot-root";
 import { useSpotStore } from "@/lib/spot/store";
 import { useCurrentScope, useCurrentWorkspaceLabel } from "@/lib/workspace-store";
@@ -51,6 +52,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const spotOpen = useSpotStore((s) => s.open);
   return (
     <DemoModeProvider>
+      <PlanModeProvider>
       <WorkspaceProvider>
       <WAProvider>
         <div className="min-h-screen bg-surface-page">
@@ -69,6 +71,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </div>
       </WAProvider>
       </WorkspaceProvider>
+      </PlanModeProvider>
     </DemoModeProvider>
   );
 }
