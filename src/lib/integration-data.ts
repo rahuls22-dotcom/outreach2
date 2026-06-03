@@ -21,15 +21,6 @@ export const DOCS_LINKS = {
 
 export type WebhookStatus = "active" | "not_configured" | "failing";
 
-export interface ProductWebhook {
-  product: ProductKey;
-  url: string; // client-hosted endpoint (their CRM/backend). "" = not configured.
-  status: WebhookStatus;
-  events: string[]; // event types Revspot emits for this product
-  lastDelivery?: string;
-  docs: string;
-}
-
 export interface WebhookDelivery {
   id: string;
   time: string;
@@ -56,38 +47,26 @@ export const inbound = {
 };
 
 // ── Outbound (Revspot → client webhook) ─────────────────────
-// Signing secret the client uses to verify the X-Revspot-Signature header.
+// ONE webhook URL for the whole workspace (Stripe/GitHub model). Every call
+// carries `event` + `product` so the client routes server-side. The client
+// hosts this URL (their CRM or backend). Each call is signed with the secret
+// below so the client can verify it came from Revspot.
 export const signingSecret = "whsec_4d7a1f9c3b6e2058";
 
-export const productWebhooks: ProductWebhook[] = [
-  {
-    product: "enrichment",
-    url: "https://hooks.godrejproperties.com/revspot/enrichment",
-    status: "active",
-    events: PRODUCT_EVENTS.enrichment,
-    lastDelivery: "2 minutes ago",
-    docs: DOCS_LINKS.enrichment,
-  },
-  {
-    product: "ai_calling",
-    url: "https://hooks.godrejproperties.com/revspot/calls",
-    status: "active",
-    events: PRODUCT_EVENTS.ai_calling,
-    lastDelivery: "8 minutes ago",
-    docs: DOCS_LINKS.ai_calling,
-  },
-  {
-    product: "campaigns",
-    url: "",
-    status: "not_configured",
-    events: PRODUCT_EVENTS.campaigns,
-    docs: DOCS_LINKS.campaigns,
-  },
-];
+export const outbound = {
+  url: "https://hooks.godrejproperties.com/revspot",
+  status: "active" as WebhookStatus,
+  lastDelivery: "2 minutes ago",
+};
 
-export function getWebhook(product: ProductKey): ProductWebhook | undefined {
-  return productWebhooks.find((w) => w.product === product);
-}
+// Per-product event reference — what events the single webhook receives for
+// each product the workspace owns. Shown read-only so the tech team knows the
+// payload shapes to branch on.
+export const PRODUCT_EVENT_DOCS: Record<ProductKey, string> = {
+  enrichment: DOCS_LINKS.enrichment,
+  ai_calling: DOCS_LINKS.ai_calling,
+  campaigns: DOCS_LINKS.campaigns,
+};
 
 // Recent outbound deliveries (shown in the webhook log).
 export const recentDeliveries: WebhookDelivery[] = [

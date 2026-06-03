@@ -2,16 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  Building2,
-  Sparkles,
-  Wallet,
-  CreditCard,
-  UserSearch,
-  PhoneCall,
-  Monitor,
-} from "lucide-react";
-import { useProducts, type ProductKey } from "@/lib/products";
+import { Building2, Sparkles, Wallet, CreditCard } from "lucide-react";
 
 const ACCOUNT_NAV = [
   { name: "Agency", href: "/settings/agency", icon: Building2 },
@@ -20,19 +11,10 @@ const ACCOUNT_NAV = [
   { name: "Billing", href: "/settings/billing", icon: CreditCard },
 ];
 
-// Per-product config tabs. Only shown when the workspace owns the product.
-const PRODUCT_NAV: { name: string; href: string; icon: typeof UserSearch; product: ProductKey }[] = [
-  { name: "Enrichment", href: "/settings/enrichment", icon: UserSearch, product: "enrichment" },
-  { name: "AI Calling", href: "/settings/ai-calling", icon: PhoneCall, product: "ai_calling" },
-  { name: "Campaigns", href: "/settings/campaigns", icon: Monitor, product: "campaigns" },
-];
-
 export default function SettingsLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { has } = useProducts();
-  const productNav = PRODUCT_NAV.filter((item) => has(item.product));
 
-  const renderLink = (item: { name: string; href: string; icon: typeof UserSearch }) => {
+  const renderLink = (item: { name: string; href: string; icon: typeof Building2 }) => {
     const active = pathname === item.href || pathname.startsWith(item.href + "/");
     return (
       <Link
@@ -56,7 +38,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
       <div className="mb-6">
         <h1 className="text-[20px] font-semibold text-text-primary">Settings</h1>
         <p className="text-[12.5px] text-text-secondary mt-0.5">
-          Manage your account and configure each product.
+          Manage your account. Lead delivery lives in Integrations → API &amp; Webhooks.
         </p>
       </div>
       <div className="flex gap-8">
@@ -68,14 +50,6 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
               </div>
               {ACCOUNT_NAV.map(renderLink)}
             </div>
-            {productNav.length > 0 && (
-              <div className="space-y-0.5">
-                <div className="px-2 mb-1 text-[9.5px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">
-                  Products
-                </div>
-                {productNav.map(renderLink)}
-              </div>
-            )}
           </nav>
         </aside>
         <main className="flex-1 min-w-0">{children}</main>

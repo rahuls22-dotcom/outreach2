@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { motion } from "framer-motion";
 import type { Variants } from "framer-motion";
 import {
@@ -13,15 +12,16 @@ import {
   Webhook,
   BookOpen,
   ExternalLink,
-  ArrowRight,
 } from "lucide-react";
 import { adAccounts } from "@/lib/integrations-data";
 import type { AdAccount } from "@/lib/integrations-data";
 import {
   inbound,
   signingSecret,
-  productWebhooks,
+  outbound,
   recentDeliveries,
+  PRODUCT_EVENTS,
+  PRODUCT_EVENT_DOCS,
   DOCS_BASE,
   DOCS_LINKS,
 } from "@/lib/integration-data";
@@ -31,13 +31,9 @@ import {
   EventChips,
   CodeBlock,
 } from "@/components/integrations/api-bits";
-import { ALL_PRODUCTS, useProducts, type ProductKey } from "@/lib/products";
+import { ALL_PRODUCTS, useProducts } from "@/lib/products";
 import WhatsAppConnectPage from "@/app/(app)/channels/whatsapp/page";
 import { useWA } from "@/lib/whatsapp-context";
-
-const PRODUCT_LABEL: Record<ProductKey, string> = Object.fromEntries(
-  ALL_PRODUCTS.map((p) => [p.key, p.label]),
-) as Record<ProductKey, string>;
 
 const stagger: Variants = {
   hidden: {},
@@ -151,10 +147,21 @@ function AdAccountCard({ account }: { account: AdAccount }) {
 
 // ── API & Webhooks Tab ──────────────────────────────────────
 // Revspot is CRM-agnostic. We host ONE inbound API (client pushes leads in) and
-// POST results to per-product webhook URLs the CLIENT hosts. No CRM handshake.
+// POST results to ONE webhook URL the CLIENT hosts. Every call carries
+// `event` + `product` so the client routes server-side. No CRM handshake.
 function ApiWebhooksTab() {
   const { has } = useProducts();
-  const ownedWebhooks = productWebhooks.filter((w) => has(w.product));
+  const ownedProducts = ALL_PRODUCTS.filter((p) => has(p.key));
+  const [webhookUrl, setWebhookUrl] = useState(outbound.url);
+  const [saved, setSaved] = useState(false);
+
+  const configured = webhookUrl.trim().length > 0;
+  const status = configured ? outbound.status : "not_configured";
+
+  const save = () => {
+    setSaved(true);
+    setTimeout(() => setSaved(false), 1800);
+  };
 
   return (
     <div className="space-y-4 max-w-[860px]">
@@ -184,49 +191,75 @@ function ApiWebhooksTab() {
         </a>
       </div>
 
-      {/* (B) Outbound webhooks */}
+      {/* (B) Outbound webhook — ONE URL for the whole workspace */}
       <div className="bg-white border border-border rounded-card p-5">
-        <div className="flex items-center gap-2 mb-1">
-          <Webhook size={15} strokeWidth={1.75} className="text-text-secondary" />
-          <h3 className="text-card-title text-text-primary">Outbound webhooks</h3>
+        <div className="flex items-center justify-between gap-3 mb-1">
+          <div className="flex items-center gap-2">
+            <Webhook size={15} strokeWidth={1.75} className="text-text-secondary" />
+            <h3 className="text-card-title text-text-primary">Outbound webhook</h3>
+          </div>
+          <WebhookStatusBadge status={status} />
         </div>
         <p className="text-[12.5px] text-text-secondary mb-4 leading-relaxed">
-          We POST results to a webhook URL <span className="text-text-primary font-medium">your team hosts</span> — one
-          per product. Every call is signed with the secret below so you can verify it came from Revspot.
-          Set each URL in{" "}
-          <span className="text-text-primary font-medium">Settings → product</span>.
+          We POST every result to one webhook URL <span className="text-text-primary font-medium">your team hosts</span>.
+          Each call carries an <code className="font-mono text-text-primary">event</code> and{" "}
+          <code className="font-mono text-text-primary">product</code> field so you route it server-side, and is
+          signed with the secret below so you can verify it came from Revspot.
         </p>
 
+        {/* Webhook URL input + save */}
         <div className="mb-4">
+          <label className="block text-[11px] font-medium text-text-tertiary uppercase tracking-[0.5px] mb-1.5">
+            Webhook URL
+          </label>
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={webhookUrl}
+              onChange={(e) => setWebhookUrl(e.target.value)}
+              placeholder="https://hooks.yourcompany.com/revspot"
+              className="flex-1 min-w-0 h-9 px-3 text-[12.5px] font-mono border border-border rounded-input bg-white text-text-primary focus:outline-none focus:border-accent transition-colors duration-150 placeholder:text-text-tertiary placeholder:font-sans"
+            />
+            <button
+              onClick={save}
+              className="h-9 px-4 inline-flex items-center gap-1.5 bg-accent text-white text-[12px] font-medium rounded-button hover:bg-accent-hover transition-colors duration-150 shrink-0"
+            >
+              {saved ? (
+                <>
+                  <Check size={14} strokeWidth={2} />
+                  Saved
+                </>
+              ) : (
+                "Save"
+              )}
+            </button>
+          </div>
+        </div>
+
+        <div className="mb-5">
           <CopyField label="Signing secret" value={signingSecret} masked />
         </div>
 
-        {/* Per-product webhook rows */}
-        <div className="space-y-2.5">
-          {ownedWebhooks.map((w) => (
-            <div
-              key={w.product}
-              className="rounded-card border border-border px-3.5 py-3"
-            >
+        {/* Per-product event reference (read-only) */}
+        <div className="text-[11px] font-medium text-text-tertiary uppercase tracking-[0.5px] mb-2">
+          Events you'll receive
+        </div>
+        <div className="space-y-2.5 mb-5">
+          {ownedProducts.map((p) => (
+            <div key={p.key} className="rounded-card border border-border px-3.5 py-3">
               <div className="flex items-center justify-between gap-3 mb-2">
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="text-[13px] font-semibold text-text-primary">
-                    {PRODUCT_LABEL[w.product]}
-                  </span>
-                  <WebhookStatusBadge status={w.status} />
-                </div>
-                <Link
-                  href={`/settings/${w.product === "ai_calling" ? "ai-calling" : w.product}`}
+                <span className="text-[13px] font-semibold text-text-primary">{p.label}</span>
+                <a
+                  href={PRODUCT_EVENT_DOCS[p.key]}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="inline-flex items-center gap-1 text-[11.5px] text-text-tertiary hover:text-text-secondary transition-colors duration-150 shrink-0"
                 >
-                  Configure
-                  <ArrowRight size={12} strokeWidth={1.5} />
-                </Link>
+                  Payload docs
+                  <ExternalLink size={12} strokeWidth={1.5} />
+                </a>
               </div>
-              <div className="text-[12px] font-mono text-text-secondary truncate mb-2">
-                {w.url || <span className="font-sans text-text-tertiary">No webhook URL set</span>}
-              </div>
-              <EventChips events={w.events} />
+              <EventChips events={PRODUCT_EVENTS[p.key]} />
             </div>
           ))}
         </div>
