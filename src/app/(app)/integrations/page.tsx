@@ -3,30 +3,11 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import type { Variants } from "framer-motion";
-import {
-  CheckCircle2,
-  Loader2,
-  Unplug,
-  Plus,
-  ChevronDown,
-  ChevronRight,
-  ArrowRight,
-  RefreshCw,
-  Trash2,
-  Pencil,
-  Check,
-  X,
-} from "lucide-react";
-import {
-  adAccounts,
-  crmOptions,
-  autoSyncRules as initialSyncRules,
-  fieldMappings,
-  stageMappings,
-  ghlStageOptions,
-  syncLog,
-} from "@/lib/integrations-data";
-import type { AdAccount, AutoSyncRule } from "@/lib/integrations-data";
+import { CheckCircle2, Loader2, Unplug, Plus, Check } from "lucide-react";
+import { adAccounts } from "@/lib/integrations-data";
+import type { AdAccount } from "@/lib/integrations-data";
+import { crmConnections } from "@/lib/crm-integration-data";
+import { CrmConnectionCard } from "@/components/integrations/crm-connection-card";
 import WhatsAppConnectPage from "@/app/(app)/channels/whatsapp/page";
 import { useWA } from "@/lib/whatsapp-context";
 
@@ -62,51 +43,6 @@ function Toggle({
     </button>
   );
 }
-
-// ── Collapsible Section ─────────────────────────────────────
-function CollapsibleSection({
-  title,
-  badge,
-  defaultOpen = false,
-  children,
-}: {
-  title: string;
-  badge?: string;
-  defaultOpen?: boolean;
-  children: React.ReactNode;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <div className="border border-border rounded-card overflow-hidden">
-      <button
-        onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between px-5 py-3.5 bg-white hover:bg-surface-page transition-colors duration-150"
-      >
-        <div className="flex items-center gap-2">
-          <h3 className="text-card-title text-text-primary">{title}</h3>
-          {badge && (
-            <span className="text-[11px] font-medium px-2 py-0.5 rounded-badge bg-surface-secondary text-text-secondary">
-              {badge}
-            </span>
-          )}
-        </div>
-        {open ? (
-          <ChevronDown size={14} strokeWidth={1.5} className="text-text-tertiary" />
-        ) : (
-          <ChevronRight size={14} strokeWidth={1.5} className="text-text-tertiary" />
-        )}
-      </button>
-      {open && <div className="px-5 pb-5 pt-2 border-t border-border-subtle">{children}</div>}
-    </div>
-  );
-}
-
-// ── Select Style ────────────────────────────────────────────
-const selectStyle = {
-  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239B9B9B' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`,
-  backgroundRepeat: "no-repeat" as const,
-  backgroundPosition: "right 10px center",
-};
 
 // ── Ad Account Card ─────────────────────────────────────────
 function AdAccountCard({ account }: { account: AdAccount }) {
@@ -190,7 +126,6 @@ type Tab = "ad-accounts" | "crm" | "whatsapp" | "notifications";
 
 export default function IntegrationsPage() {
   const [activeTab, setActiveTab] = useState<Tab>("ad-accounts");
-  const [syncRules, setSyncRules] = useState(initialSyncRules);
   // Sync state with the WhatsApp context so the tab can warn the user
   // when no connection exists yet. Notifications tab may grow similar
   // indicators (Slack/email) later — keep the variable name specific.
@@ -209,12 +144,6 @@ export default function IntegrationsPage() {
     voiceAlerts: false,
   });
   const [saved, setSaved] = useState(false);
-
-  const toggleSyncRule = (id: string) => {
-    setSyncRules((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, enabled: !r.enabled } : r))
-    );
-  };
 
   const tabs: { key: Tab; label: string }[] = [
     { key: "ad-accounts", label: "Ad Accounts" },
@@ -280,212 +209,28 @@ export default function IntegrationsPage() {
         </motion.div>
       )}
 
-      {/* ── CRM TAB ─────────────────────────────────────────── */}
+      {/* ── CRM TAB (Model A: global connection list) ───────── */}
       {activeTab === "crm" && (
-        <motion.div variants={fadeUp} className="space-y-4">
-          {/* Connection Status */}
-          <div className="bg-white border border-border rounded-card p-5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-[8px] bg-[#EFF6FF] flex items-center justify-center text-[13px] font-bold text-[#1D4ED8]">
-                  G
-                </div>
-                <div>
-                  <div className="text-[14px] font-semibold text-text-primary">GoHighLevel</div>
-                  <div className="text-[12px] text-text-secondary">Connected 14 days ago</div>
-                </div>
-                <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-badge bg-[#F0FDF4] text-[#15803D]">
-                  <CheckCircle2 size={11} strokeWidth={2} />
-                  Connected
-                </span>
-              </div>
-              <button className="text-[12px] text-text-tertiary hover:text-status-error transition-colors duration-150 flex items-center gap-1">
-                <Unplug size={11} strokeWidth={1.5} />
-                Disconnect
-              </button>
-            </div>
+        <motion.div variants={fadeUp} className="space-y-4 max-w-[860px]">
+          <div className="flex items-start justify-between gap-4">
+            <p className="text-[12.5px] text-text-secondary leading-relaxed max-w-[520px]">
+              Each connection is one CRM handshake, tagged with the products it serves.
+              Per-product behavior (stage gating, field writeback) lives in{" "}
+              <span className="text-text-primary font-medium">Settings</span>.
+            </p>
+            <button
+              className="inline-flex items-center gap-1.5 h-9 px-4 bg-accent text-white text-[12.5px] font-medium rounded-button hover:bg-accent-hover transition-colors duration-150 shrink-0"
+            >
+              <Plus size={14} strokeWidth={2} />
+              Add connection
+            </button>
           </div>
 
-          {/* Auto-Sync Rules */}
-          <CollapsibleSection title="Auto-sync rules" defaultOpen>
-            <div className="space-y-0">
-              {syncRules.map((rule) => (
-                <div
-                  key={rule.id}
-                  className="flex items-start justify-between py-3 border-b border-border-subtle last:border-0"
-                >
-                  <div className="pr-4">
-                    <div className="text-[13px] text-text-primary font-medium">{rule.label}</div>
-                    <div className="text-[11px] text-text-tertiary mt-0.5 leading-relaxed">
-                      {rule.helper}
-                    </div>
-                  </div>
-                  <Toggle enabled={rule.enabled} onToggle={() => toggleSyncRule(rule.id)} />
-                </div>
-              ))}
-            </div>
-          </CollapsibleSection>
-
-          {/* Field Mapping */}
-          <CollapsibleSection title="Field mapping" badge="Auto-mapped 8 fields" defaultOpen>
-            <div className="flex items-center gap-2 mb-3">
-              <button className="inline-flex items-center gap-1 text-[12px] font-medium text-text-secondary hover:text-text-primary transition-colors duration-150">
-                <RefreshCw size={12} strokeWidth={1.5} />
-                Auto-detect fields
-              </button>
-            </div>
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-border-subtle">
-                  <th className="px-3 py-2 text-[10px] font-medium text-text-tertiary uppercase tracking-[0.5px] text-left">
-                    Revspot Field
-                  </th>
-                  <th className="px-1 py-2 text-[10px] text-text-tertiary">→</th>
-                  <th className="px-3 py-2 text-[10px] font-medium text-text-tertiary uppercase tracking-[0.5px] text-left">
-                    GoHighLevel Field
-                  </th>
-                  <th className="px-3 py-2 text-[10px] font-medium text-text-tertiary uppercase tracking-[0.5px] text-left">
-                    Default
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {fieldMappings.map((fm) => (
-                  <tr key={fm.id} className="border-b border-border-subtle last:border-0">
-                    <td className="px-3 py-2 text-[12px] text-text-primary font-medium">
-                      {fm.revspotField}
-                    </td>
-                    <td className="px-1 py-2 text-[10px] text-text-tertiary text-center">→</td>
-                    <td className="px-3 py-2">
-                      <input
-                        type="text"
-                        defaultValue={fm.crmField}
-                        className="h-7 px-2 text-[12px] font-mono border border-border rounded-[4px] bg-white text-text-primary focus:outline-none focus:border-accent transition-colors duration-150 w-full max-w-[200px]"
-                      />
-                    </td>
-                    <td className="px-3 py-2 text-[12px] text-text-tertiary italic">
-                      {fm.defaultValue || "—"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <button className="mt-3 inline-flex items-center gap-1 text-[12px] font-medium text-text-secondary hover:text-text-primary transition-colors duration-150">
-              <Plus size={12} strokeWidth={1.5} />
-              Add mapping
-            </button>
-          </CollapsibleSection>
-
-          {/* Pipeline Mapping */}
-          <CollapsibleSection title="Pipeline & stage mapping">
-            <div className="mb-4">
-              <label className="block text-[12px] text-text-secondary mb-1">
-                GoHighLevel Pipeline
-              </label>
-              <select
-                defaultValue="Real Estate Sales Pipeline"
-                className="h-9 px-3 pr-8 text-[13px] border border-border rounded-input bg-white text-text-primary focus:outline-none focus:border-accent transition-colors duration-150 appearance-none cursor-pointer"
-                style={selectStyle}
-              >
-                <option>Real Estate Sales Pipeline</option>
-                <option>Luxury Properties Pipeline</option>
-                <option>Commercial Pipeline</option>
-              </select>
-            </div>
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-border-subtle">
-                  <th className="px-3 py-2 text-[10px] font-medium text-text-tertiary uppercase tracking-[0.5px] text-left">
-                    Revspot Stage
-                  </th>
-                  <th className="px-1 py-2 text-[10px] text-text-tertiary">→</th>
-                  <th className="px-3 py-2 text-[10px] font-medium text-text-tertiary uppercase tracking-[0.5px] text-left">
-                    GoHighLevel Stage
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {stageMappings.map((sm, i) => (
-                  <tr key={i} className="border-b border-border-subtle last:border-0">
-                    <td className="px-3 py-2 text-[12px] text-text-primary font-medium">
-                      {sm.revspotStage}
-                    </td>
-                    <td className="px-1 py-2 text-[10px] text-text-tertiary text-center">→</td>
-                    <td className="px-3 py-2">
-                      <select
-                        defaultValue={sm.crmStage}
-                        className="h-7 px-2 pr-6 text-[12px] border border-border rounded-[4px] bg-white text-text-primary focus:outline-none focus:border-accent transition-colors duration-150 appearance-none cursor-pointer"
-                        style={selectStyle}
-                      >
-                        <option value="">Select stage...</option>
-                        {ghlStageOptions.map((s) => (
-                          <option key={s} value={s}>
-                            {s}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </CollapsibleSection>
-
-          {/* Sync Log */}
-          <CollapsibleSection title="Sync log" badge="Last sync: 2 minutes ago">
-            <div className="text-[12px] text-text-secondary mb-3">
-              Today: <span className="font-medium text-text-primary">23 pushed</span> ·{" "}
-              <span className="font-medium text-status-error">1 failed</span> ·{" "}
-              <span className="text-text-tertiary">412 total synced</span>
-            </div>
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-border-subtle">
-                  {["Time", "Lead", "Action", "Status", "Details"].map((h) => (
-                    <th
-                      key={h}
-                      className="px-3 py-2 text-[10px] font-medium text-text-tertiary uppercase tracking-[0.5px] text-left"
-                    >
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {syncLog.map((entry) => (
-                  <tr key={entry.id} className="border-b border-border-subtle last:border-0">
-                    <td className="px-3 py-2 text-[11px] text-text-tertiary whitespace-nowrap">
-                      {entry.time}
-                    </td>
-                    <td className="px-3 py-2 text-[12px] text-text-primary font-medium whitespace-nowrap">
-                      {entry.leadName}
-                    </td>
-                    <td className="px-3 py-2 text-[11px] text-text-secondary whitespace-nowrap">
-                      {entry.action}
-                    </td>
-                    <td className="px-3 py-2">
-                      {entry.status === "success" ? (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[#15803D]">
-                          <CheckCircle2 size={11} strokeWidth={2} />
-                          Success
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-status-error">
-                          <X size={11} strokeWidth={2} />
-                          Failed
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2 text-[11px] text-text-secondary">{entry.details}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <button className="mt-3 inline-flex items-center gap-1 text-[12px] font-medium text-text-secondary hover:text-text-primary transition-colors duration-150">
-              View full log
-              <ArrowRight size={11} strokeWidth={1.5} />
-            </button>
-          </CollapsibleSection>
+          <div className="space-y-2.5">
+            {crmConnections.map((conn) => (
+              <CrmConnectionCard key={conn.id} conn={conn} />
+            ))}
+          </div>
         </motion.div>
       )}
 
