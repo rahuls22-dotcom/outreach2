@@ -8,6 +8,7 @@ import { adAccounts } from "@/lib/integrations-data";
 import type { AdAccount } from "@/lib/integrations-data";
 import { crmConnections } from "@/lib/crm-integration-data";
 import { CrmConnectionCard } from "@/components/integrations/crm-connection-card";
+import { CrmConnectWizard } from "@/components/integrations/crm-connect-wizard";
 import WhatsAppConnectPage from "@/app/(app)/channels/whatsapp/page";
 import { useWA } from "@/lib/whatsapp-context";
 
@@ -126,6 +127,7 @@ type Tab = "ad-accounts" | "crm" | "whatsapp" | "notifications";
 
 export default function IntegrationsPage() {
   const [activeTab, setActiveTab] = useState<Tab>("ad-accounts");
+  const [wizardOpen, setWizardOpen] = useState(false);
   // Sync state with the WhatsApp context so the tab can warn the user
   // when no connection exists yet. Notifications tab may grow similar
   // indicators (Slack/email) later — keep the variable name specific.
@@ -219,6 +221,7 @@ export default function IntegrationsPage() {
               <span className="text-text-primary font-medium">Settings</span>.
             </p>
             <button
+              onClick={() => setWizardOpen(true)}
               className="inline-flex items-center gap-1.5 h-9 px-4 bg-accent text-white text-[12.5px] font-medium rounded-button hover:bg-accent-hover transition-colors duration-150 shrink-0"
             >
               <Plus size={14} strokeWidth={2} />
@@ -333,6 +336,8 @@ export default function IntegrationsPage() {
           </div>
         </motion.div>
       )}
+
+      {wizardOpen && <CrmConnectWizard onClose={() => setWizardOpen(false)} />}
     </motion.div>
   );
 }
