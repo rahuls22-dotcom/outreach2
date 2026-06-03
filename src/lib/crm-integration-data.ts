@@ -185,7 +185,7 @@ export const crmConnections: CrmConnection[] = [
     channels: [
       {
         product: "campaigns",
-        source: { type: "push_api", location: "Inbound API" },
+        source: { type: "push_api", location: "POST /v1/leads" },
         destination: { location: "Real Estate Sales Pipeline", dedupKey: "phone" },
         writeBack: { ops: ["create_row", "update_row"], stageGate: "all" },
       },
