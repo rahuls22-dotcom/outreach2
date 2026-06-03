@@ -186,7 +186,7 @@ function AdAccountCard({ account }: { account: AdAccount }) {
 }
 
 // ── Main Page ───────────────────────────────────────────────
-type Tab = "ad-accounts" | "crm" | "whatsapp" | "enrichment" | "notifications";
+type Tab = "ad-accounts" | "crm" | "whatsapp" | "notifications";
 
 export default function IntegrationsPage() {
   const [activeTab, setActiveTab] = useState<Tab>("ad-accounts");
@@ -220,7 +220,6 @@ export default function IntegrationsPage() {
     { key: "ad-accounts", label: "Ad Accounts" },
     { key: "crm", label: "CRM" },
     { key: "whatsapp", label: "WhatsApp" },
-    { key: "enrichment", label: "Enrichment" },
     { key: "notifications", label: "Notifications" },
   ];
 
@@ -494,73 +493,6 @@ export default function IntegrationsPage() {
       {activeTab === "whatsapp" && (
         <motion.div variants={fadeUp}>
           <WhatsAppConnectPage />
-        </motion.div>
-      )}
-
-      {/* ── ENRICHMENT TAB ───────────────────────────────────── */}
-      {activeTab === "enrichment" && (
-        <motion.div variants={fadeUp} className="space-y-5 max-w-[680px]">
-          <div className="bg-white border border-border rounded-card p-5">
-            <h3 className="text-card-title text-text-primary mb-1">Auto-Enrichment</h3>
-            <p className="text-[11px] text-text-tertiary mb-4">Automatically enrich new leads with additional data from connected sources.</p>
-            <div className="space-y-0">
-              <div className="flex items-start justify-between py-3 border-b border-border-subtle">
-                <div>
-                  <span className="text-[13px] text-text-primary">Auto-enrich new enquiries</span>
-                  <div className="text-[11px] text-text-tertiary mt-0.5">Automatically enrich leads as they come in from campaigns</div>
-                </div>
-                <Toggle enabled={true} onToggle={() => {}} />
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white border border-border rounded-card p-5">
-            <h3 className="text-card-title text-text-primary mb-4">Data Sources</h3>
-            <div className="space-y-0">
-              <div className="flex items-start justify-between py-3 border-b border-border-subtle">
-                <div>
-                  <span className="text-[13px] text-text-primary">Revspot Database</span>
-                  <div className="text-[11px] text-text-tertiary mt-0.5">Enrich with proprietary Revspot data (demographics, property interest signals)</div>
-                </div>
-                <Toggle enabled={true} onToggle={() => {}} />
-              </div>
-              <div className="flex items-start justify-between py-3 border-b border-border-subtle">
-                <div className="flex items-center gap-2">
-                  <div>
-                    <span className="text-[13px] text-text-primary">LinkedIn</span>
-                    <div className="text-[11px] text-text-tertiary mt-0.5">Enrich with professional data (company, title, industry)</div>
-                  </div>
-                  <span className="text-[10px] font-medium text-text-tertiary bg-surface-secondary px-1.5 py-0.5 rounded">Coming soon</span>
-                </div>
-                <Toggle enabled={false} onToggle={() => {}} />
-              </div>
-              <div className="flex items-start justify-between py-3">
-                <div>
-                  <span className="text-[13px] text-text-primary">Company data</span>
-                  <div className="text-[11px] text-text-tertiary mt-0.5">Enrich with company information (size, revenue, industry)</div>
-                </div>
-                <Toggle enabled={true} onToggle={() => {}} />
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white border border-border rounded-card p-5">
-            <h3 className="text-card-title text-text-primary mb-4">Enrichment Stats</h3>
-            <div className="grid grid-cols-3 gap-4">
-              <div className="bg-surface-page rounded-metric px-4 py-3">
-                <div className="text-[11px] text-text-tertiary uppercase tracking-[0.4px]">Contacts enriched</div>
-                <div className="text-stat-md text-text-primary mt-1">612</div>
-              </div>
-              <div className="bg-surface-page rounded-metric px-4 py-3">
-                <div className="text-[11px] text-text-tertiary uppercase tracking-[0.4px]">Enrichment rate</div>
-                <div className="text-stat-md text-text-primary mt-1">72.4%</div>
-              </div>
-              <div className="bg-surface-page rounded-metric px-4 py-3">
-                <div className="text-[11px] text-text-tertiary uppercase tracking-[0.4px]">Avg data points</div>
-                <div className="text-stat-md text-text-primary mt-1">5.2</div>
-              </div>
-            </div>
-          </div>
         </motion.div>
       )}
 

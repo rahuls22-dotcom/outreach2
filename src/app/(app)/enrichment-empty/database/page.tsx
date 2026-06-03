@@ -11,12 +11,12 @@ export default function EnrichmentEmptyDatabasePage() {
   return (
     <DataPageShell
       variant="empty"
-      title="Enrichment records"
+      title="History"
       rootLabel="Enrichment"
       rootHref="/enrichment-empty"
       breadcrumbTrail={[
         { label: "Enrichment", href: "/enrichment-empty" },
-        { label: "Enrichment records" },
+        { label: "History" },
       ]}
       description="Every lead processed through bulk upload or single lookup, enriched, partial, or failed. Connect your CRM to backfill leads from there too."
     >

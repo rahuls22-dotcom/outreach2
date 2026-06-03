@@ -375,7 +375,7 @@ export function EnrichedLeadsEmpty() {
           <Database size={20} strokeWidth={1.5} className="text-text-secondary" />
         </div>
         <h3 className="text-[15px] font-semibold text-text-primary mb-1.5">
-          No enrichment records yet
+          No history yet
         </h3>
         <p className="text-[12.5px] text-text-secondary leading-relaxed mb-6">
           Records show up here as soon as a lead is enriched, from your CRM, a bulk upload, or a single lookup.

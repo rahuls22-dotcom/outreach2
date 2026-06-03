@@ -16,12 +16,12 @@ export default function EnrichmentDatabasePage() {
   return (
     <DataPageShell
       variant={enrichmentVariant === "populated" ? "connected" : "empty"}
-      title="Enrichment records"
+      title="History"
       rootLabel="Enrichment"
       rootHref="/enrichment"
       breadcrumbTrail={[
         { label: "Enrichment", href: "/enrichment" },
-        { label: "Enrichment records" },
+        { label: "History" },
       ]}
       description="Every lead processed through CRM sync, bulk upload, or single lookup, enriched, partial, or failed."
     >
