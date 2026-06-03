@@ -8,7 +8,7 @@ import {
   ConfigChoice,
   SaveBar,
 } from "@/components/settings/product-config";
-import { ChannelConfigCard } from "@/components/settings/channel-config-card";
+import { WebhookConfigCard } from "@/components/settings/webhook-config-card";
 
 export default function EnrichmentSettingsPage() {
   const [freshness, setFreshness] = useState<"stored" | "fresh">("stored");
@@ -25,7 +25,7 @@ export default function EnrichmentSettingsPage() {
         </p>
       </div>
 
-      <ChannelConfigCard product="enrichment" />
+      <WebhookConfigCard product="enrichment" />
 
       {/* Data freshness */}
       <ConfigCard

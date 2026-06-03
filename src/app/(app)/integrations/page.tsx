@@ -1,16 +1,43 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { motion } from "framer-motion";
 import type { Variants } from "framer-motion";
-import { CheckCircle2, Loader2, Unplug, Plus, Check } from "lucide-react";
+import {
+  CheckCircle2,
+  Loader2,
+  Unplug,
+  Check,
+  Inbox,
+  Webhook,
+  BookOpen,
+  ExternalLink,
+  ArrowRight,
+} from "lucide-react";
 import { adAccounts } from "@/lib/integrations-data";
 import type { AdAccount } from "@/lib/integrations-data";
-import { crmConnections } from "@/lib/crm-integration-data";
-import { CrmConnectionCard } from "@/components/integrations/crm-connection-card";
-import { CrmConnectWizard } from "@/components/integrations/crm-connect-wizard";
+import {
+  inbound,
+  signingSecret,
+  productWebhooks,
+  recentDeliveries,
+  DOCS_BASE,
+  DOCS_LINKS,
+} from "@/lib/integration-data";
+import {
+  CopyField,
+  WebhookStatusBadge,
+  EventChips,
+  CodeBlock,
+} from "@/components/integrations/api-bits";
+import { ALL_PRODUCTS, useProducts, type ProductKey } from "@/lib/products";
 import WhatsAppConnectPage from "@/app/(app)/channels/whatsapp/page";
 import { useWA } from "@/lib/whatsapp-context";
+
+const PRODUCT_LABEL: Record<ProductKey, string> = Object.fromEntries(
+  ALL_PRODUCTS.map((p) => [p.key, p.label]),
+) as Record<ProductKey, string>;
 
 const stagger: Variants = {
   hidden: {},
@@ -122,12 +149,180 @@ function AdAccountCard({ account }: { account: AdAccount }) {
   );
 }
 
+// ── API & Webhooks Tab ──────────────────────────────────────
+// Revspot is CRM-agnostic. We host ONE inbound API (client pushes leads in) and
+// POST results to per-product webhook URLs the CLIENT hosts. No CRM handshake.
+function ApiWebhooksTab() {
+  const { has } = useProducts();
+  const ownedWebhooks = productWebhooks.filter((w) => has(w.product));
+
+  return (
+    <div className="space-y-4 max-w-[860px]">
+      {/* (A) Inbound API */}
+      <div className="bg-white border border-border rounded-card p-5">
+        <div className="flex items-center gap-2 mb-1">
+          <Inbox size={15} strokeWidth={1.75} className="text-text-secondary" />
+          <h3 className="text-card-title text-text-primary">Inbound API</h3>
+        </div>
+        <p className="text-[12.5px] text-text-secondary mb-4 leading-relaxed">
+          Push leads to Revspot from your CRM or backend. Send a{" "}
+          <code className="font-mono text-text-primary">{inbound.method}</code> with your
+          API key in the <code className="font-mono text-text-primary">Authorization</code> header.
+        </p>
+        <div className="space-y-3">
+          <CopyField label="Endpoint" value={`${inbound.method} ${inbound.endpoint}`} />
+          <CopyField label="API key" value={inbound.apiKey} masked />
+        </div>
+        <a
+          href={DOCS_LINKS.push}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1.5 text-[12px] font-medium text-accent hover:text-accent-hover transition-colors duration-150 mt-3.5"
+        >
+          How to push leads
+          <ExternalLink size={12} strokeWidth={1.5} />
+        </a>
+      </div>
+
+      {/* (B) Outbound webhooks */}
+      <div className="bg-white border border-border rounded-card p-5">
+        <div className="flex items-center gap-2 mb-1">
+          <Webhook size={15} strokeWidth={1.75} className="text-text-secondary" />
+          <h3 className="text-card-title text-text-primary">Outbound webhooks</h3>
+        </div>
+        <p className="text-[12.5px] text-text-secondary mb-4 leading-relaxed">
+          We POST results to a webhook URL <span className="text-text-primary font-medium">your team hosts</span> — one
+          per product. Every call is signed with the secret below so you can verify it came from Revspot.
+          Set each URL in{" "}
+          <span className="text-text-primary font-medium">Settings → product</span>.
+        </p>
+
+        <div className="mb-4">
+          <CopyField label="Signing secret" value={signingSecret} masked />
+        </div>
+
+        {/* Per-product webhook rows */}
+        <div className="space-y-2.5">
+          {ownedWebhooks.map((w) => (
+            <div
+              key={w.product}
+              className="rounded-card border border-border px-3.5 py-3"
+            >
+              <div className="flex items-center justify-between gap-3 mb-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-[13px] font-semibold text-text-primary">
+                    {PRODUCT_LABEL[w.product]}
+                  </span>
+                  <WebhookStatusBadge status={w.status} />
+                </div>
+                <Link
+                  href={`/settings/${w.product === "ai_calling" ? "ai-calling" : w.product}`}
+                  className="inline-flex items-center gap-1 text-[11.5px] text-text-tertiary hover:text-text-secondary transition-colors duration-150 shrink-0"
+                >
+                  Configure
+                  <ArrowRight size={12} strokeWidth={1.5} />
+                </Link>
+              </div>
+              <div className="text-[12px] font-mono text-text-secondary truncate mb-2">
+                {w.url || <span className="font-sans text-text-tertiary">No webhook URL set</span>}
+              </div>
+              <EventChips events={w.events} />
+            </div>
+          ))}
+        </div>
+
+        {/* Recent deliveries */}
+        <div className="mt-5">
+          <div className="text-[11px] font-medium text-text-tertiary uppercase tracking-[0.5px] mb-2">
+            Recent deliveries
+          </div>
+          <div className="rounded-card border border-border-subtle divide-y divide-border-subtle">
+            {recentDeliveries.map((d) => (
+              <div key={d.id} className="flex items-center gap-3 px-3.5 py-2.5">
+                <span
+                  className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                    d.status === "delivered" ? "bg-[#15803D]" : "bg-[#DC2626]"
+                  }`}
+                />
+                <span className="text-[11.5px] font-mono text-text-primary shrink-0 w-[120px] truncate">
+                  {d.event}
+                </span>
+                <span className="text-[12px] text-text-secondary flex-1 min-w-0 truncate">
+                  {d.detail}
+                </span>
+                <span className="text-[11px] font-mono text-text-tertiary shrink-0">
+                  {d.responseCode}
+                </span>
+                <span className="text-[11px] text-text-tertiary shrink-0 w-[64px] text-right">
+                  {d.time}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* (C) Developer docs */}
+      <div className="bg-white border border-border rounded-card p-5">
+        <div className="flex items-center gap-2 mb-1">
+          <BookOpen size={15} strokeWidth={1.75} className="text-text-secondary" />
+          <h3 className="text-card-title text-text-primary">Developer docs</h3>
+        </div>
+        <p className="text-[12.5px] text-text-secondary mb-4 leading-relaxed">
+          Hand these to your tech team. Everything needed to push leads and receive results.
+        </p>
+        <div className="grid grid-cols-2 gap-2.5 mb-4">
+          {[
+            { label: "Push leads", href: DOCS_LINKS.push, desc: "Send leads to the inbound API" },
+            { label: "Webhooks overview", href: DOCS_LINKS.webhooks, desc: "Receive results on your URL" },
+            { label: "Verify signatures", href: DOCS_LINKS.signatures, desc: "Confirm calls came from us" },
+            { label: "Full reference", href: DOCS_BASE, desc: "API + event catalog" },
+          ].map((d) => (
+            <a
+              key={d.label}
+              href={d.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group flex items-start justify-between gap-2 rounded-card border border-border px-3.5 py-3 hover:border-border-strong transition-colors duration-150"
+            >
+              <div className="min-w-0">
+                <div className="text-[12.5px] font-semibold text-text-primary">{d.label}</div>
+                <div className="text-[11.5px] text-text-tertiary truncate">{d.desc}</div>
+              </div>
+              <ExternalLink
+                size={13}
+                strokeWidth={1.5}
+                className="text-text-tertiary group-hover:text-text-secondary transition-colors duration-150 shrink-0 mt-0.5"
+              />
+            </a>
+          ))}
+        </div>
+
+        {/* Sample webhook payload */}
+        <div className="text-[11px] font-medium text-text-tertiary uppercase tracking-[0.5px] mb-2">
+          Sample webhook payload
+        </div>
+        <CodeBlock>{`POST {your_webhook_url}
+X-Revspot-Signature: t=1717..,v1=5d4f...
+
+{
+  "event": "lead.enriched",
+  "id": "evt_8f3c2a9b",
+  "data": {
+    "lead_id": "rl_4521",
+    "enrichment": { "company": "Infosys", "job_title": "Eng Manager" }
+  }
+}`}</CodeBlock>
+      </div>
+    </div>
+  );
+}
+
 // ── Main Page ───────────────────────────────────────────────
-type Tab = "ad-accounts" | "crm" | "whatsapp" | "notifications";
+type Tab = "ad-accounts" | "api" | "whatsapp" | "notifications";
 
 export default function IntegrationsPage() {
   const [activeTab, setActiveTab] = useState<Tab>("ad-accounts");
-  const [wizardOpen, setWizardOpen] = useState(false);
   // Sync state with the WhatsApp context so the tab can warn the user
   // when no connection exists yet. Notifications tab may grow similar
   // indicators (Slack/email) later — keep the variable name specific.
@@ -149,7 +344,7 @@ export default function IntegrationsPage() {
 
   const tabs: { key: Tab; label: string }[] = [
     { key: "ad-accounts", label: "Ad Accounts" },
-    { key: "crm", label: "CRM" },
+    { key: "api", label: "API & Webhooks" },
     { key: "whatsapp", label: "WhatsApp" },
     { key: "notifications", label: "Notifications" },
   ];
@@ -211,29 +406,10 @@ export default function IntegrationsPage() {
         </motion.div>
       )}
 
-      {/* ── CRM TAB (Model A: global connection list) ───────── */}
-      {activeTab === "crm" && (
-        <motion.div variants={fadeUp} className="space-y-4 max-w-[860px]">
-          <div className="flex items-start justify-between gap-4">
-            <p className="text-[12.5px] text-text-secondary leading-relaxed max-w-[520px]">
-              Each connection is one CRM handshake, tagged with the products it serves.
-              Per-product behavior (stage gating, field writeback) lives in{" "}
-              <span className="text-text-primary font-medium">Settings</span>.
-            </p>
-            <button
-              onClick={() => setWizardOpen(true)}
-              className="inline-flex items-center gap-1.5 h-9 px-4 bg-accent text-white text-[12.5px] font-medium rounded-button hover:bg-accent-hover transition-colors duration-150 shrink-0"
-            >
-              <Plus size={14} strokeWidth={2} />
-              Add connection
-            </button>
-          </div>
-
-          <div className="space-y-2.5">
-            {crmConnections.map((conn) => (
-              <CrmConnectionCard key={conn.id} conn={conn} />
-            ))}
-          </div>
+      {/* ── API & WEBHOOKS TAB ───────────────────────────────── */}
+      {activeTab === "api" && (
+        <motion.div variants={fadeUp}>
+          <ApiWebhooksTab />
         </motion.div>
       )}
 
@@ -336,8 +512,6 @@ export default function IntegrationsPage() {
           </div>
         </motion.div>
       )}
-
-      {wizardOpen && <CrmConnectWizard onClose={() => setWizardOpen(false)} />}
     </motion.div>
   );
 }
