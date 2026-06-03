@@ -5,7 +5,7 @@
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { X, Download, Users, Copy, Check, Loader2, AlertTriangle, Upload, RotateCw } from "lucide-react";
+import { X, Download, Users, Check, Loader2, AlertTriangle, Upload, RotateCw } from "lucide-react";
 import {
   formatRelative,
   successPct,
@@ -95,7 +95,7 @@ export function RunDrawer({ run: runProp, onClose, onBuildAudience }: RunDrawerP
                   <PushToCrmSection run={run} />
                 </>
               )}
-              {!expired && (
+              {run.status === "done" && !expired && (
                 <>
                   <Divider />
                   <ActionsSection
@@ -105,13 +105,6 @@ export function RunDrawer({ run: runProp, onClose, onBuildAudience }: RunDrawerP
                   />
                 </>
               )}
-            </>
-          )}
-
-          {run.status === "failed" && (
-            <>
-              <Divider />
-              <ErrorSection run={run} />
             </>
           )}
 
@@ -385,32 +378,6 @@ function ActionsSection({
           Available for 7 days from the time enrichment completes.
         </p>
       )}
-    </section>
-  );
-}
-
-function ErrorSection({ run }: { run: RunRecord }) {
-  const [copied, setCopied] = useState(false);
-  const onCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(`${run.id}\n${run.errorCode}\n${run.errorMessage || ""}`);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1400);
-    } catch { /* noop */ }
-  };
-  return (
-    <section className="p-5">
-      <SectionLabel>Why this run failed</SectionLabel>
-      <div className="mt-3 p-3 rounded-card bg-[#FEF2F2] border border-[#FECACA]">
-        <div className="text-[12px] font-medium text-[#DC2626]">{run.errorCode || "Unknown error"}</div>
-        <p className="text-[12px] text-[#7F1D1D] mt-1">{run.errorMessage}</p>
-      </div>
-      <div className="flex items-center gap-2 mt-3">
-        <ActionBtn onClick={onCopy}>
-          {copied ? <Check size={13} strokeWidth={1.5} /> : <Copy size={13} strokeWidth={1.5} />}
-          {copied ? "Copied" : "Copy error ID"}
-        </ActionBtn>
-      </div>
     </section>
   );
 }
