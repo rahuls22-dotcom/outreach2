@@ -543,15 +543,15 @@ function BlindsField() {
     >
       <GradientBlinds
         gradientColors={["#23272f", "#6b7280", "#2a2e37"]}
-        angle={20}
-        noise={0.18}
-        blindCount={16}
-        blindMinWidth={44}
+        angle={226}
+        noise={0.24}
+        blindCount={14}
+        blindMinWidth={0}
         mouseDampening={0.15}
-        spotlightRadius={0.6}
+        spotlightRadius={1}
         spotlightSoftness={1.1}
         spotlightOpacity={0.55}
-        distortAmount={12}
+        distortAmount={0}
         mixBlendMode="screen"
       />
     </div>

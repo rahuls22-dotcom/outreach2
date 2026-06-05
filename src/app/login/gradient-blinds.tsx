@@ -285,8 +285,10 @@ void main() {
 
       if (firstResizeRef.current) {
         firstResizeRef.current = false;
-        const cx = gl.drawingBufferWidth / 2;
-        const cy = gl.drawingBufferHeight / 2;
+        // Rest the spotlight in the top-right corner (shader y is flipped, so
+        // top = max height). The cursor still moves it on hover.
+        const cx = gl.drawingBufferWidth;
+        const cy = gl.drawingBufferHeight;
         uniforms.iMouse.value = [cx, cy];
         mouseTargetRef.current = [cx, cy];
       }
