@@ -1,425 +1,542 @@
 "use client";
 
-// Narrow icon rail (60px). Every nav item is a 40×40 icon button with a
-// tooltip that appears to the right on hover. The full-width sidebar is
-// gone — the platform is dense; vertical real-estate matters more than
-// labels you read once and learn.
+// Expanded sidebar (240px). Sourced from the mvp-final layout, but the Spot
+// row is a Link to /spot (demo behavior) so the full Spot workflow surface
+// still owns the right pane.
+//
+// Order (top → bottom):
+//   1. Spot               (demo)
+//   2. Dashboard          (mvp)
+//   3. Projects           (mvp)
+//   4. Campaigns          (demo)
+//   5. Memory             (demo)
+//   6. Leads              (demo, route /enquiries)
+//   7. Outreach           (demo)
+//   8. Tools section      (mvp): Enrichment (children), Contact extraction
+//                                 (children), Creatives, AI calling agents,
+//                                 Audiences (Soon).
+//   — no Workspace section
+//   9. Wallet widget      (mvp)
+//  10. Demo toggles       (mvp): Empty State, Enrichment-Only, Enrichment
+//                                 demo view
+//  11. User + Settings    (mvp)
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { cloneElement, isValidElement, useEffect, useRef, useState } from "react";
-import type { ReactElement } from "react";
-import { createPortal } from "react-dom";
 import {
   LayoutGrid,
+  FolderKanban,
   Monitor,
   FileText,
-  Plug,
+  Globe,
+  Image as ImageIcon,
+  Settings,
   Eye,
   EyeOff,
-  Sparkles,
-  Brain,
+  UserSearch,
+  ContactRound,
+  ChevronRight,
+  ChevronUp,
+  Activity,
   Database,
   ScanLine,
+  ListChecks,
+  Lock,
+  PhoneCall,
+  Wallet,
+  Plus,
   Send,
-  Bot,
-  Check,
+  Brain,
   LogOut,
 } from "lucide-react";
-import { signOut } from "@/lib/auth";
 import { useDemoMode } from "@/lib/demo-mode";
+import { useProducts } from "@/lib/products";
+import { useSpotStore } from "@/lib/spot/store";
 import { SpotMark } from "@/components/spot/spot-mark";
-import { RevspotLogo } from "@/components/layout/revspot-logo";
-import {
-  redirectAfterScopeSwitch,
-  useAccessibleWorkspaces,
-  useCurrentScope,
-  useCurrentUser,
-  useWorkspaceStore,
-} from "@/lib/workspace-store";
-import { getWorkspace } from "@/lib/workspace-data";
-import { projectsForWorkspace } from "@/lib/project-data";
+import { WorkspaceSwitcher, UserRolePill } from "@/components/layout/workspace-switcher";
+import { useCurrentUser } from "@/lib/workspace-store";
+import { signOut } from "@/lib/auth";
 
-// Match Lucide's ForwardRefExoticComponent signature via `typeof LayoutGrid`
-// — using a narrower React.ComponentType<{size, strokeWidth}> rejects
-// Lucide icons at compile time on strict tsconfigs (Vercel-style).
-type NavItem = {
-  name: string;
-  href: string;
-  icon: typeof LayoutGrid;
-  description?: string;
-  comingSoon?: boolean;
+// ─── Top standalone items (above sections) ───────────────────────
+const dashboardItem = { name: "Dashboard", href: "/dashboard", icon: LayoutGrid };
+const projectsItem  = { name: "Projects",  href: "/projects",  icon: FolderKanban };
+const campaignsItem = { name: "Campaigns", href: "/campaigns", icon: Monitor };
+const memoryItem    = { name: "Memory",    href: "/memory",    icon: Brain };
+const leadsItem     = { name: "Leads",     href: "/enquiries", icon: FileText };
+const outreachItem  = { name: "Outreach",  href: "/outreach",  icon: Send };
+
+// Demo wallet — representative balance shown in the sidebar so the user
+// always knows how much head-room they have before they need to top up.
+const WALLET = {
+  totalMinutes: 5000,
+  usedMinutes: 3250,
+  rupeesPerMinute: 8,
 };
 
-// Sidebar philosophy (this pass): one item per row, no noise. Long-lived
-// nouns (Products, Personas, Creatives, Audiences, Performance, History)
-// all live inside /memory — they don't deserve top-level real estate.
-// The top of the rail is the daily working set: Dashboard → Campaigns →
-// Memory → Leads → outbound + data + agents → workspace.
-const navGroups: NavItem[][] = [
-  [
-    { name: "Dashboard", href: "/dashboard", icon: LayoutGrid, description: "Metrics, leads, voice perf" },
-    { name: "Campaigns", href: "/campaigns", icon: Monitor, description: "Meta · Google · live spend" },
-    { name: "Memory", href: "/memory", icon: Brain, description: "Products, personas, creatives, performance & change history" },
-    { name: "Leads", href: "/enquiries", icon: FileText, description: "CRM inbox" },
-  ],
-  [{ name: "Outreach", href: "/outreach", icon: Send, description: "Voice + WhatsApp outbound" }],
-  [
-    { name: "Enrichment", href: "/enrichment", icon: Database, description: "Thicken leads with verified data" },
-    { name: "Contact Extraction", href: "/contact-extraction", icon: ScanLine, description: "Find net-new validated contacts" },
-  ],
-  [{ name: "Agents", href: "/agents-mvp", icon: Bot, description: "Voice + WhatsApp agents Spot dispatches" }],
-  [
-    { name: "Brand", href: "/brand", icon: Sparkles, description: "Workspace brand & voice" },
-    { name: "Integrations", href: "/integrations", icon: Plug, description: "Connect ad accounts", comingSoon: true },
-  ],
-];
+function formatInrShort(n: number): string {
+  if (n >= 100000) return `₹${(n / 100000).toFixed(n % 100000 === 0 ? 0 : 1)}L`;
+  if (n >= 1000) return `₹${(n / 1000).toFixed(n % 1000 === 0 ? 0 : 1)}K`;
+  return `₹${n.toLocaleString("en-IN")}`;
+}
 
-/**
- * Wraps a trigger element and renders its tooltip into document.body via
- * a portal. We portal because the rail's <nav> uses overflow-y-auto, which
- * implicitly clips horizontal overflow too — a tooltip rendered as a
- * child would never escape the 60px sidebar. Portaling sidesteps that.
- *
- * Tooltip position is computed from the trigger's getBoundingClientRect()
- * on each hover so it stays accurate even if the rail scrolls.
- */
-function TooltipWrap({
-  label,
-  description,
-  children,
-}: {
-  label: string;
-  description?: string;
-  // The child is the actual trigger (a Link or button). We inject our
-  // ref + hover handlers onto it via cloneElement so the trigger element
-  // *is* the bounding box — no wrapper that would distort positioning.
-  children: ReactElement<{
-    ref?: React.Ref<HTMLElement>;
-    onMouseEnter?: (e: React.MouseEvent<HTMLElement>) => void;
-    onMouseLeave?: (e: React.MouseEvent<HTMLElement>) => void;
-    onFocus?: (e: React.FocusEvent<HTMLElement>) => void;
-    onBlur?: (e: React.FocusEvent<HTMLElement>) => void;
-  }>;
-}) {
-  const ref = useRef<HTMLElement>(null);
-  const [visible, setVisible] = useState(false);
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => setMounted(true), []);
-
-  const updatePosition = () => {
-    if (!ref.current) return;
-    const rect = ref.current.getBoundingClientRect();
-    setPos({ top: rect.top + rect.height / 2, left: rect.right + 10 });
-  };
-
-  const onEnter = () => {
-    updatePosition();
-    setVisible(true);
-  };
-  const onLeave = () => setVisible(false);
-
-  // Inject ref + hover/focus handlers onto the trigger directly.
-  const trigger = isValidElement(children)
-    ? cloneElement(children, {
-        ref,
-        onMouseEnter: onEnter,
-        onMouseLeave: onLeave,
-        onFocus: onEnter,
-        onBlur: onLeave,
-      })
-    : children;
+function WalletWidget() {
+  const { totalMinutes, usedMinutes, rupeesPerMinute } = WALLET;
+  const remaining = Math.max(0, totalMinutes - usedMinutes);
+  const pctUsed = totalMinutes > 0 ? Math.min(100, (usedMinutes / totalMinutes) * 100) : 0;
+  const tone =
+    pctUsed >= 90
+      ? { bar: "#DC2626", text: "text-[#DC2626]" }
+      : pctUsed >= 75
+        ? { bar: "#D97706", text: "text-[#92400E]" }
+        : { bar: "rgba(15, 23, 42, 0.78)", text: "text-text-primary" };
 
   return (
-    <>
-      {trigger}
-      {mounted && visible && pos &&
-        createPortal(
+    <div className="px-3 pb-2">
+      <div className="rounded-[8px] border border-border-subtle bg-white px-2.5 py-2">
+        <div className="flex items-center gap-1.5 mb-1.5">
+          <Wallet size={11} strokeWidth={1.75} className="text-text-tertiary shrink-0" />
+          <span className="text-[10px] font-semibold text-text-tertiary uppercase tracking-[0.5px]">
+            Wallet
+          </span>
+          <span className={`text-[10px] font-semibold tabular-nums ${tone.text} ml-auto`}>
+            {Math.round(pctUsed)}%
+          </span>
+        </div>
+        <div className="h-1 rounded-full bg-surface-secondary overflow-hidden">
           <div
-            className="pointer-events-none fadeUp"
-            style={{
-              position: "fixed",
-              top: pos.top,
-              left: pos.left,
-              transform: "translateY(-50%)",
-              background: "#111",
-              color: "#FAFAF8",
-              padding: "6px 10px",
-              borderRadius: 6,
-              whiteSpace: "nowrap",
-              boxShadow: "0 6px 16px rgba(0,0,0,0.18)",
-              zIndex: 200,
-            }}
+            className="h-full rounded-full transition-all"
+            style={{ width: `${pctUsed.toFixed(1)}%`, background: tone.bar }}
+          />
+        </div>
+        <div className="flex items-center justify-between mt-1.5 text-[10px] tabular-nums">
+          <span className="text-text-tertiary">
+            <span className="text-text-secondary font-medium">{usedMinutes.toLocaleString()}</span>
+            <span className="mx-0.5">/</span>
+            {totalMinutes.toLocaleString()} min
+          </span>
+          <button
+            type="button"
+            className="inline-flex items-center gap-0.5 text-[10px] font-medium text-text-primary hover:underline"
+            title={`${remaining.toLocaleString()} min · ${formatInrShort(remaining * rupeesPerMinute)} left`}
           >
-            <div className="text-[12px] font-medium leading-tight">{label}</div>
-            {description && (
-              <div className="text-[10.5px] text-white/55 mt-0.5 font-normal">{description}</div>
-            )}
-            <span
-              aria-hidden
-              style={{
-                position: "absolute",
-                left: -3,
-                top: "50%",
-                transform: "translateY(-50%) rotate(45deg)",
-                width: 7,
-                height: 7,
-                background: "#111",
-              }}
-            />
-          </div>,
-          document.body,
-        )}
-    </>
+            <Plus size={9} strokeWidth={2.5} />
+            Top up
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
-function RailItem({ item, active }: { item: NavItem; active: boolean }) {
-  const Icon = item.icon;
-  const className = `relative flex items-center justify-center w-10 h-10 rounded-[8px] transition-colors duration-150 ${
-    active
-      ? "bg-surface-secondary text-text-primary"
-      : item.comingSoon
-        ? "text-text-tertiary cursor-default"
-        : "text-text-secondary hover:bg-surface-secondary/60 hover:text-text-primary"
-  }`;
-  const inner = (
-    <>
-      <Icon size={17} strokeWidth={1.6} />
-      {item.comingSoon && (
-        <span
-          aria-hidden
-          className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-text-tertiary/50"
-        />
-      )}
-      {active && (
-        <span
-          aria-hidden
-          className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-r-full bg-text-primary"
-        />
-      )}
-    </>
-  );
+// When enrichment-only plan is on, only these hrefs survive in the Tools nav.
+// All other sections are hidden entirely.
+const ENRICHMENT_ONLY_HREFS = new Set([
+  "/enrichment",
+  "/contact-extraction",
+  "/agents-mvp",
+]);
 
-  return (
-    <TooltipWrap label={item.name} description={item.description}>
-      {item.comingSoon ? (
-        <div className={className}>{inner}</div>
-      ) : (
-        <Link href={item.href} className={className}>
-          {inner}
-        </Link>
-      )}
-    </TooltipWrap>
-  );
-}
+// Tools section — pulled from MVP intact. Order:
+//   Enrichment (Dashboard / Enrich / History)
+//   Contact extraction (New extraction / All contacts)
+//   Creatives
+//   AI calling agents
+//   Audiences (Soon)
+const toolsSection = {
+  label: "Tools",
+  items: [
+    {
+      name: "Enrichment",
+      href: "/enrichment",
+      icon: UserSearch,
+      children: [
+        { name: "Dashboard", href: "/enrichment", icon: LayoutGrid },
+        { name: "Enrich", href: "/enrichment/operations", icon: Activity },
+        { name: "History", href: "/enrichment/database", icon: Database },
+      ],
+    },
+    {
+      name: "Contact extraction",
+      href: "/contact-extraction",
+      icon: ContactRound,
+      children: [
+        { name: "New extraction", href: "/contact-extraction/operations", icon: ScanLine },
+        { name: "All contacts", href: "/contact-extraction/database", icon: ListChecks },
+      ],
+    },
+    { name: "Creatives", href: "/creatives", icon: ImageIcon },
+    { name: "AI calling agents", href: "/agents-mvp", icon: PhoneCall },
+    { name: "Audiences", href: "/audiences", icon: Globe, comingSoon: true },
+  ],
+};
 
 export function Sidebar() {
-  const pathname = usePathname();
+  const pathname = usePathname() || "";
   const router = useRouter();
-  const { isEmpty, toggle } = useDemoMode();
+  const { isEmpty, toggle, enrichmentVariant, setEnrichmentVariant } = useDemoMode();
+  const { setProducts, enrichmentOnly } = useProducts();
+  const spotOpen = useSpotStore((s) => s.open);
   const user = useCurrentUser();
 
-  const isActive = (href: string) => {
+  // Manual expand/collapse overrides per parent href. `undefined` = follow the
+  // route default (expanded when current path is under the parent). Toggling
+  // the caret sets an explicit boolean; navigating elsewhere doesn't reset it.
+  const [expandedOverride, setExpandedOverride] = useState<Record<string, boolean>>({});
+
+  const isUnder = (href: string) => {
     if (href === "/dashboard") return pathname === "/dashboard" || pathname === "/";
-    return pathname.startsWith(href);
+    if (href === "/spot") return pathname === "/spot";
+    return pathname === href || pathname.startsWith(href + "/");
   };
 
+  const isExactlyAt = (href: string) => {
+    if (href === "/dashboard") return pathname === "/dashboard" || pathname === "/";
+    return pathname === href;
+  };
+
+  // Parent gets "active" treatment for any sub-route, including its children —
+  // EXCEPT we want the parent's row not to look pressed while a child is the
+  // current page. So highlight parent only when exactly on it.
+  const isActiveForParent = (item: { href: string; children?: { href: string }[] }) => {
+    if (item.children && item.children.length > 0) {
+      const childOwnsParentRoute = item.children.some((c) => c.href === item.href);
+      if (childOwnsParentRoute) return false;
+      return isExactlyAt(item.href);
+    }
+    return isUnder(item.href);
+  };
+
+  const navLinkClass = (active: boolean) =>
+    `relative flex items-center gap-2.5 px-2 h-8 rounded-[6px] transition-colors duration-150 ${
+      active
+        ? "bg-surface-secondary text-text-primary font-medium"
+        : "text-text-secondary hover:bg-surface-secondary/60"
+    }`;
+
+  // The 6 top items above the Tools section. Each shows individually unless
+  // the workspace is in enrichment-only mode (in which case all are hidden;
+  // only Tools is left).
+  const topItems = [
+    dashboardItem,
+    projectsItem,
+    campaignsItem,
+    memoryItem,
+    leadsItem,
+    outreachItem,
+  ];
+
   return (
-    <aside className="fixed left-0 top-0 h-screen w-sidebar bg-white border-r border-border flex flex-col items-center py-2.5 z-50">
-      {/* Workspace mark — click to switch */}
-      <NarrowWorkspaceTrigger />
+    <aside className="fixed left-0 top-0 h-screen w-sidebar bg-white border-r border-border flex flex-col z-50">
+      {/* Workspace switcher · sits in the brand row */}
+      <div className="px-2 pt-3 pb-2 border-b border-border-subtle">
+        <WorkspaceSwitcher />
+      </div>
 
-      <Divider />
-
-      {/* Ask Spot — the hero entry */}
-      <TooltipWrap label="Ask Spot · ⌘J" description="Your Head of Growth">
-        <Link
-          href="/spot"
-          className={`relative flex items-center justify-center w-10 h-10 rounded-[8px] transition-colors duration-150 ${
-            pathname === "/spot" ? "bg-black text-[#FAFAF8]" : "bg-[#111] text-[#FAFAF8] hover:bg-black"
-          }`}
-        >
-          <SpotMark size={18} />
-        </Link>
-      </TooltipWrap>
-
-      <Divider />
-
-      {/* Nav groups */}
-      <nav className="flex-1 overflow-y-auto flex flex-col items-center gap-0.5 w-full px-2">
-        {navGroups.map((group, gi) => (
-          <div key={gi} className="flex flex-col items-center gap-0.5 w-full">
-            {group.map((item) => (
-              <RailItem key={item.href} item={item} active={isActive(item.href)} />
-            ))}
-            {gi < navGroups.length - 1 && <Divider />}
+      {/* Navigation */}
+      <nav className="flex-1 overflow-y-auto px-3 py-1 pb-2">
+        {/* Spot row · standalone, top. Hidden in enrichment-only mode. */}
+        {!enrichmentOnly && (
+          <div className="mb-1 space-y-0.5">
+            <Link
+              href="/spot"
+              className={`relative flex items-center gap-2.5 px-2 h-8 rounded-[6px] transition-colors duration-150 ${
+                isUnder("/spot") || spotOpen
+                  ? "bg-surface-secondary text-text-primary font-medium"
+                  : "text-text-secondary hover:bg-surface-secondary/60"
+              }`}
+              style={{ fontSize: "13.5px" }}
+            >
+              <span className="inline-flex items-center justify-center" style={{ width: 16, height: 16 }}>
+                <SpotMark size={14} />
+              </span>
+              <span>Spot</span>
+              <span
+                className="ml-auto"
+                style={{ width: 6, height: 6, borderRadius: "50%", background: "#1A1A1A" }}
+                aria-hidden
+                title="New from Spot"
+              />
+            </Link>
           </div>
-        ))}
+        )}
+
+        {/* The 6 top standalone links · Dashboard, Projects, Campaigns,
+            Memory, Leads, Outreach. Hidden in enrichment-only mode. */}
+        {!enrichmentOnly && (
+          <div className="mb-3 space-y-0.5">
+            {topItems.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={navLinkClass(isUnder(item.href))}
+                style={{ fontSize: "13.5px" }}
+              >
+                <item.icon size={16} strokeWidth={1.5} />
+                <span>{item.name}</span>
+              </Link>
+            ))}
+          </div>
+        )}
+
+        {/* Tools section · the only labelled section. Filtered down to
+            enrichment + contact-extraction + agents in enrichment-only mode. */}
+        {(() => {
+          const items = enrichmentOnly
+            ? toolsSection.items.filter((it) => ENRICHMENT_ONLY_HREFS.has(it.href))
+            : toolsSection.items;
+          if (items.length === 0) return null;
+          return (
+            <div className="mb-3">
+              <div className="label-section px-2 mb-1">{toolsSection.label}</div>
+              <div className="space-y-0.5">
+                {items.map((item) => {
+                  const lockedHref =
+                    enrichmentOnly && item.href === "/contact-extraction"
+                      ? "/locked/contact-extraction"
+                      : enrichmentOnly && item.href === "/agents-mvp"
+                        ? "/locked/ai-calling-agents"
+                        : null;
+                  if (lockedHref) {
+                    const locked = isUnder(lockedHref);
+                    return (
+                      <Link
+                        key={item.href}
+                        href={lockedHref}
+                        className={`relative flex items-center gap-2.5 px-2 h-8 rounded-[6px] transition-colors duration-150 ${
+                          locked
+                            ? "bg-surface-secondary text-text-primary font-medium"
+                            : "text-text-tertiary hover:bg-surface-secondary/60 hover:text-text-secondary"
+                        }`}
+                        style={{ fontSize: "13.5px" }}
+                      >
+                        <item.icon size={16} strokeWidth={1.5} />
+                        <span>{item.name}</span>
+                        <Lock
+                          size={11}
+                          strokeWidth={1.75}
+                          className="ml-auto text-text-tertiary"
+                          aria-label="Locked"
+                        />
+                      </Link>
+                    );
+                  }
+                  const cs = "comingSoon" in item && item.comingSoon;
+                  if (cs) {
+                    return (
+                      <div
+                        key={item.href}
+                        className="relative flex items-center gap-2.5 px-2 h-8 rounded-[6px] text-text-tertiary cursor-default"
+                        style={{ fontSize: "13.5px" }}
+                      >
+                        <item.icon size={16} strokeWidth={1.5} />
+                        <span>{item.name}</span>
+                        <span className="ml-auto text-[8px] font-medium px-1 py-0.5 rounded bg-surface-secondary text-text-tertiary">
+                          Soon
+                        </span>
+                      </div>
+                    );
+                  }
+                  const children = ("children" in item ? item.children : undefined) as
+                    | { name: string; href: string; icon: typeof item.icon }[]
+                    | undefined;
+                  const hasChildren = !!children && children.length > 0;
+                  const isExpanded = hasChildren
+                    ? (expandedOverride[item.href] ?? isUnder(item.href))
+                    : false;
+                  const toggleExpanded = (e: React.MouseEvent) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setExpandedOverride((s) => ({ ...s, [item.href]: !isExpanded }));
+                  };
+                  return (
+                    <div key={item.href}>
+                      <Link
+                        href={item.href}
+                        onClick={() => {
+                          if (hasChildren) {
+                            setExpandedOverride((s) => ({ ...s, [item.href]: true }));
+                          }
+                        }}
+                        className={navLinkClass(isActiveForParent(item))}
+                        style={{ fontSize: "13.5px" }}
+                      >
+                        <item.icon size={16} strokeWidth={1.5} />
+                        <span>{item.name}</span>
+                        {hasChildren && (
+                          <button
+                            type="button"
+                            onClick={toggleExpanded}
+                            aria-label={isExpanded ? "Collapse" : "Expand"}
+                            aria-expanded={isExpanded}
+                            className="ml-auto p-0.5 -mr-0.5 rounded hover:bg-surface-tertiary/60 text-text-tertiary hover:text-text-secondary transition-colors"
+                          >
+                            {isExpanded ? (
+                              <ChevronUp size={12} strokeWidth={2} />
+                            ) : (
+                              <ChevronRight size={12} strokeWidth={2} />
+                            )}
+                          </button>
+                        )}
+                      </Link>
+                      {hasChildren && isExpanded && (
+                        <div className="mt-0.5 mb-1 ml-[14px] pl-3 border-l border-border-subtle space-y-0.5">
+                          {children!
+                            .filter((child) => {
+                              // No-storage clients have no persistent records DB,
+                              // so the "History" sub-tab is hidden.
+                              if (
+                                enrichmentVariant === "no-storage" &&
+                                child.href === "/enrichment/database"
+                              ) {
+                                return false;
+                              }
+                              return true;
+                            })
+                            .map((child) => {
+                              const childActive =
+                                child.href === item.href
+                                  ? pathname === child.href
+                                  : isUnder(child.href);
+                              return (
+                                <Link
+                                  key={child.href}
+                                  href={child.href}
+                                  className={`relative flex items-center gap-2 px-2 h-7 rounded-[6px] transition-colors duration-150 ${
+                                    childActive
+                                      ? "bg-surface-secondary text-text-primary font-medium"
+                                      : "text-text-secondary hover:bg-surface-secondary/60"
+                                  }`}
+                                  style={{ fontSize: "12.5px" }}
+                                >
+                                  <child.icon size={13} strokeWidth={1.5} />
+                                  <span>{child.name}</span>
+                                </Link>
+                              );
+                            })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
       </nav>
 
-      {/* Demo state toggle */}
-      <TooltipWrap
-        label={isEmpty ? "Empty-state mode ON" : "Preview empty states"}
-        description="Demo toggle"
-      >
+      {/* Wallet — always visible above the demo controls */}
+      <WalletWidget />
+
+      {/* Demo mode toggles */}
+      <div className="px-3 pb-2 space-y-1.5">
         <button
           onClick={toggle}
-          className={`relative flex items-center justify-center w-10 h-10 rounded-[8px] transition-colors mb-1 ${
+          className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-[6px] text-[11px] font-medium transition-all duration-150 ${
             isEmpty
-              ? "bg-[#FEF3C7] text-[#92400E]"
-              : "text-text-tertiary hover:bg-surface-secondary/60 hover:text-text-secondary"
+              ? "bg-[#FEF3C7] text-[#92400E] border border-[#FDE68A]"
+              : "bg-surface-secondary text-text-tertiary hover:text-text-secondary"
           }`}
         >
-          {isEmpty ? <EyeOff size={14} strokeWidth={2} /> : <Eye size={14} strokeWidth={2} />}
+          {isEmpty ? <EyeOff size={12} strokeWidth={2} /> : <Eye size={12} strokeWidth={2} />}
+          {isEmpty ? "Empty State Mode ON" : "Preview Empty States"}
         </button>
-      </TooltipWrap>
-
-      {/* User avatar · click to sign out */}
-      <TooltipWrap label={`Sign out · ${user.name}`} description={user.email}>
+        {/* Enrichment-only plan toggle. ON = workspace owns only Enrichment,
+            which triggers the locked/upsell flows. OFF = full product suite. */}
         <button
-          type="button"
-          onClick={() => {
-            signOut();
-            router.replace("/login");
-          }}
-          className="relative flex items-center justify-center w-10 h-10 group"
+          onClick={() =>
+            setProducts(
+              enrichmentOnly
+                ? ["enrichment", "ai_calling", "campaigns"]
+                : ["enrichment"],
+            )
+          }
+          className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-[6px] text-[11px] font-medium transition-all duration-150 ${
+            enrichmentOnly
+              ? "bg-[#EEF2FF] text-[#3730A3] border border-[#C7D2FE]"
+              : "bg-surface-secondary text-text-tertiary hover:text-text-secondary"
+          }`}
         >
-          <div className="w-[28px] h-[28px] rounded-full bg-surface-secondary flex items-center justify-center group-hover:hidden">
+          <Lock size={12} strokeWidth={2} />
+          {enrichmentOnly ? "Enrichment-Only Plan ON" : "Preview Enrichment-Only"}
+        </button>
+
+        {/* Enrichment demo view · 4 chips. Drives every /enrichment tab from
+            one place so the user can A/B states without leaving the sidebar. */}
+        <div className="pt-1">
+          <div className="px-1 pb-1 text-[9.5px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">
+            Enrichment demo view
+          </div>
+          <div className="grid grid-cols-2 gap-1">
+            {[
+              { key: "populated", label: "Populated" },
+              { key: "empty", label: "Empty" },
+              { key: "no-crm", label: "No CRM" },
+              { key: "no-storage", label: "No storage" },
+            ].map((opt) => {
+              const active = enrichmentVariant === opt.key;
+              return (
+                <button
+                  key={opt.key}
+                  onClick={() => setEnrichmentVariant(opt.key as typeof enrichmentVariant)}
+                  className={`px-2 py-1.5 rounded-[6px] text-[11px] font-medium transition-all duration-150 ${
+                    active
+                      ? "bg-text-primary text-white"
+                      : "bg-surface-secondary text-text-tertiary hover:text-text-secondary"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* User row · name + role + email + Settings cog + sign out */}
+      <div className="border-t border-border px-3 py-2">
+        <div className="flex items-center gap-2">
+          <div className="w-[26px] h-[26px] rounded-full bg-surface-secondary flex items-center justify-center flex-shrink-0">
             <span className="text-[10px] font-medium text-text-secondary">
-              {user.name.split(" ").map((w) => w[0]).join("").slice(0, 2)}
+              {user.name
+                .split(" ")
+                .map((w) => w[0])
+                .join("")
+                .slice(0, 2)}
             </span>
           </div>
-          <div className="w-[28px] h-[28px] rounded-full bg-surface-secondary hidden group-hover:flex items-center justify-center text-text-secondary">
-            <LogOut size={13} strokeWidth={1.8} />
+          <div className="flex-1 min-w-0">
+            <div className="text-[12px] font-medium text-text-primary leading-tight flex items-center gap-1.5">
+              <span className="truncate">{user.name}</span>
+              <UserRolePill />
+            </div>
+            <div className="text-[10px] text-text-tertiary truncate">{user.email}</div>
           </div>
-        </button>
-      </TooltipWrap>
-    </aside>
-  );
-}
-
-function Divider() {
-  return <div aria-hidden className="w-6 h-px bg-border-subtle my-1.5" />;
-}
-
-/**
- * Narrow workspace trigger. Same popover behaviour as the old
- * WorkspaceSwitcher, but the trigger is just the Revspot mark; the
- * popover opens to the right (since the rail is narrow).
- */
-function NarrowWorkspaceTrigger() {
-  const router = useRouter();
-  const pathname = usePathname();
-  const user = useCurrentUser();
-  const accessible = useAccessibleWorkspaces();
-  const scope = useCurrentScope();
-  const setScope = useWorkspaceStore((s) => s.setScope);
-
-  const [open, setOpen] = useState(false);
-  const wrapRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const onClick = (e: MouseEvent) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
-  }, [open]);
-
-  const switchTo = (newScope: string) => {
-    setScope(newScope);
-    setOpen(false);
-    const next = redirectAfterScopeSwitch({ newScope, currentPath: pathname || "/" });
-    if (next) router.push(next);
-  };
-
-  const isAll = scope.kind === "all";
-  const currentWs = scope.kind === "workspace" ? getWorkspace(scope.id) : null;
-
-  return (
-    <div ref={wrapRef} className="relative">
-      <TooltipWrap
-        label={isAll ? "All workspaces" : currentWs?.name || "Workspace"}
-        description={isAll ? `${accessible.length} workspaces` : currentWs?.region}
-      >
-        <button
-          type="button"
-          onClick={() => setOpen((o) => !o)}
-          className="relative flex items-center justify-center w-10 h-10 rounded-[8px] hover:bg-surface-secondary"
-        >
-          <RevspotLogo size={22} />
-        </button>
-      </TooltipWrap>
-
-      {open && (
-        <div
-          className="fadeInScale"
-          style={{
-            position: "absolute",
-            left: "calc(100% + 8px)",
-            top: 0,
-            width: 280,
-            background: "#FFF",
-            border: "1px solid var(--border)",
-            borderRadius: 10,
-            boxShadow: "0 12px 40px rgba(0,0,0,0.12)",
-            zIndex: 80,
-            padding: 6,
-          }}
-        >
-          {user.role === "admin" && (
-            <>
-              <button
-                type="button"
-                onClick={() => switchTo("all")}
-                className="w-full flex items-center gap-2.5 px-2 py-2 rounded-[7px] hover:bg-surface-page text-left"
-                style={{ background: isAll ? "var(--bg-page)" : "transparent" }}
-              >
-                <RevspotLogo size={20} />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[12.5px] font-semibold">All workspaces</span>
-                    <span className="pill" style={{ fontSize: 9.5, padding: "0 5px" }}>
-                      Admin
-                    </span>
-                  </div>
-                  <div className="text-[10.5px] text-text-tertiary">Cross-workspace dashboard</div>
-                </div>
-                {isAll && <Check size={13} className="text-text-secondary" />}
-              </button>
-              <div className="my-1 h-px bg-border-subtle" />
-            </>
-          )}
-
-          {accessible.map((w) => {
-            const projects = projectsForWorkspace(w.id);
-            const active = scope.kind === "workspace" && scope.id === w.id;
-            return (
-              <button
-                key={w.id}
-                type="button"
-                onClick={() => switchTo(w.id)}
-                className="w-full flex items-center gap-2.5 px-3 py-2 rounded-[7px] hover:bg-surface-page text-left"
-                style={{ background: active ? "var(--bg-page)" : "transparent" }}
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="text-[12.5px] font-semibold truncate">{w.name}</div>
-                  <div className="text-[10.5px] text-text-tertiary truncate">
-                    {projects.length} project{projects.length === 1 ? "" : "s"} · {w.memberCount} members
-                  </div>
-                </div>
-                {active && <Check size={13} className="text-text-secondary" />}
-              </button>
-            );
-          })}
+          <Link
+            href="/settings"
+            aria-label="Settings"
+            className={`p-1 transition-colors ${
+              isUnder("/settings")
+                ? "text-text-primary"
+                : "text-text-tertiary hover:text-text-secondary"
+            }`}
+          >
+            <Settings size={14} strokeWidth={1.5} />
+          </Link>
+          <button
+            type="button"
+            aria-label="Sign out"
+            title="Sign out"
+            onClick={() => {
+              signOut();
+              router.replace("/login");
+            }}
+            className="p-1 text-text-tertiary hover:text-text-secondary transition-colors"
+          >
+            <LogOut size={13} strokeWidth={1.6} />
+          </button>
         </div>
-      )}
-    </div>
+      </div>
+    </aside>
   );
 }
