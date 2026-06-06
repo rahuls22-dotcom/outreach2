@@ -62,7 +62,11 @@ export const SAMPLE_GATE_LEADS = 50;
 
 /* ── Signal computation ────────────────────────────────────────── */
 
-function efficiencySignal(m: EdTechMetrics, targetCpl: number): HealthSignal {
+function efficiencySignal(
+  m: EdTechMetrics,
+  targetCpl: number,
+  targetLabel: string,
+): HealthSignal {
   const ratio = m.cpl / targetCpl;
   let level: SignalLevel = "green";
   if (ratio > 1.5) level = "red";
@@ -73,8 +77,8 @@ function efficiencySignal(m: EdTechMetrics, targetCpl: number): HealthSignal {
     level,
     detail:
       level === "green"
-        ? `CPL ₹${m.cpl} at or under target ₹${targetCpl}`
-        : `CPL ₹${m.cpl} is ${ratio.toFixed(1)}× target ₹${targetCpl}`,
+        ? `CPL ₹${m.cpl} at or under ${targetLabel} ₹${targetCpl}`
+        : `CPL ₹${m.cpl} is ${ratio.toFixed(1)}× ${targetLabel} ₹${targetCpl}`,
   };
 }
 
@@ -140,7 +144,12 @@ function momentumSignal(d: EdTechMetricDeltas): HealthSignal {
 const LEVEL_RANK: Record<SignalLevel, number> = { green: 0, amber: 1, red: 2 };
 
 export function computeSpotTake(c: EdTechCampaign): SpotTake {
-  const { targetCpl, qualBenchmark } = benchmarkFor(c.productId);
+  // Target resolution: the campaign's own target (set from its execution
+  // plan) wins; absent that, fall back to the product-level benchmark.
+  const bench = benchmarkFor(c.productId);
+  const targetCpl = c.target?.cpl ?? bench.targetCpl;
+  const qualBenchmark = c.target?.qualRate ?? bench.qualBenchmark;
+  const targetLabel = c.target?.source === "plan" ? "plan target" : "target";
 
   // Sample gate — too few leads to judge.
   if (c.metrics.leads < SAMPLE_GATE_LEADS) {
@@ -152,7 +161,7 @@ export function computeSpotTake(c: EdTechCampaign): SpotTake {
   }
 
   const signals: HealthSignal[] = [
-    efficiencySignal(c.metrics, targetCpl),
+    efficiencySignal(c.metrics, targetCpl, targetLabel),
     qualitySignal(c.metrics, qualBenchmark),
     fatigueSignal(c.metrics, c.deltas),
     momentumSignal(c.deltas),

@@ -79,6 +79,20 @@ export type EdTechAdSet = {
   ads: EdTechAd[];
 };
 
+/**
+ * Performance target a campaign is held to. Set on the campaign at creation
+ * time — most often inherited from the execution plan that launched it
+ * ("plan"), but it can be a product benchmark or a manual override. Spot's
+ * take reads this first; when absent it falls back to the product benchmark.
+ */
+export type CampaignTarget = {
+  /** ₹ target cost per lead. */
+  cpl: number;
+  /** Target qualification rate, in percent (matches metric units). */
+  qualRate: number;
+  source: "plan" | "benchmark" | "manual";
+};
+
 export type EdTechCampaign = {
   id: string;
   name: string;
@@ -89,6 +103,8 @@ export type EdTechCampaign = {
   objective: "Lead Gen" | "Retargeting" | "Lookalike" | "Search" | "Discover";
   status: EdTechCampaignStatus;
   health: EdTechHealth;
+  /** What "good" looks like for this campaign — set at launch from the plan. */
+  target: CampaignTarget;
   metrics: EdTechMetrics;
   deltas: EdTechMetricDeltas;
   metaUrl: string;
@@ -138,6 +154,7 @@ export const edTechCampaigns: EdTechCampaign[] = [
   // ── Guyju's JEE Crack — healthy product, 4 active campaigns
   {
     id: "etc-jee-tofu",
+    target: { cpl: 340, qualRate: 11, source: "plan" },
     name: "JEE Crack · TOFU · Mentor-led hook",
     productId: "prod-guyjus-jee",
     productName: "Guyju's JEE Crack",
@@ -163,6 +180,7 @@ export const edTechCampaigns: EdTechCampaign[] = [
   },
   {
     id: "etc-jee-lal",
+    target: { cpl: 340, qualRate: 11, source: "plan" },
     name: "JEE Crack · LAL · Class 11 parents",
     productId: "prod-guyjus-jee",
     productName: "Guyju's JEE Crack",
@@ -188,6 +206,7 @@ export const edTechCampaigns: EdTechCampaign[] = [
   },
   {
     id: "etc-jee-retarget",
+    target: { cpl: 300, qualRate: 11, source: "plan" },
     name: "JEE Crack · BOFU · Retargeting · Demo class",
     productId: "prod-guyjus-jee",
     productName: "Guyju's JEE Crack",
@@ -213,6 +232,7 @@ export const edTechCampaigns: EdTechCampaign[] = [
   },
   {
     id: "etc-jee-search",
+    target: { cpl: 360, qualRate: 11, source: "plan" },
     name: "JEE Crack · Google Search · Brand + non-brand",
     productId: "prod-guyjus-jee",
     productName: "Guyju's JEE Crack",
@@ -240,6 +260,7 @@ export const edTechCampaigns: EdTechCampaign[] = [
   // ── Guyju's NEET Pro — high CPL, 2 active
   {
     id: "etc-neet-tofu",
+    target: { cpl: 380, qualRate: 12, source: "plan" },
     name: "NEET Pro · TOFU · Parents-see-progress hook",
     productId: "prod-guyjus-neet",
     productName: "Guyju's NEET Pro",
@@ -265,6 +286,7 @@ export const edTechCampaigns: EdTechCampaign[] = [
   },
   {
     id: "etc-neet-retarget",
+    target: { cpl: 320, qualRate: 12, source: "plan" },
     name: "NEET Pro · BOFU · Retargeting · Biology mocks",
     productId: "prod-guyjus-neet",
     productName: "Guyju's NEET Pro",
@@ -292,6 +314,7 @@ export const edTechCampaigns: EdTechCampaign[] = [
   // ── Foundation 9-10 — underperforming, 1 active, 1 draft
   {
     id: "etc-found-tofu",
+    target: { cpl: 300, qualRate: 9, source: "plan" },
     name: "Foundation 9-10 · TOFU · Lab-bench hook",
     productId: "prod-guyjus-foundation",
     productName: "Guyju's Foundation 9-10",
@@ -317,6 +340,7 @@ export const edTechCampaigns: EdTechCampaign[] = [
   },
   {
     id: "etc-found-discover",
+    target: { cpl: 320, qualRate: 9, source: "plan" },
     name: "Foundation 9-10 · Google Discover · Parent intent",
     productId: "prod-guyjus-foundation",
     productName: "Guyju's Foundation 9-10",

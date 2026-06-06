@@ -25,11 +25,33 @@ its driver — it is never a black box.
 
 ## Where the target comes from
 
-Per-campaign **target CPL** is set by the **execution plan** that launched the
-campaign (each campaign in a plan carries a `targetCpl`). When a campaign has
-no plan target, fall back to the **product-level benchmark** in
-`PRODUCT_BENCHMARK` (Memory → Overview holds the product benchmark). The
-benchmark also supplies the expected **qualification rate**.
+The target lives **on the campaign** — `campaign.target = { cpl, qualRate,
+source }` — and is set at creation time, most often inherited from the
+**execution plan** that launched it (`source: "plan"`). This is the structural
+key: every campaign carries what "good" looks like for it, so Spot's take
+never has to guess.
+
+Resolution order (most specific wins):
+
+1. `campaign.target` — the campaign's own target (plan / manual).
+2. `PRODUCT_BENCHMARK[productId]` — the product-level fallback (also where
+   Memory → Overview surfaces the benchmark).
+3. `DEFAULT_BENCHMARK` — global default.
+
+Because the target rides on the campaign, the driver can name its source —
+e.g. _"CPL ₹510 is 1.6× plan target ₹360"_ — so the insight is traceable back
+to the plan that set it. The campaign structure that makes this work:
+
+```
+Product
+  └─ Execution plan            (sets per-campaign target CPL + qual rate + budget)
+       └─ Campaign  ← target lives here, copied from the plan at launch
+            └─ Ad set
+                 └─ Ad
+```
+
+Health is judged at the **campaign** level (targets are per-campaign);
+ad-set / ad rows don't carry a separate verdict.
 
 ## The four signals
 

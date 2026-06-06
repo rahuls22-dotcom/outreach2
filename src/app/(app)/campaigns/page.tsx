@@ -33,7 +33,6 @@ import {
   Film,
   Layout,
   Search,
-  Calendar,
   Filter,
   TrendingUp,
   TrendingDown,
@@ -41,6 +40,7 @@ import {
   Sliders,
 } from "lucide-react";
 import { SpotMark } from "@/components/spot/spot-mark";
+import { DateRangeSelector } from "@/components/dashboard/date-range-selector";
 import { useSpotStore } from "@/lib/spot/store";
 import {
   edTechCampaigns,
@@ -103,14 +103,15 @@ function pct(n: number) {
 
 // Freeze the lead column (campaign name + Spot's take) so it stays put while
 // the metric columns scroll horizontally. `bg` must be opaque to occlude the
-// scrolling cells; the right shadow marks the freeze line.
-function freezeStyle(bg: string) {
+// scrolling cells; the right shadow only appears once the table is actually
+// scrolled, so at rest the column reads seamlessly with the rest of the row.
+function freezeStyle(bg: string, scrolled: boolean) {
   return {
     position: "sticky" as const,
     left: 0,
     zIndex: 5,
     background: bg,
-    boxShadow: "6px 0 8px -6px rgba(0,0,0,0.10)",
+    boxShadow: scrolled ? "6px 0 8px -6px rgba(0,0,0,0.10)" : undefined,
   };
 }
 
@@ -308,16 +309,6 @@ const ALL_METRIC_KEYS: MetricKey[] = [
   "costPerQualified",
 ];
 
-/* ─── Date range ────────────────────────────────────────────────── */
-
-const DATE_RANGES = [
-  { key: "7d", label: "Last 7 days" },
-  { key: "30d", label: "Last 30 days" },
-  { key: "90d", label: "Last 90 days" },
-  { key: "custom", label: "Custom range" },
-] as const;
-type DateRange = (typeof DATE_RANGES)[number]["key"];
-
 /* ─── Page ──────────────────────────────────────────────────────── */
 
 type ChannelFilterValue = "all" | "Meta" | "Google";
@@ -327,10 +318,11 @@ export default function CampaignsPage() {
   // Spot's take is filled in row-by-row on the first load of the day.
   const revealedTakes = useSpotTakeReveal(edTechCampaigns.map((c) => c.id));
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  // True once the table is scrolled right — drives the frozen-column shadow.
+  const [scrolled, setScrolled] = useState(false);
   const [query, setQuery] = useState("");
   const [productId, setProductId] = useState<"all" | string>("all");
   const [channel, setChannel] = useState<ChannelFilterValue>("all");
-  const [range, setRange] = useState<DateRange>("30d");
   const [selectedMetrics, setSelectedMetrics] = useState<MetricKey[]>(DEFAULT_METRICS);
 
   const toggle = (id: string) => setExpanded((m) => ({ ...m, [id]: !m[id] }));
@@ -406,16 +398,16 @@ export default function CampaignsPage() {
 
   return (
     <div>
-      {/* Page header · one Spot button, not twenty. Open a campaign to
-          dig in; Spot's take rides on every row. */}
-      <div className="mb-4 flex items-start justify-between gap-4">
-        <div>
-          <div className="text-meta text-text-secondary mb-1">Growth · Live spend</div>
-          <h1 className="text-page-title text-text-primary">Campaigns</h1>
-          <p className="text-meta text-text-secondary mt-1 max-w-[680px]">
-            Every Meta and Google campaign in one read-only view. Open a campaign
-            to dig in, jump to Meta with the inline ↗, or ask Spot anything.
-          </p>
+      {/* Page header · compact single row — title + read-only note on the
+          left, Ask Spot on the right. */}
+      <div className="mb-3 flex items-center justify-between gap-4">
+        <div className="flex items-baseline gap-2.5 min-w-0">
+          <h1 className="text-[22px] font-semibold tracking-[-0.01em] text-text-primary">
+            Campaigns
+          </h1>
+          <span className="text-[12px] text-text-tertiary truncate">
+            Every Meta &amp; Google campaign · read-only
+          </span>
         </div>
         <button
           type="button"
@@ -453,7 +445,7 @@ export default function CampaignsPage() {
         </span>
         {/* Spacer pushes date range to the right edge. */}
         <span className="flex-1" />
-        <DateRangeChip value={range} onChange={setRange} />
+        <DateRangeSelector compact />
       </div>
 
       {/* Roll-up strip — each card now carries a trend delta so they
@@ -486,10 +478,14 @@ export default function CampaignsPage() {
         />
       </div>
 
-      {/* Table — horizontally scrollable when many metric columns are on. */}
-      <div className="bg-white border border-border rounded-card overflow-x-auto">
+      {/* Table — horizontally scrollable when many metric columns are on.
+          The lead column freezes; its shadow shows only once scrolled. */}
+      <div
+        className="bg-white border border-border rounded-card overflow-x-auto"
+        onScroll={(e) => setScrolled(e.currentTarget.scrollLeft > 0)}
+      >
         <div className="min-w-max">
-          <TableHeader colTemplate={colTemplate} metrics={selectedMetrics} />
+          <TableHeader colTemplate={colTemplate} metrics={selectedMetrics} scrolled={scrolled} />
           {filtered.length === 0 ? (
             <div className="px-4 py-10 text-center text-[13px] text-text-tertiary">
               No campaigns match your filters.
@@ -507,6 +503,7 @@ export default function CampaignsPage() {
                 onToggleAdset={(id) => toggle(id)}
                 onOpen={() => router.push(`/campaigns/${c.id}`)}
                 takeRevealed={revealedTakes.has(c.id)}
+                scrolled={scrolled}
               />
             ))
           )}
@@ -517,47 +514,6 @@ export default function CampaignsPage() {
 }
 
 /* ─── Filters ──────────────────────────────────────────────────── */
-
-function DateRangeChip({ value, onChange }: { value: DateRange; onChange: (v: DateRange) => void }) {
-  const [open, setOpen] = useState(false);
-  const current = DATE_RANGES.find((r) => r.key === value)!;
-  return (
-    <div className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-button border border-border bg-white hover:border-border-hover text-[12px] font-medium text-text-primary"
-      >
-        <Calendar size={12} strokeWidth={1.7} className="text-text-secondary" />
-        {current.label}
-        <ChevronDown size={11} strokeWidth={1.8} className="text-text-tertiary" />
-      </button>
-      {open && (
-        <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          {/* Right-aligned since this chip lives on the right edge. */}
-          <div className="absolute right-0 top-full mt-1 z-20 min-w-[180px] bg-white border border-border rounded-card shadow-card-hover py-1">
-            {DATE_RANGES.map((r) => (
-              <button
-                key={r.key}
-                type="button"
-                onClick={() => {
-                  onChange(r.key);
-                  setOpen(false);
-                }}
-                className={`w-full text-left px-3 py-1.5 text-[12px] hover:bg-surface-page ${
-                  r.key === value ? "text-text-primary font-medium" : "text-text-secondary"
-                }`}
-              >
-                {r.label}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
 
 /**
  * Channel filter — All / Meta / Google. Each item shows the same
@@ -822,9 +778,11 @@ function MetricsPicker({
 function TableHeader({
   colTemplate,
   metrics,
+  scrolled,
 }: {
   colTemplate: string;
   metrics: MetricKey[];
+  scrolled: boolean;
 }) {
   return (
     <div
@@ -833,7 +791,7 @@ function TableHeader({
     >
       <div
         className="flex items-center gap-1 pr-2"
-        style={freezeStyle("var(--bg-page)")}
+        style={freezeStyle("var(--bg-page)", scrolled)}
       >
         Campaign
         <span className="text-text-tertiary/70 normal-case font-normal tracking-normal">
@@ -861,6 +819,7 @@ function CampaignRow({
   onToggleAdset,
   onOpen,
   takeRevealed,
+  scrolled,
 }: {
   c: EdTechCampaign;
   metrics: MetricKey[];
@@ -871,6 +830,7 @@ function CampaignRow({
   onToggleAdset: (id: string) => void;
   onOpen: () => void;
   takeRevealed: boolean;
+  scrolled: boolean;
 }) {
   return (
     <>
@@ -880,7 +840,7 @@ function CampaignRow({
       >
         <div
           className="flex items-center gap-1.5 min-w-0 pr-2"
-          style={freezeStyle("#FFFFFF")}
+          style={freezeStyle("#FFFFFF", scrolled)}
         >
           <StatusDot status={c.status} />
           <div className="flex-1 min-w-0">
@@ -918,6 +878,7 @@ function CampaignRow({
             colTemplate={colTemplate}
             expanded={isAdsetExpanded(a.id)}
             onToggle={() => onToggleAdset(a.id)}
+            scrolled={scrolled}
           />
         ))}
     </>
@@ -931,6 +892,7 @@ function AdSetRow({
   colTemplate,
   expanded,
   onToggle,
+  scrolled,
 }: {
   a: EdTechAdSet;
   parent: EdTechCampaign;
@@ -938,6 +900,7 @@ function AdSetRow({
   colTemplate: string;
   expanded: boolean;
   onToggle: () => void;
+  scrolled: boolean;
 }) {
   return (
     <>
@@ -947,7 +910,7 @@ function AdSetRow({
       >
         <div
           className="flex items-center gap-1.5 min-w-0 pr-2"
-          style={freezeStyle("#FAFAFA")}
+          style={freezeStyle("#FAFAFA", scrolled)}
         >
           <StatusDot status={a.status} />
           <div className="flex-1 min-w-0">
@@ -983,6 +946,7 @@ function AdSetRow({
             parent={parent}
             metrics={metrics}
             colTemplate={colTemplate}
+            scrolled={scrolled}
           />
         ))}
     </>
@@ -994,11 +958,13 @@ function AdRow({
   parent,
   metrics,
   colTemplate,
+  scrolled,
 }: {
   ad: EdTechAd;
   parent: EdTechCampaign;
   metrics: MetricKey[];
   colTemplate: string;
+  scrolled: boolean;
 }) {
   const KIcon = KIND_ICON[ad.kind];
   return (
@@ -1008,7 +974,7 @@ function AdRow({
     >
       <div
         className="flex items-center gap-2 min-w-0 pr-2"
-        style={freezeStyle("#FFFFFF")}
+        style={freezeStyle("#FFFFFF", scrolled)}
       >
         <StatusDot status={ad.status} />
         <div className="flex items-center gap-2 min-w-0 pl-7 flex-1">
