@@ -109,11 +109,13 @@ type MetricKey =
   | "ctr"
   | "cpc"
   | "leads"
-  | "cpl"
   | "verified"
-  | "verificationRate"
   | "qualified"
+  | "conversionRate"
+  | "verificationRate"
   | "qualificationRate"
+  | "cpl"
+  | "cpvl"
   | "costPerQualified";
 
 type MetricDef = {
@@ -129,6 +131,12 @@ type MetricDef = {
   deltaKey: keyof EdTechMetricDeltas;
 };
 
+// Derived helpers — link clicks ≈ spend / CPC; conversion rate = leads per
+// link click; CPVL = spend per verified lead.
+function linkClicks(m: EdTechMetrics) {
+  return m.cpc > 0 ? m.spend / m.cpc : 0;
+}
+
 const METRIC_DEFS: Record<MetricKey, MetricDef> = {
   spend: {
     key: "spend",
@@ -137,31 +145,26 @@ const METRIC_DEFS: Record<MetricKey, MetricDef> = {
     format: (m) => inr(m.spend),
     deltaKey: "spend",
   },
-  impressions: {
-    key: "impressions",
-    label: "Impressions",
-    short: "Impr",
-    width: 80,
-    format: (m) => num(m.impressions),
-    deltaKey: "impressions",
-  },
   cpm: {
     key: "cpm",
-    label: "CPM",
-    width: 70,
+    label: "CPM · Ad delivery cost",
+    short: "CPM",
+    width: 72,
     format: (m) => inr(m.cpm),
     deltaKey: "cpm",
   },
   ctr: {
     key: "ctr",
-    label: "CTR",
+    label: "CTR · Link click-through rate",
+    short: "CTR",
     width: 70,
     format: (m) => `${m.ctr.toFixed(2)}%`,
     deltaKey: "ctr",
   },
   cpc: {
     key: "cpc",
-    label: "CPC",
+    label: "CPC · Traffic cost",
+    short: "CPC",
     width: 70,
     format: (m) => inr(m.cpc),
     deltaKey: "cpc",
@@ -169,24 +172,37 @@ const METRIC_DEFS: Record<MetricKey, MetricDef> = {
   leads: {
     key: "leads",
     label: "Leads",
-    width: 78,
+    width: 72,
     format: (m) => num(m.leads),
     deltaKey: "leads",
-  },
-  cpl: {
-    key: "cpl",
-    label: "CPL",
-    width: 78,
-    format: (m) => inr(m.cpl),
-    deltaKey: "cpl",
   },
   verified: {
     key: "verified",
     label: "Verified leads",
     short: "Verified",
-    width: 84,
+    width: 80,
     format: (m) => num(m.verified),
     deltaKey: "verified",
+  },
+  qualified: {
+    key: "qualified",
+    label: "Qualified leads",
+    short: "Qualified",
+    width: 82,
+    format: (m) => num(m.qualified),
+    deltaKey: "qualified",
+  },
+  conversionRate: {
+    key: "conversionRate",
+    label: "Conversion rate · leads / link click",
+    short: "Conv %",
+    width: 76,
+    format: (m) => {
+      const c = linkClicks(m);
+      return c > 0 ? pct((m.leads / c) * 100) : "—";
+    },
+    // No dedicated delta — track leads as the directional proxy.
+    deltaKey: "leads",
   },
   verificationRate: {
     key: "verificationRate",
@@ -196,55 +212,82 @@ const METRIC_DEFS: Record<MetricKey, MetricDef> = {
     format: (m) => pct(m.verificationRate),
     deltaKey: "verificationRate",
   },
-  qualified: {
-    key: "qualified",
-    label: "Qualified leads",
-    short: "Qualified",
-    width: 86,
-    format: (m) => num(m.qualified),
-    deltaKey: "qualified",
-  },
   qualificationRate: {
     key: "qualificationRate",
-    label: "Qualification rate",
-    short: "Qual %",
-    width: 78,
+    label: "QL rate · qualification rate",
+    short: "QL %",
+    width: 72,
     format: (m) => pct(m.qualificationRate),
     deltaKey: "qualificationRate",
   },
+  cpl: {
+    key: "cpl",
+    label: "CPL · Cost per lead",
+    short: "CPL",
+    width: 76,
+    format: (m) => inr(m.cpl),
+    deltaKey: "cpl",
+  },
+  cpvl: {
+    key: "cpvl",
+    label: "CPVL · Cost per verified lead",
+    short: "CPVL",
+    width: 82,
+    format: (m) => inr(m.verified > 0 ? Math.round(m.spend / m.verified) : 0),
+    // Cost metric — borrow CPQL's inverted delta so ↑ reads red.
+    deltaKey: "costPerQualified",
+  },
   costPerQualified: {
     key: "costPerQualified",
-    label: "Cost / qualified lead",
+    label: "CPQL · Cost per qualified lead",
     short: "CPQL",
-    width: 90,
+    width: 84,
     format: (m) => inr(m.costPerQualified),
     deltaKey: "costPerQualified",
   },
+  impressions: {
+    key: "impressions",
+    label: "Impressions",
+    short: "Impr",
+    width: 80,
+    format: (m) => num(m.impressions),
+    deltaKey: "impressions",
+  },
 };
 
-// Default columns — match the prior layout so first-time users see
-// what they're used to. Metric picker lets them deviate.
+// Default columns — the full ordered set the user spec'd. Impressions is
+// pickable but not shown by default.
 const DEFAULT_METRICS: MetricKey[] = [
   "spend",
-  "leads",
-  "cpl",
-  "qualified",
-  "qualificationRate",
-  "costPerQualified",
-];
-
-const ALL_METRIC_KEYS: MetricKey[] = [
-  "spend",
-  "impressions",
   "cpm",
   "ctr",
   "cpc",
   "leads",
-  "cpl",
   "verified",
-  "verificationRate",
   "qualified",
+  "conversionRate",
+  "verificationRate",
   "qualificationRate",
+  "cpl",
+  "cpvl",
+  "costPerQualified",
+];
+
+// Canonical order the picker preserves (default set + impressions option).
+const ALL_METRIC_KEYS: MetricKey[] = [
+  "spend",
+  "cpm",
+  "ctr",
+  "cpc",
+  "impressions",
+  "leads",
+  "verified",
+  "qualified",
+  "conversionRate",
+  "verificationRate",
+  "qualificationRate",
+  "cpl",
+  "cpvl",
   "costPerQualified",
 ];
 
@@ -340,7 +383,8 @@ export default function CampaignsPage() {
   // metrics. Status dot · name(flex) · ...metrics · health(120).
   const colTemplate = useMemo(() => {
     const metricCols = selectedMetrics.map((k) => `${METRIC_DEFS[k].width}px`).join(" ");
-    return `14px minmax(0,1.6fr) ${metricCols} 200px`;
+    // Spot's take now rides inline in the name cell — no trailing column.
+    return `14px minmax(300px,1.4fr) ${metricCols}`;
   }, [selectedMetrics]);
 
   return (
@@ -425,29 +469,31 @@ export default function CampaignsPage() {
         />
       </div>
 
-      {/* Table */}
-      <div className="bg-white border border-border rounded-card overflow-hidden">
-        <TableHeader colTemplate={colTemplate} metrics={selectedMetrics} />
-        {filtered.length === 0 ? (
-          <div className="px-4 py-10 text-center text-[13px] text-text-tertiary">
-            No campaigns match your filters.
-          </div>
-        ) : (
-          filtered.map((c) => (
-            <CampaignRow
-              key={c.id}
-              c={c}
-              metrics={selectedMetrics}
-              colTemplate={colTemplate}
-              expanded={!!expanded[c.id]}
-              isAdsetExpanded={(id) => !!expanded[id]}
-              onToggle={() => toggle(c.id)}
-              onToggleAdset={(id) => toggle(id)}
-              onOpen={() => router.push(`/campaigns/${c.id}`)}
-              takeRevealed={revealedTakes.has(c.id)}
-            />
-          ))
-        )}
+      {/* Table — horizontally scrollable when many metric columns are on. */}
+      <div className="bg-white border border-border rounded-card overflow-x-auto">
+        <div className="min-w-max">
+          <TableHeader colTemplate={colTemplate} metrics={selectedMetrics} />
+          {filtered.length === 0 ? (
+            <div className="px-4 py-10 text-center text-[13px] text-text-tertiary">
+              No campaigns match your filters.
+            </div>
+          ) : (
+            filtered.map((c) => (
+              <CampaignRow
+                key={c.id}
+                c={c}
+                metrics={selectedMetrics}
+                colTemplate={colTemplate}
+                expanded={!!expanded[c.id]}
+                isAdsetExpanded={(id) => !!expanded[id]}
+                onToggle={() => toggle(c.id)}
+                onToggleAdset={(id) => toggle(id)}
+                onOpen={() => router.push(`/campaigns/${c.id}`)}
+                takeRevealed={revealedTakes.has(c.id)}
+              />
+            ))
+          )}
+        </div>
       </div>
     </div>
   );
@@ -769,16 +815,17 @@ function TableHeader({
       style={{ gridTemplateColumns: colTemplate }}
     >
       <div></div>
-      <div>Campaign</div>
+      <div className="inline-flex items-center gap-1">
+        Campaign
+        <span className="text-text-tertiary/70 normal-case font-normal tracking-normal">
+          · Spot&apos;s take
+        </span>
+      </div>
       {metrics.map((k) => (
         <div key={k} className="text-right">
           {METRIC_DEFS[k].short ?? METRIC_DEFS[k].label}
         </div>
       ))}
-      <div className="inline-flex items-center gap-1">
-        <SpotMark size={9} />
-        Spot&apos;s take
-      </div>
     </div>
   );
 }
@@ -821,6 +868,7 @@ function CampaignRow({
           expanded={expanded}
           onToggle={onToggle}
           onOpen={onOpen}
+          take={{ c, revealed: takeRevealed }}
         />
         {metrics.map((k) => {
           const def = METRIC_DEFS[k];
@@ -832,7 +880,6 @@ function CampaignRow({
             />
           );
         })}
-        <SpotTakeCell c={c} revealed={takeRevealed} />
       </div>
 
       {expanded &&
@@ -894,7 +941,6 @@ function AdSetRow({
             />
           );
         })}
-        <div />
       </div>
       {expanded &&
         a.ads.map((ad) => (
@@ -955,7 +1001,6 @@ function AdRow({
           />
         );
       })}
-      <div />
     </div>
   );
 }
@@ -975,36 +1020,33 @@ function StatusDot({ status }: { status: EdTechCampaignStatus }) {
 }
 
 /**
- * Spot's take — the health verdict, filled in by Spot on first load of the
- * day (row-by-row reveal). Before reveal: a small "reviewing…" state with a
- * pulsing Spot mark. After: a colored verdict badge + the driving reason.
+ * Spot's take — the health verdict, inline next to the campaign name (where
+ * "Spot it" used to sit). Filled in by Spot on the first load of the day
+ * (row-by-row reveal): a pulsing "reviewing…" state → a colored verdict
+ * badge. The driving reason rides as a hover tooltip so the row stays tight.
  */
-function SpotTakeCell({ c, revealed }: { c: EdTechCampaign; revealed: boolean }) {
+function InlineSpotTake({ c, revealed }: { c: EdTechCampaign; revealed: boolean }) {
   if (!revealed) {
     return (
-      <div className="flex items-center gap-1.5 text-text-tertiary">
+      <span className="inline-flex items-center gap-1 text-text-tertiary flex-shrink-0">
         <span className="inline-flex animate-pulse">
-          <SpotMark size={12} />
+          <SpotMark size={10} />
         </span>
-        <span className="text-[11px] italic">reviewing…</span>
-      </div>
+        <span className="text-[10px] italic">reviewing…</span>
+      </span>
     );
   }
   const take = computeSpotTake(c);
   const tone = VERDICT_TONE[take.verdict];
   return (
-    <div className="min-w-0" title={take.driver}>
-      <span
-        className="inline-flex items-center gap-1 h-[18px] px-1.5 rounded-full text-[10px] font-semibold uppercase tracking-wider"
-        style={{ background: tone.bg, color: tone.text }}
-      >
-        <span className="w-1.5 h-1.5 rounded-full" style={{ background: tone.dot }} />
-        {VERDICT_LABEL[take.verdict]}
-      </span>
-      <div className="text-[10.5px] text-text-tertiary leading-snug mt-0.5 line-clamp-2">
-        {take.driver}
-      </div>
-    </div>
+    <span
+      className="inline-flex items-center gap-1 h-[17px] px-1.5 rounded-full text-[10px] font-semibold flex-shrink-0"
+      style={{ background: tone.bg, color: tone.text }}
+      title={`Spot's take — ${take.driver}`}
+    >
+      <span className="w-1.5 h-1.5 rounded-full" style={{ background: tone.dot }} />
+      {VERDICT_LABEL[take.verdict]}
+    </span>
   );
 }
 
@@ -1069,6 +1111,7 @@ function NameCell({
   expanded,
   onToggle,
   onOpen,
+  take,
   indent = 0,
   dense,
 }: {
@@ -1080,6 +1123,8 @@ function NameCell({
   onToggle: () => void;
   /** When provided, the name becomes a link that opens the detail page. */
   onOpen?: () => void;
+  /** Spot's take rides inline next to the name (campaign rows only). */
+  take?: { c: EdTechCampaign; revealed: boolean };
   indent?: number;
   dense?: boolean;
 }) {
@@ -1128,6 +1173,8 @@ function NameCell({
           >
             <ArrowUpRight size={11} strokeWidth={1.8} />
           </a>
+          {/* Spot's take — sits where "Spot it" used to, glanceable. */}
+          {take && <InlineSpotTake c={take.c} revealed={take.revealed} />}
         </div>
         <div className={`text-text-tertiary truncate ${dense ? "text-[10.5px]" : "text-[11px]"} mt-0.5`}>
           {sub}
