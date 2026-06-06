@@ -22,7 +22,7 @@
 //   · Product filter   · Channel filter   · Metrics picker   · Search
 // And on the right edge: Global date range (conventional placement).
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ChevronDown,
@@ -40,7 +40,6 @@ import {
   Sliders,
 } from "lucide-react";
 import { SpotMark } from "@/components/spot/spot-mark";
-import { useSpotStore } from "@/lib/spot/store";
 import {
   edTechCampaigns,
   productOptions,
@@ -48,11 +47,15 @@ import {
   type EdTechAdSet,
   type EdTechCampaign,
   type EdTechCampaignStatus,
-  type EdTechHealth,
   type EdTechMetrics,
   type EdTechMetricDeltas,
   type TrendDelta,
 } from "@/lib/campaigns-edtech";
+import {
+  computeSpotTake,
+  VERDICT_LABEL,
+  VERDICT_TONE,
+} from "@/lib/spot/campaign-health";
 
 /* ─── Status + health styling ──────────────────────────────────── */
 
@@ -65,17 +68,6 @@ const STATUS_LABEL: Record<EdTechCampaignStatus, string> = {
   enabled: "Live",
   paused: "Paused",
   draft: "Draft",
-};
-
-const HEALTH_TONE: Record<EdTechHealth, string> = {
-  "on-track": "pill-ok",
-  "needs-attention": "pill-warn",
-  underperforming: "pill-err",
-};
-const HEALTH_LABEL: Record<EdTechHealth, string> = {
-  "on-track": "On track",
-  "needs-attention": "Needs attention",
-  underperforming: "Off",
 };
 
 const KIND_ICON: Record<EdTechAd["kind"], typeof ImageIcon> = {
@@ -272,20 +264,8 @@ type ChannelFilterValue = "all" | "Meta" | "Google";
 
 export default function CampaignsPage() {
   const router = useRouter();
-  const startCampaignDive = useSpotStore((s) => s.startCampaignDive);
-  // Open chat-left + campaign-on-right Spot dive for any entity tier.
-  const openSpotIt = (entity: {
-    id: string;
-    name: string;
-    tier: "campaign" | "adset" | "ad";
-    productId: string;
-    productName: string;
-    channel: "Meta" | "Google";
-    metaUrl: string;
-  }) => {
-    startCampaignDive(entity);
-    router.push("/spot");
-  };
+  // Spot's take is filled in row-by-row on the first load of the day.
+  const revealedTakes = useSpotTakeReveal(edTechCampaigns.map((c) => c.id));
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [query, setQuery] = useState("");
   const [productId, setProductId] = useState<"all" | string>("all");
@@ -360,24 +340,31 @@ export default function CampaignsPage() {
   // metrics. Status dot · name(flex) · ...metrics · health(120).
   const colTemplate = useMemo(() => {
     const metricCols = selectedMetrics.map((k) => `${METRIC_DEFS[k].width}px`).join(" ");
-    return `14px minmax(0,1.6fr) ${metricCols} 120px`;
+    return `14px minmax(0,1.6fr) ${metricCols} 200px`;
   }, [selectedMetrics]);
 
   return (
     <div>
-      {/* Page header — no global "Diagnose with Spot" CTA. The action
-          lives on every row instead, where the context is concrete. */}
-      <div className="mb-4">
-        <div className="text-meta text-text-secondary mb-1">Growth · Live spend</div>
-        <h1 className="text-page-title text-text-primary">Campaigns</h1>
-        <p className="text-meta text-text-secondary mt-1 max-w-[680px]">
-          Every Meta and Google campaign in one read-only view. Tap{" "}
-          <span className="inline-flex items-center align-baseline gap-0.5 px-1 py-px rounded-[4px] bg-[#111] text-[#FAFAF8] text-[10px] font-medium relative top-px">
-            <SpotMark size={8} />
-            Edit
-          </span>{" "}
-          on any row to have Spot make the change, or jump to Meta with the inline ↗.
-        </p>
+      {/* Page header · one Spot button, not twenty. Open a campaign to
+          dig in; Spot's take rides on every row. */}
+      <div className="mb-4 flex items-start justify-between gap-4">
+        <div>
+          <div className="text-meta text-text-secondary mb-1">Growth · Live spend</div>
+          <h1 className="text-page-title text-text-primary">Campaigns</h1>
+          <p className="text-meta text-text-secondary mt-1 max-w-[680px]">
+            Every Meta and Google campaign in one read-only view. Open a campaign
+            to dig in, jump to Meta with the inline ↗, or ask Spot anything.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => router.push("/spot")}
+          className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-button bg-[#111] text-[#FAFAF8] hover:bg-black text-[12.5px] font-medium flex-shrink-0"
+          title="Ask Spot about your campaigns"
+        >
+          <SpotMark size={13} />
+          Ask Spot
+        </button>
       </div>
 
       {/* Filters strip — product · channel · metrics · search on the
@@ -456,7 +443,8 @@ export default function CampaignsPage() {
               isAdsetExpanded={(id) => !!expanded[id]}
               onToggle={() => toggle(c.id)}
               onToggleAdset={(id) => toggle(id)}
-              openSpotIt={openSpotIt}
+              onOpen={() => router.push(`/campaigns/${c.id}`)}
+              takeRevealed={revealedTakes.has(c.id)}
             />
           ))
         )}
@@ -787,24 +775,15 @@ function TableHeader({
           {METRIC_DEFS[k].short ?? METRIC_DEFS[k].label}
         </div>
       ))}
-      <div>Health</div>
+      <div className="inline-flex items-center gap-1">
+        <SpotMark size={9} />
+        Spot&apos;s take
+      </div>
     </div>
   );
 }
 
 /* ─── Rows ─────────────────────────────────────────────────────── */
-
-/** Callback to open the Spot-it dive for a given entity (campaign /
- *  ad-set / ad). Passed down through every row component. */
-type OpenSpotIt = (entity: {
-  id: string;
-  name: string;
-  tier: "campaign" | "adset" | "ad";
-  productId: string;
-  productName: string;
-  channel: "Meta" | "Google";
-  metaUrl: string;
-}) => void;
 
 function CampaignRow({
   c,
@@ -814,7 +793,8 @@ function CampaignRow({
   isAdsetExpanded,
   onToggle,
   onToggleAdset,
-  openSpotIt,
+  onOpen,
+  takeRevealed,
 }: {
   c: EdTechCampaign;
   metrics: MetricKey[];
@@ -823,7 +803,8 @@ function CampaignRow({
   isAdsetExpanded: (id: string) => boolean;
   onToggle: () => void;
   onToggleAdset: (id: string) => void;
-  openSpotIt: OpenSpotIt;
+  onOpen: () => void;
+  takeRevealed: boolean;
 }) {
   return (
     <>
@@ -839,17 +820,7 @@ function CampaignRow({
           metaUrl={c.metaUrl}
           expanded={expanded}
           onToggle={onToggle}
-          onSpotIt={() =>
-            openSpotIt({
-              id: c.id,
-              name: c.name,
-              tier: "campaign",
-              productId: c.productId,
-              productName: c.productName,
-              channel: c.channel,
-              metaUrl: c.metaUrl,
-            })
-          }
+          onOpen={onOpen}
         />
         {metrics.map((k) => {
           const def = METRIC_DEFS[k];
@@ -861,7 +832,7 @@ function CampaignRow({
             />
           );
         })}
-        <HealthCell health={c.health} />
+        <SpotTakeCell c={c} revealed={takeRevealed} />
       </div>
 
       {expanded &&
@@ -874,7 +845,6 @@ function CampaignRow({
             colTemplate={colTemplate}
             expanded={isAdsetExpanded(a.id)}
             onToggle={() => onToggleAdset(a.id)}
-            openSpotIt={openSpotIt}
           />
         ))}
     </>
@@ -888,7 +858,6 @@ function AdSetRow({
   colTemplate,
   expanded,
   onToggle,
-  openSpotIt,
 }: {
   a: EdTechAdSet;
   parent: EdTechCampaign;
@@ -896,7 +865,6 @@ function AdSetRow({
   colTemplate: string;
   expanded: boolean;
   onToggle: () => void;
-  openSpotIt: OpenSpotIt;
 }) {
   return (
     <>
@@ -912,17 +880,6 @@ function AdSetRow({
           metaUrl={a.metaUrl}
           expanded={expanded}
           onToggle={onToggle}
-          onSpotIt={() =>
-            openSpotIt({
-              id: a.id,
-              name: a.name,
-              tier: "adset",
-              productId: parent.productId,
-              productName: parent.productName,
-              channel: parent.channel,
-              metaUrl: a.metaUrl,
-            })
-          }
           indent={1}
           dense
         />
@@ -947,7 +904,6 @@ function AdSetRow({
             parent={parent}
             metrics={metrics}
             colTemplate={colTemplate}
-            openSpotIt={openSpotIt}
           />
         ))}
     </>
@@ -959,13 +915,11 @@ function AdRow({
   parent,
   metrics,
   colTemplate,
-  openSpotIt,
 }: {
   ad: EdTechAd;
   parent: EdTechCampaign;
   metrics: MetricKey[];
   colTemplate: string;
-  openSpotIt: OpenSpotIt;
 }) {
   const KIcon = KIND_ICON[ad.kind];
   return (
@@ -988,20 +942,6 @@ function AdRow({
           >
             <ArrowUpRight size={11} strokeWidth={1.8} />
           </a>
-          <SpotItButton
-            onClick={() =>
-              openSpotIt({
-                id: ad.id,
-                name: ad.name,
-                tier: "ad",
-                productId: parent.productId,
-                productName: parent.productName,
-                channel: parent.channel,
-                metaUrl: ad.metaUrl,
-              })
-            }
-            dense
-          />
         </div>
       </div>
       {metrics.map((k) => {
@@ -1035,30 +975,90 @@ function StatusDot({ status }: { status: EdTechCampaignStatus }) {
 }
 
 /**
- * "Spot it" — filled black pill with the SpotMark. Opens the dive
- * surface (chat-on-left + campaign-on-right) where the user can dig
- * deeper, scale, pause, or optimise via Spot.
+ * Spot's take — the health verdict, filled in by Spot on first load of the
+ * day (row-by-row reveal). Before reveal: a small "reviewing…" state with a
+ * pulsing Spot mark. After: a colored verdict badge + the driving reason.
  */
-function SpotItButton({
-  onClick,
-  dense,
-}: {
-  onClick: () => void;
-  dense?: boolean;
-}) {
+function SpotTakeCell({ c, revealed }: { c: EdTechCampaign; revealed: boolean }) {
+  if (!revealed) {
+    return (
+      <div className="flex items-center gap-1.5 text-text-tertiary">
+        <span className="inline-flex animate-pulse">
+          <SpotMark size={12} />
+        </span>
+        <span className="text-[11px] italic">reviewing…</span>
+      </div>
+    );
+  }
+  const take = computeSpotTake(c);
+  const tone = VERDICT_TONE[take.verdict];
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`inline-flex items-center gap-1 rounded-[5px] bg-[#111] text-[#FAFAF8] hover:bg-black font-medium flex-shrink-0 ${
-        dense ? "h-[18px] px-1.5 text-[10px]" : "h-[20px] px-1.5 text-[10.5px]"
-      }`}
-      title="Open chat + campaign view to dig deeper"
-    >
-      <SpotMark size={dense ? 9 : 10} />
-      Spot it
-    </button>
+    <div className="min-w-0" title={take.driver}>
+      <span
+        className="inline-flex items-center gap-1 h-[18px] px-1.5 rounded-full text-[10px] font-semibold uppercase tracking-wider"
+        style={{ background: tone.bg, color: tone.text }}
+      >
+        <span className="w-1.5 h-1.5 rounded-full" style={{ background: tone.dot }} />
+        {VERDICT_LABEL[take.verdict]}
+      </span>
+      <div className="text-[10.5px] text-text-tertiary leading-snug mt-0.5 line-clamp-2">
+        {take.driver}
+      </div>
+    </div>
   );
+}
+
+/**
+ * First-load-of-the-day reveal. The verdict for each campaign appears one at
+ * a time with a 2–3s gap — Spot visibly "reviewing" the book. Tracked via a
+ * localStorage date key so later loads the same day show everything at once.
+ */
+function useSpotTakeReveal(allIds: string[]): Set<string> {
+  const [revealed, setRevealed] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    const KEY = "revspot:spot-takes-revealed";
+    let storedDate: string | null = null;
+    let today = "";
+    try {
+      today = new Date().toDateString();
+      storedDate = window.localStorage.getItem(KEY);
+    } catch {
+      // SSR / no storage — just reveal all.
+    }
+    if (!today || storedDate === today) {
+      setRevealed(new Set(allIds));
+      return;
+    }
+    // Animate the reveal, then stamp today's date so it only runs once/day.
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    let cumulative = 0;
+    allIds.forEach((id, i) => {
+      // 2–3s per row, deterministic-ish (varies by index, no Math.random in SSR concerns).
+      cumulative += 2000 + ((i * 700) % 1000);
+      timers.push(
+        setTimeout(() => {
+          setRevealed((prev) => {
+            const next = new Set(prev);
+            next.add(id);
+            return next;
+          });
+        }, cumulative),
+      );
+    });
+    timers.push(
+      setTimeout(() => {
+        try {
+          window.localStorage.setItem(KEY, today);
+        } catch {
+          /* ignore */
+        }
+      }, cumulative + 100),
+    );
+    return () => timers.forEach(clearTimeout);
+    // Run once on mount — allIds is stable (module-level campaign list).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return revealed;
 }
 
 function NameCell({
@@ -1068,7 +1068,7 @@ function NameCell({
   metaUrl,
   expanded,
   onToggle,
-  onSpotIt,
+  onOpen,
   indent = 0,
   dense,
 }: {
@@ -1078,7 +1078,8 @@ function NameCell({
   metaUrl: string;
   expanded: boolean;
   onToggle: () => void;
-  onSpotIt: () => void;
+  /** When provided, the name becomes a link that opens the detail page. */
+  onOpen?: () => void;
   indent?: number;
   dense?: boolean;
 }) {
@@ -1101,9 +1102,22 @@ function NameCell({
       )}
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5 min-w-0">
-          <span className={`font-medium text-text-primary truncate ${dense ? "text-[12px]" : "text-[12.5px]"}`}>
-            {name}
-          </span>
+          {onOpen ? (
+            <button
+              type="button"
+              onClick={onOpen}
+              className={`font-medium text-text-primary truncate text-left hover:underline ${
+                dense ? "text-[12px]" : "text-[12.5px]"
+              }`}
+              title="Open campaign"
+            >
+              {name}
+            </button>
+          ) : (
+            <span className={`font-medium text-text-primary truncate ${dense ? "text-[12px]" : "text-[12.5px]"}`}>
+              {name}
+            </span>
+          )}
           {/* Inline Open in Meta — tiny ↗ icon, no chrome */}
           <a
             href={metaUrl}
@@ -1114,7 +1128,6 @@ function NameCell({
           >
             <ArrowUpRight size={11} strokeWidth={1.8} />
           </a>
-          <SpotItButton onClick={onSpotIt} dense={dense} />
         </div>
         <div className={`text-text-tertiary truncate ${dense ? "text-[10.5px]" : "text-[11px]"} mt-0.5`}>
           {sub}
@@ -1179,10 +1192,6 @@ function TrendDeltaBadge({
       )}
     </div>
   );
-}
-
-function HealthCell({ health }: { health: EdTechHealth }) {
-  return <span className={`pill ${HEALTH_TONE[health]}`}>{HEALTH_LABEL[health]}</span>;
 }
 
 /**

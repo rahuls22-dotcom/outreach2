@@ -737,43 +737,30 @@ function FilterChip({
  * BRAND TAB · voice / tone / palette (markdown source).
  * ═══════════════════════════════════════════════════════════════ */
 
-const GUYJUS_BRAND_MD = `# Brand · Guyju's
-
-_Voice and visual guidelines every creative pulls from. Editable source._
-
-## Voice
-
-Guyju's sounds like a **sharp, credible mentor** — never a hype-machine. Talk to ambitious parents and students as equals. Lead with proof, not promises.
-
-**We are:** Credible · Specific · Outcome-led · Calm under pressure
-**We are not:** Loud · Vague-aspirational · Fear-mongering · Discount-led
-
-## Rules
-
-- Lead with the outcome (rank, fluency, confidence), then the mechanism (mentors, mocks, replays).
-- Use real numbers — batch sizes, hours saved, mock cadence. Never round-up claims.
-- Never promise a rank or a guaranteed result. Show the system, not a guarantee.
-- Parents are the buyer for school-age products; students are the buyer for self-study. Match the second-person voice to whoever pays.
-- No countdown-timer urgency. Scarcity is real (capped batches) or it isn't said.
-
-## Palette
-
-- **Ink** \`#1A1A1A\` — primary text, logo
-- **Gold** \`#C9A86A\` — accent, premium cues
-- **Trust blue** \`#1D4ED8\` — links, proof points
-- **Success green** \`#15803D\` — outcomes, verified results
-- **Surface** \`#FAF8F2\` — warm off-white backgrounds
-
-## Logo
-
-- Primary: stacked wordmark on light surface.
-- Reverse: white wordmark on ink for dark creatives.
-- Never place the mark on a busy photo without the scrim.
-`;
-
 function BrandTab({ files }: { files: ProductMemoryFiles }) {
   return (
-    <MdFileBody source={GUYJUS_BRAND_MD} productId={files.productId} file="brand.md" />
+    <div className="max-w-[720px]">
+      <h1 className="text-[22px] font-semibold text-text-primary tracking-tight mt-0 mb-1">
+        Brand
+      </h1>
+      <FilePathBreadcrumb productId={files.productId} file="brand/" />
+      <p className="text-[12.5px] text-text-secondary leading-relaxed mb-5 max-w-[600px]">
+        The brand logo Spot uses across creatives for this product.
+      </p>
+
+      {/* Logo — the only thing we actually have. */}
+      <div className="text-[10.5px] uppercase tracking-wider text-text-tertiary font-semibold mb-2">
+        Logo
+      </div>
+      <div className="bg-white border border-border rounded-card p-8 flex items-center justify-center">
+        <span
+          className="text-[34px] font-semibold tracking-tight text-text-primary"
+          style={{ fontFamily: "var(--font-heading, inherit)" }}
+        >
+          Guyju&apos;s
+        </span>
+      </div>
+    </div>
   );
 }
 
