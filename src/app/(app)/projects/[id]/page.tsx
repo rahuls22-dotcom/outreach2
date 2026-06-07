@@ -5,6 +5,7 @@
 // (what's working), the campaigns table (filtered to this product), and an
 // enrichment placeholder — and links out to Memory, Campaigns, and Leads.
 
+import { useState } from "react";
 import { useParams, useRouter, notFound } from "next/navigation";
 import { motion } from "framer-motion";
 import type { Variants } from "framer-motion";
@@ -14,21 +15,21 @@ import {
   Brain,
   Monitor,
   FileText,
+  Users,
   Sparkles,
   Package,
 } from "lucide-react";
-import { PRODUCTS, diagnoseProduct } from "@/lib/products-data";
-import {
-  planForProduct,
-  PLAN_STATUS_LABEL,
-  PLAN_STATUS_TONE,
-} from "@/lib/spot/extended-flows";
+import { PRODUCTS } from "@/lib/products-data";
 import { rollupCampaigns, campaignsForProduct } from "@/lib/campaigns-edtech-rollup";
+import { projectHealth } from "@/lib/spot/project-health";
 import { scorecardsForProduct } from "@/lib/spot/persona-scorecard";
 import { CampaignsTable, inr, num } from "@/components/campaigns/campaigns-table";
 import { PersonaScorecardCard } from "@/components/personas/persona-scorecard-card";
+import { LeadDistribution } from "@/components/enrichment/lead-distribution";
 import { MetricCard } from "@/components/dashboard/metric-card";
 import { SpotMark } from "@/components/spot/spot-mark";
+
+type Tab = "personas" | "campaigns" | "enrichment";
 
 const fadeUp: Variants = {
   hidden: { opacity: 0, y: 4 },
@@ -54,9 +55,9 @@ export default function ProjectDetailPage() {
   const campaigns = campaignsForProduct(id);
   const r = rollupCampaigns(campaigns);
   const scorecards = scorecardsForProduct(id);
-  const plan = planForProduct(id);
-  const dx = diagnoseProduct(product!);
+  const health = projectHealth(id);
   const hasCampaigns = campaigns.length > 0;
+  const [tab, setTab] = useState<Tab>("personas");
 
   return (
     <motion.div initial="hidden" animate="show" variants={fadeUp}>
@@ -74,26 +75,20 @@ export default function ProjectDetailPage() {
       {/* Header */}
       <div className="mb-5 flex items-start justify-between gap-4 flex-wrap">
         <div className="flex items-start gap-3 min-w-0">
-          <div className="w-10 h-10 rounded-card bg-[#FAF8F2] border border-[#E8E3D5] flex items-center justify-center flex-shrink-0">
-            <Package size={18} strokeWidth={1.5} className="text-text-secondary" />
+          <div
+            className="w-10 h-10 rounded-card flex items-center justify-center flex-shrink-0"
+            style={{ background: `${product!.accent}1A`, color: product!.accent }}
+          >
+            <Package size={18} strokeWidth={1.5} />
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap mb-0.5">
               <h1 className="text-[24px] font-semibold tracking-[-0.01em] text-text-primary leading-tight">
                 {product!.name}
               </h1>
-              {plan ? (
-                <span className={`pill ${PLAN_STATUS_TONE[plan.status]}`} style={{ fontSize: 10.5 }}>
-                  {PLAN_STATUS_LABEL[plan.status]}
-                </span>
-              ) : (
-                <span
-                  className={`pill pill-${dx.tone === "err" ? "err" : dx.tone === "warn" ? "warn" : "info"}`}
-                  style={{ fontSize: 10.5 }}
-                >
-                  {dx.chip}
-                </span>
-              )}
+              <span className={`pill ${health.tone}`} style={{ fontSize: 10.5 }} title={health.driver}>
+                {health.label}
+              </span>
             </div>
             <div className="text-[12.5px] text-text-secondary">
               {product!.client} &middot; {product!.category}
@@ -162,9 +157,15 @@ export default function ProjectDetailPage() {
         )}
       </Section>
 
-      {/* Personas */}
-      <Section title="Personas · what's working" sub="Live verdict + angle leaderboard per persona.">
-        {scorecards.length > 0 ? (
+      {/* Tabs · Personas | Campaigns | Enrichment */}
+      <div className="flex items-center gap-1 border-b border-border-subtle mb-5">
+        <TabButton icon={Users} label="Personas" active={tab === "personas"} onClick={() => setTab("personas")} count={scorecards.length} />
+        <TabButton icon={Monitor} label="Campaigns" active={tab === "campaigns"} onClick={() => setTab("campaigns")} count={campaigns.length} />
+        <TabButton icon={Sparkles} label="Enrichment" active={tab === "enrichment"} onClick={() => setTab("enrichment")} />
+      </div>
+
+      {tab === "personas" &&
+        (scorecards.length > 0 ? (
           <div className="space-y-4">
             {scorecards.map((card) => (
               <PersonaScorecardCard key={card.id} card={card} />
@@ -172,48 +173,69 @@ export default function ProjectDetailPage() {
           </div>
         ) : (
           <EmptyNote text="No personas linked to this product yet." />
-        )}
-      </Section>
+        ))}
 
-      {/* Campaigns */}
-      <Section
-        title="Campaigns"
-        sub="The same view as the Campaigns page, scoped to this product."
-        action={
-          hasCampaigns ? (
-            <button
-              type="button"
-              onClick={() => router.push(`/campaigns?product=${id}`)}
-              className="inline-flex items-center gap-1 text-[11.5px] text-text-tertiary hover:text-text-primary"
-            >
-              View all in Campaigns
-              <ArrowRight size={11} strokeWidth={1.8} />
-            </button>
-          ) : undefined
-        }
-      >
-        {hasCampaigns ? (
-          <CampaignsTable
-            campaigns={campaigns}
-            onOpenCampaign={(cid) => router.push(`/campaigns/${cid}`)}
-            emptyLabel="No campaigns for this product yet."
-          />
-        ) : (
-          <EmptyNote text="No campaigns for this product yet — launch one from Spot." />
-        )}
-      </Section>
-
-      {/* Enrichment — placeholder (design pending). */}
-      <Section title="Enrichment">
-        <div className="bg-white border border-border border-dashed rounded-card px-5 py-8 flex flex-col items-center justify-center text-center">
-          <Sparkles size={18} strokeWidth={1.5} className="text-text-tertiary mb-2" />
-          <div className="text-[12.5px] font-medium text-text-primary">Enrichment · coming soon</div>
-          <div className="text-[11.5px] text-text-tertiary mt-0.5 max-w-[420px]">
-            Enrichment data for this product will live here.
-          </div>
+      {tab === "campaigns" && (
+        <div>
+          {hasCampaigns && (
+            <div className="flex justify-end mb-2">
+              <button
+                type="button"
+                onClick={() => router.push(`/campaigns?product=${id}`)}
+                className="inline-flex items-center gap-1 text-[11.5px] text-text-tertiary hover:text-text-primary"
+              >
+                View all in Campaigns
+                <ArrowRight size={11} strokeWidth={1.8} />
+              </button>
+            </div>
+          )}
+          {hasCampaigns ? (
+            <CampaignsTable
+              campaigns={campaigns}
+              onOpenCampaign={(cid) => router.push(`/campaigns/${cid}`)}
+              emptyLabel="No campaigns for this product yet."
+            />
+          ) : (
+            <EmptyNote text="No campaigns for this product yet — launch one from Spot." />
+          )}
         </div>
-      </Section>
+      )}
+
+      {tab === "enrichment" && <LeadDistribution productId={id} />}
     </motion.div>
+  );
+}
+
+function TabButton({
+  icon: Icon,
+  label,
+  active,
+  onClick,
+  count,
+}: {
+  icon: typeof Users;
+  label: string;
+  active: boolean;
+  onClick: () => void;
+  count?: number;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`relative inline-flex items-center gap-1.5 py-2.5 px-3.5 text-[13px] font-medium transition-colors ${
+        active ? "text-text-primary" : "text-text-secondary hover:text-text-primary"
+      }`}
+    >
+      <Icon size={13} strokeWidth={1.7} />
+      {label}
+      {typeof count === "number" && (
+        <span className="text-[10.5px] text-text-tertiary tabular">{count}</span>
+      )}
+      {active && (
+        <span aria-hidden className="absolute left-3 right-3 -bottom-px h-0.5 bg-text-primary rounded-full" />
+      )}
+    </button>
   );
 }
 

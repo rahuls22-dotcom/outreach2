@@ -14,6 +14,7 @@ import {
   PLAN_STATUS_TONE,
 } from "@/lib/spot/extended-flows";
 import { rollupCampaigns, campaignsForProduct } from "@/lib/campaigns-edtech-rollup";
+import { projectHealth } from "@/lib/spot/project-health";
 import { SpotMark } from "@/components/spot/spot-mark";
 import { useSpotStore } from "@/lib/spot/store";
 import { useCurrentWorkspaceLabel } from "@/lib/workspace-store";
@@ -50,16 +51,6 @@ function MetricStack({
   );
 }
 
-function HealthPill({ health }: { health: "on-track" | "needs-attention" | "underperforming" }) {
-  const map = {
-    "on-track": { label: "On track", cls: "pill-ok" },
-    "needs-attention": { label: "Attention", cls: "pill-warn" },
-    underperforming: { label: "Low", cls: "pill-err" },
-  } as const;
-  const c = map[health];
-  return <span className={`pill ${c.cls}`}>{c.label}</span>;
-}
-
 export default function ProjectsPage() {
   const router = useRouter();
   const askSpot = useSpotStore((s) => s.askSpot);
@@ -69,6 +60,7 @@ export default function ProjectsPage() {
     p,
     rollup: rollupCampaigns(campaignsForProduct(p.id)),
     plan: planForProduct(p.id),
+    health: projectHealth(p.id),
   }));
 
   const totalSpend = rows.reduce((s, r) => s + r.rollup.spend, 0);
@@ -82,7 +74,9 @@ export default function ProjectsPage() {
   const COLS = "minmax(200px, 2fr) 90px 120px 130px 130px 150px 80px 20px";
   const gridStyle: React.CSSProperties = { gridTemplateColumns: COLS, columnGap: 18 };
 
-  const attention = rows.filter((r) => r.p.performance.health !== "on-track");
+  const attention = rows.filter(
+    (r) => r.health.state === "needs-attention" || r.health.state === "underperforming",
+  );
 
   return (
     <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
@@ -134,7 +128,7 @@ export default function ProjectsPage() {
             <span />
           </div>
 
-          {rows.map(({ p, rollup, plan }, i) => {
+          {rows.map(({ p, rollup, plan, health }, i) => {
             const last = i === rows.length - 1;
             const r = readinessLabel(p.readiness);
             return (
@@ -151,8 +145,8 @@ export default function ProjectsPage() {
                       width: 32,
                       height: 32,
                       borderRadius: 7,
-                      background: `linear-gradient(135deg, oklch(0.92 0.04 ${(p.id.length * 47) % 360}) 0%, oklch(0.78 0.06 ${(p.id.length * 47 + 40) % 360}) 100%)`,
-                      color: "rgba(0,0,0,0.5)",
+                      background: `${p.accent}1A`,
+                      color: p.accent,
                     }}
                   >
                     <Folder size={13} />
@@ -198,7 +192,9 @@ export default function ProjectsPage() {
                   )}
                 </div>
                 <div className="flex justify-end">
-                  <HealthPill health={p.performance.health} />
+                  <span className={`pill ${health.tone}`} title={health.driver}>
+                    {health.label}
+                  </span>
                 </div>
                 <ChevronRight size={14} className="text-text-tertiary" />
               </button>

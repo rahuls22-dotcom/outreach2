@@ -103,6 +103,11 @@ export type ProductSummary = {
   readiness: number;
   /** Spend + leads rolled up from this product's campaigns. */
   performance: ProductPerformance;
+  /** Stable brand accent (hex) — the one place product colour is defined.
+   *  Used for the product icon on Projects + anywhere a per-product tint is
+   *  needed. Assigned here so colours are managed centrally, not derived from
+   *  a fragile id hash. */
+  accent: string;
   updatedAt: string;
 };
 
@@ -210,6 +215,7 @@ export const PRODUCTS: ProductSummary[] = [
       },
     ],
     readiness: 0.88,
+    accent: "#1F5BE0",
     performance: {
       window: "Last 30 days",
       totalSpend: 642000,
@@ -306,6 +312,7 @@ export const PRODUCTS: ProductSummary[] = [
       },
     ],
     readiness: 0.74,
+    accent: "#15803D",
     performance: {
       window: "Last 30 days",
       totalSpend: 488000,
@@ -384,6 +391,7 @@ export const PRODUCTS: ProductSummary[] = [
       },
     ],
     readiness: 0.42,
+    accent: "#7C3AED",
     performance: {
       window: "Last 30 days",
       totalSpend: 188000,
@@ -490,6 +498,7 @@ export const PRODUCTS: ProductSummary[] = [
       },
     ],
     readiness: 0.62,
+    accent: "#C9A86A",
     performance: {
       window: "Last 7 days · pre-launch",
       totalSpend: 0,
