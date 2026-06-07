@@ -5,11 +5,12 @@
 // filter chrome (product / channel / metrics / search / date), the rollup stat
 // strip, and feeds the filtered campaign list + selected metrics to the table.
 
-import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Search, Filter, ChevronDown, Sliders } from "lucide-react";
 import { SpotMark } from "@/components/spot/spot-mark";
 import { DateRangeSelector } from "@/components/dashboard/date-range-selector";
+import { PRODUCTS } from "@/lib/products-data";
 import { edTechCampaigns, productOptions } from "@/lib/campaigns-edtech";
 import { rollupCampaigns } from "@/lib/campaigns-edtech-rollup";
 import {
@@ -27,9 +28,23 @@ import { StatCard } from "@/components/campaigns/metric-badges";
 type ChannelFilterValue = "all" | "Meta" | "Google";
 
 export default function CampaignsPage() {
+  return (
+    <Suspense fallback={<div />}>
+      <CampaignsPageInner />
+    </Suspense>
+  );
+}
+
+function CampaignsPageInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // Deep-link: /campaigns?product=<id> pre-selects the product filter.
+  const initialProduct = (() => {
+    const p = searchParams.get("product");
+    return p && PRODUCTS.some((x) => x.id === p) ? p : "all";
+  })();
   const [query, setQuery] = useState("");
-  const [productId, setProductId] = useState<"all" | string>("all");
+  const [productId, setProductId] = useState<"all" | string>(initialProduct);
   const [channel, setChannel] = useState<ChannelFilterValue>("all");
   const [selectedMetrics, setSelectedMetrics] = useState<MetricKey[]>(DEFAULT_METRICS);
 
