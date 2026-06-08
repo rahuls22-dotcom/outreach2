@@ -76,7 +76,7 @@ function WalletWidget() {
     <div className="px-3 pb-2">
       <button
         type="button"
-        onClick={() => router.push("/settings/wallet")}
+        onClick={() => router.push("/settings/utilization")}
         className="w-full text-left rounded-[8px] border border-border-subtle bg-white hover:border-text-tertiary hover:shadow-sm transition-all px-2.5 py-2"
       >
         <div className="flex items-center gap-1.5 mb-1.5">
@@ -105,7 +105,7 @@ function WalletWidget() {
             role="button"
             onClick={(e) => {
               e.stopPropagation();
-              router.push("/settings/wallet");
+              router.push("/settings/utilization");
             }}
             className="inline-flex items-center gap-0.5 text-[10px] font-medium text-text-primary hover:underline cursor-pointer"
           >

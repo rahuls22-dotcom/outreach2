@@ -21,6 +21,7 @@
  */
 
 import { useMemo, useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import {
   WALLETS,
   poolSummary,
@@ -388,7 +389,7 @@ export default function WalletSettingsPage({ view = "utilization" }: { view?: Wa
             defaultPreset="30"
             onChange={(preset) => setRange(presetToDays(preset))}
           />
-          {v === "utilization" && (
+          {v === "utilization" && billingMode === "prepaid" && (
             <BillingPrimaryCta
               onAddMoney={() => {
                 // When the wallet is blocking (empty/expired), redirect
@@ -416,12 +417,22 @@ export default function WalletSettingsPage({ view = "utilization" }: { view?: Wa
         {billingMode === "prepaid" && <BalanceStateDemoSwitch />}
       </div>
 
-      {/* ── Utilization route: order driven by billing mode ───────────
-          - Prepaid: balance hero FIRST (how much you have left), then
-            the per-product breakdown (what you used it on).
-          - Postpaid: skip balance hero entirely — there's no balance
-            to show — and just lead with the breakdown.
-          Render order matches the mental model the user reads in. */}
+      {/* ── Utilization route ──────────────────────────────────────────
+          Utilization only makes sense for prepaid customers — it's
+          the "balance + how much of it you've consumed" story.
+          Postpaid customers have no prepaid balance to track against,
+          so the Utilization page renders an empty-state pointer to
+          the Billing page where their spend lives.
+
+          Prepaid layout:
+            1. Balance hero (or empty hero if balance is drained)
+            2. Per-product utilization (in real units, same flat
+               tree shape as the Billing Products table)
+            3. Utilization over time chart
+      */}
+      {v === "utilization" && billingMode === "postpaid" && (
+        <PostpaidUtilizationEmpty />
+      )}
       {v === "utilization" && billingMode === "prepaid" && isBalanceBlocking(billingMode, balanceState) && (
         <PrepaidEmptyHero
           balance={balanceState}
@@ -437,46 +448,32 @@ export default function WalletSettingsPage({ view = "utilization" }: { view?: Wa
           periodLabel={periodLabel}
         />
       )}
-      {v === "utilization" && <WalletUtilizationSection rangeDays={range} />}
+      {v === "utilization" && billingMode === "prepaid" && (
+        <UtilizationByProductTable rangeDays={range} />
+      )}
 
-      {/* Billing section starts here — header, spend hero, products
-          table, charts, invoices. The Wallet route renders the
-          balance hero only and skips this whole block. */}
+      {/* ── Billing route ──────────────────────────────────────────────
+          Same content for both prepaid and postpaid: how much money
+          you've spent over a time period, split by product, with
+          invoices below. The only difference between modes is the
+          framing copy on the spend hero ("drawn from your wallet"
+          vs "to be invoiced this cycle") — the numbers are the same
+          underlying spend calculation.
+      */}
       {v === "billing" && (
-      <div>
-        <div className="flex items-center gap-2 mb-2">
-          <Receipt size={14} strokeWidth={1.6} className="text-text-tertiary" />
-          <h3 className="text-[14px] font-semibold text-text-primary">Billing</h3>
-          <span
-            className={`text-[10.5px] font-medium uppercase tracking-[0.3px] px-1.5 py-0.5 rounded-badge ${
-              billingMode === "prepaid"
-                ? "bg-[#EFF6FF] text-[#1D4ED8]"
-                : "bg-[#FEF3C7] text-[#92400E]"
-            }`}
-          >
-            {billingMode === "prepaid" ? "Prepaid" : "Postpaid"}
-          </span>
-        </div>
-        <p className="text-[12px] text-text-secondary mb-4">
-          {billingMode === "prepaid"
-            ? "You top up a balance; usage in the last " + range + " days draws against it."
-            : "Usage accrues this cycle and gets invoiced when the cycle closes."}
-        </p>
-      </div>
+        <BillingSpendHero
+          rangeUtilized={rangeUtilized}
+          range={range}
+          billingMode={billingMode}
+          period={period}
+          periodLabel={periodLabel}
+        />
       )}
 
-      {/* Postpaid hero — billing-side story (no balance to manage),
-          so it only renders on the Billing route. */}
-      {v === "billing" && billingMode === "postpaid" && (
-        <PostpaidBillingHero rangeUtilized={rangeUtilized} period={period} periodLabel={periodLabel} />
-      )}
-
-      {/* (Prepaid balance hero rendered above via <PrepaidBalanceHero/>
-          so the order is balance-first, then per-product breakdown.) */}
-
-      {/* Modules table — same chrome in both modes; just the column
-          headings shift ("% of plan" in prepaid, "vs last cycle" in
-          postpaid). Currency arg pinned to INR. */}
+      {/* Products spend table — universal flat tree, same chrome in
+          both modes; only the second column heading shifts ("% of
+          plan" in prepaid, "vs cap" in postpaid). Currency pinned
+          to INR. */}
       {v === "billing" && (
         <ModulesTable rangeDays={range} totalPool={pool.totalCredits} currency="INR" billingMode={billingMode} />
       )}
@@ -510,7 +507,7 @@ export default function WalletSettingsPage({ view = "utilization" }: { view?: Wa
           and its own inline date filter. Lives only on the
           Utilization page because it visualises consumption rather
           than money. */}
-      {v === "utilization" && <WalletUsageChart />}
+      {v === "utilization" && billingMode === "prepaid" && <WalletUsageChart />}
 
       {/* ── Activity / invoices footer ────────────────────────────────
           Lives only on the Billing route. The wallet route is the
@@ -1493,24 +1490,35 @@ function BillingPrimaryCta({ onAddMoney }: { onAddMoney: () => void }) {
 }
 
 // ────────────────────────────────────────────────────────────────────
-//  PostpaidBillingHero — alternative to the prepaid balance card.
-//  Headline is the *estimated bill* this cycle (no plan, no
-//  remaining); cycle close date replaces the "resets" copy; an
-//  optional org-level spend cap shows progress against a hard
-//  ceiling (postpaid customers usually set one to avoid surprise
-//  invoices).
+//  BillingSpendHero — universal spend hero on the Billing page,
+//  works the same for both prepaid and postpaid. Billing is a pure
+//  spend story — "how much have I spent over this range?" — so the
+//  hero is mostly identical between modes, with just the framing
+//  copy underneath shifting:
+//
+//    Prepaid  → "Drawn from your prepaid balance"
+//    Postpaid → "Will be invoiced when the cycle closes (DD MMM)"
+//
+//  Postpaid also gets a side-by-side spend-cap meter so finance can
+//  see how close they are to the hard ceiling. Prepaid skips that
+//  because the actual ceiling is the prepaid balance, and that's
+//  surfaced on the Utilization page.
 // ────────────────────────────────────────────────────────────────────
-function PostpaidBillingHero({
+function BillingSpendHero({
   rangeUtilized,
+  range,
+  billingMode,
   period,
   periodLabel,
 }: {
   rangeUtilized: number;
+  range: number;
+  billingMode: BillingMode;
   period: { daysLeft: number; end: Date };
   periodLabel: string;
 }) {
-  // Pretend spend cap — in a real system this comes from the org's
-  // billing settings. ₹50,000/month is a credible mid-market default.
+  // Spend cap is a postpaid-only concept — a hard ceiling at which
+  // dialing auto-pauses so the org doesn't get a surprise invoice.
   const cycleCap = 50000;
   const capPct = Math.min(100, (rangeUtilized / cycleCap) * 100);
   const capTone =
@@ -1520,24 +1528,31 @@ function PostpaidBillingHero({
 
   return (
     <div className="bg-white border border-border rounded-card p-5">
-      {/* Top row — cycle chip + days remaining */}
-      <div className="flex items-center justify-between gap-3 mb-4">
+      {/* Top row — period chip + supporting meta. For postpaid we
+          surface the cycle-close date because that's when the bill
+          lands; for prepaid we surface the period the spend covers. */}
+      <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
         <div className="flex items-center gap-2">
           <Calendar size={13} strokeWidth={1.6} className="text-text-tertiary" />
-          <span className="text-[12px] font-medium text-text-secondary">Current cycle</span>
+          <span className="text-[12px] font-medium text-text-secondary">
+            {billingMode === "postpaid" ? "Current cycle" : "Spend window"}
+          </span>
           <span className="text-[12px] text-text-primary font-medium">{periodLabel}</span>
         </div>
-        <span className="text-[11px] font-medium text-text-tertiary">
-          <span className="text-text-secondary">{period.daysLeft}</span> days left · cycle closes {period.end.toLocaleString("en-IN", { day: "numeric", month: "short" })}
-        </span>
+        {billingMode === "postpaid" && (
+          <span className="text-[11px] font-medium text-text-tertiary">
+            <span className="text-text-secondary">{period.daysLeft}</span> days left · cycle closes {period.end.toLocaleString("en-IN", { day: "numeric", month: "short" })}
+          </span>
+        )}
       </div>
 
-      {/* Hero numbers — estimated bill is the headline (no plan,
-          no remaining) and the spend cap progresses on the right. */}
-      <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr] gap-5 items-end mb-4">
+      {/* Hero numbers. Spent-in-range is the headline for both modes.
+          Postpaid also shows the spend cap on the right; prepaid
+          gets a wider headline column since there's no cap meter. */}
+      <div className={`grid grid-cols-1 ${billingMode === "postpaid" ? "md:grid-cols-[2fr_1fr]" : ""} gap-5 items-end mb-4`}>
         <div>
           <p className="text-[10px] font-medium text-text-tertiary uppercase tracking-[0.4px] mb-1">
-            Estimated bill this cycle
+            {billingMode === "postpaid" ? "Estimated bill this cycle" : `Spend in last ${range} days`}
           </p>
           <p
             className="text-[36px] font-semibold text-text-primary leading-none tracking-[-0.01em] tabular-nums"
@@ -1546,30 +1561,214 @@ function PostpaidBillingHero({
             {formatAmount(rangeUtilized, "INR")}
           </p>
           <p className="text-[11.5px] text-text-tertiary mt-1.5">
-            Invoiced on {period.end.toLocaleString("en-IN", { day: "numeric", month: "short" })}. You&apos;ll be charged exactly what you use.
+            {billingMode === "postpaid"
+              ? <>Invoiced on {period.end.toLocaleString("en-IN", { day: "numeric", month: "short" })}. You&apos;ll be charged exactly what you use.</>
+              : "Drawn from your prepaid balance over this window."}
           </p>
         </div>
-        <div className="text-left md:text-right">
-          <p className="text-[10px] font-medium text-text-tertiary uppercase tracking-[0.4px] mb-1">
-            Spend cap
-          </p>
-          <p className="text-[20px] font-semibold text-text-primary tabular-nums">
-            {formatAmount(cycleCap, "INR")}
-          </p>
-          <p className="text-[11px] text-text-tertiary mt-1 tabular-nums">
-            {capPct.toFixed(0)}% used · auto-pause at cap
-          </p>
-        </div>
+        {billingMode === "postpaid" && (
+          <div className="text-left md:text-right">
+            <p className="text-[10px] font-medium text-text-tertiary uppercase tracking-[0.4px] mb-1">
+              Spend cap
+            </p>
+            <p className="text-[20px] font-semibold text-text-primary tabular-nums">
+              {formatAmount(cycleCap, "INR")}
+            </p>
+            <p className="text-[11px] text-text-tertiary mt-1 tabular-nums">
+              {capPct.toFixed(0)}% used · auto-pause at cap
+            </p>
+          </div>
+        )}
       </div>
 
-      {/* Spend-cap progress bar — coloured to flag when the org is
-          approaching its hard ceiling so finance can lift it ahead
-          of the auto-pause kicking in. */}
-      <div className="h-2.5 rounded-full bg-surface-secondary overflow-hidden">
-        <div
-          className="h-full transition-all"
-          style={{ width: `${capPct.toFixed(2)}%`, background: capTone }}
-        />
+      {/* Spend-cap progress bar — only renders for postpaid. */}
+      {billingMode === "postpaid" && (
+        <div className="h-2.5 rounded-full bg-surface-secondary overflow-hidden">
+          <div
+            className="h-full transition-all"
+            style={{ width: `${capPct.toFixed(2)}%`, background: capTone }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
+//  PostpaidUtilizationEmpty — what the Utilization page shows for
+//  postpaid orgs. Utilization is "how much of my prepaid balance
+//  have I consumed?" — postpaid orgs don't have a prepaid balance,
+//  so there's nothing to utilize. Point them at Billing where their
+//  spend lives.
+// ────────────────────────────────────────────────────────────────────
+function PostpaidUtilizationEmpty() {
+  const router = useRouter();
+  return (
+    <div className="bg-white border border-border rounded-card p-8 text-center max-w-[560px] mx-auto">
+      <div className="w-12 h-12 mx-auto rounded-full bg-surface-secondary flex items-center justify-center mb-3">
+        <BarChart3 size={20} strokeWidth={1.5} className="text-text-tertiary" />
+      </div>
+      <h3 className="text-[14px] font-semibold text-text-primary">
+        Utilization isn&apos;t applicable for postpaid
+      </h3>
+      <p className="text-[12.5px] text-text-secondary mt-1.5 max-w-[420px] mx-auto leading-snug">
+        Utilization tracks how much of a prepaid balance you&apos;ve consumed.
+        Your workspace is on postpaid — you&apos;re invoiced at the end of the
+        cycle for exactly what you use, with no balance to draw down.
+      </p>
+      <button
+        type="button"
+        onClick={() => router.push("/settings/billing")}
+        className="mt-4 inline-flex items-center gap-1.5 h-9 px-4 bg-accent text-white text-[13px] font-medium rounded-button hover:bg-accent-hover transition-colors"
+      >
+        <Receipt size={13} strokeWidth={1.8} />
+        Go to Billing
+      </button>
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
+//  UtilizationByProductTable — same flat-tree chrome as the Billing
+//  Products table, but the cells show *units* (phones extracted,
+//  enrichments run, minutes talked) instead of money. Reuses the
+//  same Product → Capability hierarchy so the two surfaces feel
+//  like the same product viewed through two different lenses
+//  (units vs money).
+//
+//  Daily limits live as a small chip under the product name (same
+//  treatment as the Billing table).
+// ────────────────────────────────────────────────────────────────────
+function UtilizationByProductTable({ rangeDays }: { rangeDays: number }) {
+  // Per-product derived rows. We scale each capability's units by
+  // the ratio of range-spend to period-spend so the displayed unit
+  // count maps to the selected date range.
+  const rows = useMemo(() => {
+    return WALLETS.map((w) => {
+      const series = sliceDailyToRange(w.daily, rangeDays);
+      const used   = series.reduce((s, d) => s + d.amount, 0);
+      const ratio  = w.utilized > 0 ? used / w.utilized : 0;
+      const caps   = w.capabilities.filter((c) => !c.included);
+      return { module: w, ratio, caps };
+    });
+  }, [rangeDays]);
+
+  // Three-column grid — name on the left, units in the middle, and a
+  // trailing column reserved for future bits (share-of-product %,
+  // daily-limit progress). For now it's empty but keeps the
+  // structural similarity to the Billing table strong.
+  const gridCols = "grid-cols-[minmax(0,1fr)_180px_80px]";
+
+  return (
+    <div className="bg-white border border-border rounded-card overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-border-subtle">
+        <h3 className="text-[13px] font-semibold text-text-primary">Utilization by product</h3>
+        <span className="text-[11px] text-text-tertiary">
+          Last {rangeDays} days · successful actions only
+        </span>
+      </div>
+
+      {/* Column headers */}
+      <div className={`grid ${gridCols} gap-3 px-5 py-2 border-b border-border-subtle text-[10px] font-medium text-text-tertiary uppercase tracking-[0.4px]`}>
+        <span>Product / capability</span>
+        <span className="text-right">Units</span>
+        <span className="text-right">Share</span>
+      </div>
+
+      {/* Rows */}
+      <div>
+        {rows.map(({ module: m, ratio, caps }, productIdx) => {
+          const ModIcon = m.icon;
+          const dl      = m.dailyLimit;
+          const dlPct   = dl && dl.count > 0 ? Math.min(100, (dl.used / dl.count) * 100) : 0;
+          const dlTone  =
+              dl && dlPct >= 90 ? "#DC2626"
+            : dl && dlPct >= 75 ? "#D97706"
+            : null;
+          // Sum of capability units (only really comparable within a
+          // single product because units differ across products);
+          // used for the per-product share denominator.
+          const productUnits = caps.reduce((s, c) => s + Math.round(c.unitCount * ratio), 0);
+          return (
+            <div
+              key={m.id}
+              className={productIdx > 0 ? "border-t border-border-subtle" : ""}
+            >
+              {/* Product header row */}
+              <div className={`grid ${gridCols} gap-3 px-5 py-3 items-center bg-surface-page/40`}>
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <span
+                    className="w-2 h-2 rounded-full shrink-0"
+                    style={{ background: m.chartColor }}
+                  />
+                  <div
+                    className="w-7 h-7 rounded-input flex items-center justify-center shrink-0"
+                    style={{ background: m.gradient }}
+                  >
+                    <ModIcon size={13} strokeWidth={1.6} style={{ color: m.text }} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[13px] font-semibold text-text-primary truncate">
+                      {m.name}
+                    </p>
+                    {dl && (
+                      <p className="text-[10.5px] text-text-tertiary tabular-nums inline-flex items-center gap-1.5 mt-0.5">
+                        {dlTone && (
+                          <span
+                            className="w-1.5 h-1.5 rounded-full"
+                            style={{ background: dlTone }}
+                            aria-hidden
+                          />
+                        )}
+                        <Timer size={10} strokeWidth={1.75} className="text-text-tertiary" />
+                        Daily {formatNum(dl.used)} / {formatNum(dl.count)} {dl.unit}{dl.count === 1 ? "" : "s"}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <div /> {/* Units col is blank on the product header */}
+                <div /> {/* Share col is blank on the product header */}
+              </div>
+
+              {/* Capability sub-rows — units only, no money. */}
+              {caps.map((c) => {
+                const capUnits = Math.round(c.unitCount * ratio);
+                const sharePct = productUnits > 0 ? (capUnits / productUnits) * 100 : 0;
+                // Drop the unit suffix on Enrichment (the label
+                // "Professional enrichment" already says everything;
+                // appending "enrichments" would be redundant). Keep
+                // it for phones/emails/mins where the unit gives the
+                // count meaning.
+                const showUnitSuffix = c.unitLabel !== "enrichment";
+                return (
+                  <div
+                    key={c.id}
+                    className={`grid ${gridCols} gap-3 px-5 py-2.5 items-center border-t border-border-subtle`}
+                  >
+                    <div className="flex items-center gap-2 pl-7 min-w-0">
+                      <span className="text-text-tertiary/60 text-[11px] select-none shrink-0" aria-hidden>↳</span>
+                      <span className="text-[12.5px] text-text-secondary truncate">
+                        {c.label}
+                      </span>
+                    </div>
+                    <div className="text-right tabular-nums">
+                      <span className="text-[13.5px] font-medium text-text-primary">{formatNum(capUnits)}</span>
+                      {showUnitSuffix && (
+                        <span className="text-[11px] text-text-tertiary ml-1.5">
+                          {c.unitLabel}{capUnits === 1 ? "" : "s"}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-right tabular-nums text-[11.5px] text-text-tertiary">
+                      {sharePct.toFixed(0)}%
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

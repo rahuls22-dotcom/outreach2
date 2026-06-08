@@ -567,24 +567,23 @@ function OutreachRow({
           (Leads), not stage-over-stage — each column reads "how
           many of my leads made it this far?". */}
       <td className="px-3 py-3 text-right tabular-nums whitespace-nowrap">
-        <span className="text-[13px] text-text-primary">{o.called.toLocaleString()}</span>
-        <span className="text-[11px] text-text-tertiary ml-1.5">{pct(o.called, o.totalContacts)}%</span>
+        <span className="text-[15px] font-medium text-text-primary">{o.called.toLocaleString()}</span>
+        <span className="text-[10.5px] text-text-tertiary ml-2">{pct(o.called, o.totalContacts)}%</span>
       </td>
       <td className="px-3 py-3 text-right tabular-nums whitespace-nowrap">
-        <span className="text-[13px] text-text-primary">{o.connected.toLocaleString()}</span>
-        <span className="text-[11px] text-text-tertiary ml-1.5">{pct(o.connected, o.totalContacts)}%</span>
+        <span className="text-[15px] font-medium text-text-primary">{o.connected.toLocaleString()}</span>
+        <span className="text-[10.5px] text-text-tertiary ml-2">{pct(o.connected, o.totalContacts)}%</span>
       </td>
       <td className="px-3 py-3 text-right tabular-nums whitespace-nowrap">
-        <span className="text-[13px] text-text-primary">{o.interacted.toLocaleString()}</span>
-        <span className="text-[11px] text-text-tertiary ml-1.5">{pct(o.interacted, o.totalContacts)}%</span>
+        <span className="text-[15px] font-medium text-text-primary">{o.interacted.toLocaleString()}</span>
+        <span className="text-[10.5px] text-text-tertiary ml-2">{pct(o.interacted, o.totalContacts)}%</span>
       </td>
       {/* Qualified — bottom of the funnel and the headline metric.
-          The count gets the bolder treatment so the eye lands on
-          the answer to "how is this outreach performing?"; the
-          percentage stays quiet. */}
+          One step heavier than the other stages so the eye lands
+          on the answer to "how is this outreach performing?". */}
       <td className="px-3 py-3 text-right tabular-nums whitespace-nowrap">
-        <span className="text-[14px] font-semibold text-text-primary">{o.qualified.toLocaleString()}</span>
-        <span className="text-[11px] text-text-tertiary ml-1.5">{qualRate}%</span>
+        <span className="text-[15.5px] font-semibold text-text-primary">{o.qualified.toLocaleString()}</span>
+        <span className="text-[10.5px] text-text-tertiary ml-2">{qualRate}%</span>
       </td>
       {/* Dates trail to the right — useful metadata but not the headline.
           Created / Updated sit together so the user can read them as a
