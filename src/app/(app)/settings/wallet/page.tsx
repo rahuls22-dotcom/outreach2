@@ -765,38 +765,63 @@ function WalletUsageChart() {
   // Enrichment stacks Professional + Financial.
   const activeCaps = activeWallet.capabilities.filter((c) => !c.included);
 
-  // Each capability's share of the product's total spend, derived
-  // from credits_used on the static seed. We don't have separate
-  // daily series per capability, so the stack apportions the
-  // wallet's daily series by these shares. For real data we'd swap
-  // this for true per-capability series; the visual story is the
-  // same either way.
-  const capShares = (() => {
-    const tot = activeCaps.reduce((s, c) => s + c.creditsUsed, 0);
-    if (tot === 0) return activeCaps.map(() => 0);
-    return activeCaps.map((c) => c.creditsUsed / tot);
-  })();
+  // Utilization is measured in UNITS, not rupees. The wallet's daily
+  // series carries ₹ amounts though, so we convert from ₹ → units by
+  // proportionally redistributing the product's static unit counts
+  // (from credits-data) across the active range. The bucket-to-bucket
+  // shape stays identical to the rupee series; only the scale flips
+  // from money to actions.
+  const totalRangeRupees = days.walletTotals[activeIdx] ?? 0;
 
-  // series[bucketIdx] = total ₹ for the active product in that bucket
-  const series = days.buckets.map((b) => b.perWallet[activeIdx] ?? 0);
-  const total  = days.walletTotals[activeIdx] ?? 0;
+  // Each capability's unit count for the active date range. The
+  // static seed counts are for the full period; we scale them down
+  // by what fraction of the period falls inside the range. For real
+  // data this'd come straight from a per-capability events stream;
+  // the proportional approximation produces the same visual shape.
+  const rangeRatio = activeWallet.utilized > 0 ? totalRangeRupees / activeWallet.utilized : 0;
+  const capRangeUnits = activeCaps.map((c) => c.unitCount * rangeRatio);
 
-  // capSeries[capIdx][bucketIdx] = ₹ for one capability in one bucket
+  // Per-bucket per-capability unit count. We distribute each cap's
+  // range total across buckets weighted by the bucket's share of the
+  // range's ₹ — so a bucket with double the spend gets double the
+  // units of that capability.
+  const rupeeSeries = days.buckets.map((b) => b.perWallet[activeIdx] ?? 0);
   const capSeries: number[][] = activeCaps.map((_, capIdx) =>
-    series.map((v) => v * capShares[capIdx])
+    rupeeSeries.map((v) =>
+      totalRangeRupees > 0 ? (v / totalRangeRupees) * capRangeUnits[capIdx] : 0
+    )
   );
 
-  // capPerBucketTotals[capIdx] = total ₹ for one capability across
-  // the whole range — used for the legend chips and the tooltip
-  // totals line.
+  // Per-bucket TOTAL units (sum across capabilities). Drives the
+  // stack's max and the tooltip's "Total" row.
+  const series = rupeeSeries.map((_, bIdx) =>
+    capSeries.reduce((s, row) => s + row[bIdx], 0)
+  );
+
+  // Range total in units for the active product — anchors the hero
+  // stat above the chart.
+  const total = capRangeUnits.reduce((s, n) => s + n, 0);
+
+  // capPerBucketTotals[capIdx] = total units for one capability across
+  // the whole range — drives the legend chips and tooltip rows.
   const capTotals = capSeries.map((row) => row.reduce((s, v) => s + v, 0));
+
+  // Active product's display unit suffix. When all capabilities share
+  // a unit (Enrichment: both "enrichment", AI Calling: just "min") we
+  // use that unit. When they differ (Contact Extraction: phones vs
+  // emails) the sum doesn't share a meaningful unit, so we fall back
+  // to "actions".
+  const productUnitLabel = (() => {
+    if (activeCaps.length === 0) return "";
+    const first = activeCaps[0].unitLabel;
+    const allSame = activeCaps.every((c) => c.unitLabel === first);
+    return allSame ? `${first}${total === 1 ? "" : "s"}` : "actions";
+  })();
 
   // Pad the raw max up to a round number so the Y-axis labels can be
   // clean increments (0, 50, 100, 150, 200) instead of awkward
-  // fractions of the literal peak. Trade-off: the top of the line
-  // sits a touch below the top of the canvas, which is the standard
-  // chart convention and reads as breathing room rather than waste.
-  const max    = niceMax(Math.max(1, ...series));
+  // fractions of the literal peak.
+  const max = niceMax(Math.max(1, ...series));
 
   const CHART_H = 240;
   const viewW   = 100;
@@ -903,7 +928,7 @@ function WalletUsageChart() {
             Utilization over time
           </h3>
           <p className="text-[11.5px] text-text-secondary mt-0.5">
-            {unitWord} spend for one product at a time. Switch products via the tabs below.
+            {unitWord} consumption in units for one product at a time. Switch products via the tabs below.
           </p>
         </div>
         <DateRangeSelector
@@ -925,7 +950,20 @@ function WalletUsageChart() {
       >
         {WALLETS.map((w, i) => {
           const active = i === activeIdx;
-          const tot    = days.walletTotals[i] ?? 0;
+          // Per-tab range total — compute the product's unit total
+          // for the active range, using the same period→range ratio
+          // logic the active product uses. This keeps each tab's
+          // caption in units (e.g., "779 phones", "732 mins") and
+          // never reverts to rupees.
+          const tabRupees   = days.walletTotals[i] ?? 0;
+          const tabRatio    = w.utilized > 0 ? tabRupees / w.utilized : 0;
+          const wCaps       = w.capabilities.filter((c) => !c.included);
+          const tabUnits    = wCaps.reduce((s, c) => s + Math.round(c.unitCount * tabRatio), 0);
+          const firstUnit   = wCaps[0]?.unitLabel ?? "";
+          const allSameUnit = wCaps.every((c) => c.unitLabel === firstUnit);
+          const tabUnitLabel = allSameUnit
+            ? `${firstUnit}${tabUnits === 1 ? "" : "s"}`
+            : "actions";
           return (
             <button
               key={w.id}
@@ -945,7 +983,7 @@ function WalletUsageChart() {
               />
               <span>{w.name}</span>
               <span className="text-[10.5px] text-text-tertiary tabular-nums">
-                ₹{formatNum(tot)}
+                {formatNum(tabUnits)} {tabUnitLabel}
               </span>
               {active && (
                 <span
@@ -968,15 +1006,22 @@ function WalletUsageChart() {
           (AI Calling → Talk time only) the legend would be noise. */}
       <div className="mb-4">
         <p className="text-[10px] font-medium text-text-tertiary uppercase tracking-[0.4px] tabular-nums">
-          {activeWallet.name} · spend in last {range} days
+          {activeWallet.name} · used in last {range} days
         </p>
         <p className="text-[24px] font-semibold text-text-primary leading-none mt-1 tabular-nums">
-          ₹{formatNum(total)}
+          {formatNum(Math.round(total))}
+          {productUnitLabel && (
+            <span className="text-[14px] font-medium text-text-secondary ml-1.5">
+              {productUnitLabel}
+            </span>
+          )}
         </p>
         {activeCaps.length > 1 && (
           <div className="flex items-center gap-x-4 gap-y-1 flex-wrap mt-2.5">
             {activeCaps.map((c, capIdx) => {
-              const tone = capLayerColor(activeWallet.chartColor, capIdx);
+              const tone     = capLayerColor(activeWallet.chartColor, capIdx);
+              const capCount = Math.round(capTotals[capIdx]);
+              const capUnit  = `${c.unitLabel}${capCount === 1 ? "" : "s"}`;
               return (
                 <span key={c.id} className="inline-flex items-center gap-1.5 text-[11.5px] tabular-nums">
                   <span
@@ -984,7 +1029,9 @@ function WalletUsageChart() {
                     style={{ background: tone.fill }}
                   />
                   <span className="text-text-secondary">{c.label}</span>
-                  <span className="text-text-tertiary">₹{formatNum(Math.round(capTotals[capIdx]))}</span>
+                  <span className="text-text-tertiary">
+                    {formatNum(capCount)} {capUnit}
+                  </span>
                 </span>
               );
             })}
@@ -1019,7 +1066,7 @@ function WalletUsageChart() {
                 className="absolute right-2 leading-none"
                 style={{ top: `${t.topPct}%`, transform }}
               >
-                ₹{formatYTick(t.value)}
+                {formatYTick(t.value)}
               </span>
             );
           })}
@@ -1128,7 +1175,7 @@ function WalletUsageChart() {
               just restate the total. */}
           {hover !== null && days.buckets[hover] && (() => {
             const b       = days.buckets[hover];
-            const v       = b.perWallet[activeIdx] ?? 0;
+            const v       = series[hover] ?? 0;        // total units for this bucket
             const leftPct = series.length > 1 ? (hover / (series.length - 1)) * 100 : 50;
             const align   = hover > series.length * 0.6 ? "right" : "left";
             return (
@@ -1142,7 +1189,7 @@ function WalletUsageChart() {
                     : "translate(calc(-100% - 8px), -8px)",
                 }}
               >
-                <div className="bg-text-primary text-white rounded-[6px] px-3 py-2 shadow-md whitespace-nowrap min-w-[180px]">
+                <div className="bg-text-primary text-white rounded-[6px] px-3 py-2 shadow-md whitespace-nowrap min-w-[200px]">
                   <p className="text-[10.5px] font-medium opacity-80 mb-1 tabular-nums">
                     {b.label}
                   </p>
@@ -1150,8 +1197,9 @@ function WalletUsageChart() {
                     <>
                       <div className="space-y-0.5 mb-1.5">
                         {activeCaps.map((c, capIdx) => {
-                          const tone = capLayerColor(activeWallet.chartColor, capIdx);
-                          const capV = capSeries[capIdx][hover] ?? 0;
+                          const tone     = capLayerColor(activeWallet.chartColor, capIdx);
+                          const capV     = Math.round(capSeries[capIdx][hover] ?? 0);
+                          const capUnit  = `${c.unitLabel}${capV === 1 ? "" : "s"}`;
                           return (
                             <div
                               key={c.id}
@@ -1162,19 +1210,21 @@ function WalletUsageChart() {
                                 style={{ background: tone.fill }}
                               />
                               <span className="flex-1 truncate">{c.label}</span>
-                              <span className="font-medium">₹{formatNum(Math.round(capV))}</span>
+                              <span className="font-medium">{formatNum(capV)} {capUnit}</span>
                             </div>
                           );
                         })}
                       </div>
                       <div className="border-t border-white/15 pt-1 flex items-center justify-between text-[11.5px] tabular-nums">
                         <span className="opacity-70">Total</span>
-                        <span className="font-semibold">₹{formatNum(Math.round(v))}</span>
+                        <span className="font-semibold">
+                          {formatNum(Math.round(v))} {productUnitLabel}
+                        </span>
                       </div>
                     </>
                   ) : (
                     <p className="text-[13px] font-semibold tabular-nums">
-                      ₹{formatNum(Math.round(v))}
+                      {formatNum(Math.round(v))}{productUnitLabel ? ` ${productUnitLabel}` : ""}
                     </p>
                   )}
                 </div>
