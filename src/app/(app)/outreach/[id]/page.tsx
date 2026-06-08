@@ -331,30 +331,41 @@ function ContactRow({ c }: { c: OutreachContact }) {
   );
 }
 
-// ── Source filter — page-level multi-select scoping all widgets ─────────────
-
+// ── Source filter — single-select dropdown mirroring SourceFilterPills ──────
+//
+// Earlier this was a multi-select checkbox menu where the user picked which
+// CSV uploads to include. The trigger label only said "M of N sources" so the
+// user couldn't tell which file was active without opening the menu. Replaced
+// with a single-select dropdown styled like the enrichment dashboard's
+// SourceFilterPills: the button label spells out the active file by name
+// ("Q2 follow-up.csv"), and the dropdown lists every uploaded file with a
+// lead count alongside an "All uploads" option at the top. Picking one file
+// scopes every widget on the page down to that file's data.
 function SourceFilter({
   sources,
-  selected,
-  allSelected,
+  activeSourceId,
   menuOpen,
   setMenuOpen,
-  onToggle,
-  onSetAll,
+  onSelect,
 }: {
   sources: { id: string; name: string; leads: number; uploadedAt: string }[];
-  selected: string[];
-  allSelected: boolean;
+  /** Currently-active source id, or null for "all uploads". */
+  activeSourceId: string | null;
   menuOpen: boolean;
   setMenuOpen: (v: boolean) => void;
-  onToggle: (id: string) => void;
-  onSetAll: (all: boolean) => void;
+  onSelect: (id: string | null) => void;
 }) {
-  const label = allSelected
-    ? `All sources · ${sources.length}`
-    : selected.length === 0
-      ? "No sources"
-      : `${selected.length} of ${sources.length} sources`;
+  const totalLeads = sources.reduce((s, src) => s + src.leads, 0);
+  const active = activeSourceId === null
+    ? null
+    : sources.find((s) => s.id === activeSourceId) ?? null;
+
+  // Trigger label: "Source: All uploads" when no file is picked, or the
+  // file's own short name when one is active. The trigger also surfaces the
+  // lead count for the active scope so the user sees the size of their
+  // dataset at a glance.
+  const triggerLabel = active ? active.name : "All uploads";
+  const triggerCount = active ? active.leads : totalLeads;
 
   return (
     <div className="relative">
@@ -363,59 +374,84 @@ function SourceFilter({
         aria-haspopup="listbox"
         aria-expanded={menuOpen}
         className={`inline-flex items-center gap-1.5 h-9 px-3 text-[12.5px] font-medium rounded-button border transition-colors ${
-          allSelected
+          active === null
             ? "border-border bg-white text-text-secondary hover:bg-surface-page"
             : "border-accent/40 bg-accent/5 text-accent hover:bg-accent/10"
         }`}
       >
-        <Database size={13} strokeWidth={1.5} />
-        {label}
+        <FileSpreadsheet size={13} strokeWidth={1.5} />
+        <span className="text-text-tertiary">Source:</span>
+        <span className="truncate max-w-[160px]">{triggerLabel}</span>
+        <span className="text-text-tertiary tabular-nums text-[10.5px]">
+          {triggerCount.toLocaleString("en-IN")}
+        </span>
         <ChevronDown size={13} strokeWidth={1.5} className={`transition-transform ${menuOpen ? "rotate-180" : ""}`} />
       </button>
       {menuOpen && (
         <>
           <div className="fixed inset-0 z-30" onClick={() => setMenuOpen(false)} aria-hidden />
-          <div className="absolute right-0 top-full mt-1.5 w-[300px] bg-white border border-border rounded-card shadow-lg z-40 overflow-hidden">
-            <div className="px-3 py-2 border-b border-border-subtle flex items-center justify-between">
-              <span className="text-[10.5px] font-semibold text-text-tertiary uppercase tracking-[0.5px]">Uploaded sources</span>
-              <button
-                onClick={() => onSetAll(!allSelected)}
-                className="text-[11.5px] font-medium text-accent hover:underline"
-              >
-                {allSelected ? "Clear all" : "Select all"}
-              </button>
+          <div className="absolute right-0 top-full mt-1.5 w-[320px] bg-white border border-border rounded-card shadow-lg z-40 overflow-hidden">
+            <div className="px-3 py-2 border-b border-border-subtle">
+              <span className="text-[10.5px] font-semibold text-text-tertiary uppercase tracking-[0.5px]">
+                Uploaded files
+              </span>
             </div>
-            <div className="max-h-[280px] overflow-y-auto py-1">
-              {sources.map(s => {
-                const checked = selected.includes(s.id);
+            <div className="max-h-[320px] overflow-y-auto py-1">
+              {/* "All uploads" option at the top — picks the combined scope.
+                  Same row shape as a file row so the eye doesn't have to
+                  reparse the layout. */}
+              <button
+                type="button"
+                onClick={() => { onSelect(null); setMenuOpen(false); }}
+                className={`w-full flex items-center gap-2.5 px-3 py-2 text-left transition-colors ${
+                  activeSourceId === null ? "bg-surface-secondary" : "hover:bg-surface-page"
+                }`}
+              >
+                <span className="w-3.5 inline-flex justify-center text-accent">
+                  {activeSourceId === null && <Check size={12} strokeWidth={2.5} />}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <div className={`text-[12.5px] truncate ${activeSourceId === null ? "font-semibold text-text-primary" : "font-medium text-text-primary"}`}>
+                    All uploads
+                  </div>
+                  <div className="text-[10.5px] text-text-tertiary tabular-nums">
+                    {sources.length} {sources.length === 1 ? "file" : "files"} · {totalLeads.toLocaleString("en-IN")} leads
+                  </div>
+                </div>
+              </button>
+
+              {/* One row per uploaded file. Filename is the primary label
+                  with the upload date + lead count as quiet meta below. */}
+              {sources.map((s) => {
+                const isActive = s.id === activeSourceId;
                 return (
-                  <label
+                  <button
                     key={s.id}
-                    className="flex items-center gap-2.5 px-3 py-2 hover:bg-surface-page cursor-pointer"
+                    type="button"
+                    onClick={() => { onSelect(s.id); setMenuOpen(false); }}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 text-left transition-colors ${
+                      isActive ? "bg-surface-secondary" : "hover:bg-surface-page"
+                    }`}
                   >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => onToggle(s.id)}
-                      className="w-3.5 h-3.5 rounded border-border text-accent focus:ring-accent/20 cursor-pointer"
-                    />
+                    <span className="w-3.5 inline-flex justify-center text-accent">
+                      {isActive && <Check size={12} strokeWidth={2.5} />}
+                    </span>
                     <span className="inline-flex items-center justify-center w-6 h-6 rounded bg-[#F0FDF4] text-[#15803D] shrink-0">
                       <FileSpreadsheet size={12} strokeWidth={1.75} />
                     </span>
                     <div className="flex-1 min-w-0">
-                      <div className="text-[12.5px] font-medium text-text-primary truncate" title={s.name}>{s.name}</div>
+                      <div className={`text-[12.5px] truncate ${isActive ? "font-semibold text-text-primary" : "font-medium text-text-primary"}`} title={s.name}>
+                        {s.name}
+                      </div>
                       <div className="text-[10.5px] text-text-tertiary tabular-nums flex items-center gap-1">
                         <span>Uploaded {format(new Date(s.uploadedAt), "dd MMM yyyy")}</span>
                         <span className="text-border">·</span>
                         <span>{s.leads.toLocaleString()} leads</span>
                       </div>
                     </div>
-                  </label>
+                  </button>
                 );
               })}
-            </div>
-            <div className="px-3 py-2 border-t border-border-subtle text-[10.5px] text-text-tertiary tabular-nums">
-              Selected: <span className="text-text-secondary font-medium">{selected.reduce((sum, id) => sum + (sources.find(s => s.id === id)?.leads ?? 0), 0).toLocaleString()}</span> leads
             </div>
           </div>
         </>
@@ -2307,28 +2343,22 @@ export default function OutreachDetailPage() {
   // Edit drawer — opens when the header Edit button is clicked.
   const [editOpen, setEditOpen] = useState(false);
 
-  // Page-level source filter — scopes every widget + the table to the
-  // selected CSVs. Default: all sources selected. Sources are per-outreach
-  // now so the dropdown shows files specific to *this* campaign.
+  // Page-level source filter — single-select dropdown (matches the
+  // enrichment dashboard's SourceFilterPills pattern). The user picks
+  // either "All uploads" (activeSourceId = null) or one specific file;
+  // every widget on the page scopes down to that selection. Sources are
+  // per-outreach so the dropdown only shows files belonging to *this*
+  // campaign.
   const [sourceMenuOpen, setSourceMenuOpen] = useState(false);
   const sources = detail?.sources ?? [];
-  const [selectedSources, setSelectedSources] = useState<string[]>(() =>
-    sources.map(s => s.id)
-  );
-  // Keep the source selection in sync when the outreach id changes
-  // (e.g. user navigates from the listing into a different campaign).
-  // Without this the filter would stay anchored to the previous outreach
-  // and dump the new page's data because no source ids match.
+  const [activeSourceId, setActiveSourceId] = useState<string | null>(null);
+  // Reset to "All uploads" whenever the outreach id changes so the filter
+  // never points at a file id that doesn't exist on the new page.
   const sourceIdsKey = sources.map(s => s.id).join("|");
   useEffect(() => {
-    setSelectedSources(sources.map(s => s.id));
+    setActiveSourceId(null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sourceIdsKey]);
-  const toggleSource = (id: string) =>
-    setSelectedSources(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
-  const setAllSources = (all: boolean) =>
-    setSelectedSources(all ? sources.map(s => s.id) : []);
-  const sourcesAllSelected = selectedSources.length === sources.length;
   const [activeFilter, setActiveFilter] = useState<FilterTab>("all");
 
   // Filters popover state — chip multi-selects + range inputs
@@ -2406,11 +2436,10 @@ export default function OutreachDetailPage() {
     if (sources.length === 0) return 1;
     const totalLeads = sources.reduce((s, src) => s + src.leads, 0);
     if (totalLeads <= 0) return 1;
-    const selectedLeads = sources
-      .filter(s => selectedSources.includes(s.id))
-      .reduce((s, src) => s + src.leads, 0);
-    return selectedLeads / totalLeads;
-  }, [sources, selectedSources]);
+    if (activeSourceId === null) return 1; // "All uploads" — full dataset.
+    const active = sources.find((s) => s.id === activeSourceId);
+    return active ? active.leads / totalLeads : 1;
+  }, [sources, activeSourceId]);
 
   const scaled = useMemo(() => {
     const activity = d.activityDays || 1;
@@ -2681,12 +2710,10 @@ export default function OutreachDetailPage() {
           <DateRangeSelector compact onChange={setRangePreset} defaultPreset="7" />
           <SourceFilter
             sources={d.sources}
-            selected={selectedSources}
-            allSelected={sourcesAllSelected}
+            activeSourceId={activeSourceId}
             menuOpen={sourceMenuOpen}
             setMenuOpen={setSourceMenuOpen}
-            onToggle={toggleSource}
-            onSetAll={setAllSources}
+            onSelect={setActiveSourceId}
           />
           <StatusActionButton
             status={outreachStatus}
@@ -2710,25 +2737,31 @@ export default function OutreachDetailPage() {
         </div>
       </div>
 
-      {/* Source filter context banner — only when partially filtered */}
-      {!sourcesAllSelected && (
-        <div className="flex items-center gap-2 mb-4 px-3 py-2 rounded-card bg-accent/5 border border-accent/20 text-[12px]">
-          <FilterIcon size={12} strokeWidth={1.5} className="text-accent" />
-          <span className="text-text-secondary">
-            Showing data from{" "}
-            <span className="font-medium text-text-primary">
-              {selectedSources.length} of {d.sources.length} uploaded sources
+      {/* Source filter context banner — only when scoped to a single file.
+          The trigger label already names the active file, but this banner
+          reinforces it across the full page width so the user always knows
+          which file the widgets and table are tied to. */}
+      {activeSourceId !== null && (() => {
+        const active = d.sources.find((s) => s.id === activeSourceId);
+        if (!active) return null;
+        return (
+          <div className="flex items-center gap-2 mb-4 px-3 py-2 rounded-card bg-accent/5 border border-accent/20 text-[12px]">
+            <FilterIcon size={12} strokeWidth={1.5} className="text-accent" />
+            <span className="text-text-secondary">
+              Showing data from{" "}
+              <span className="font-medium text-text-primary">{active.name}</span>
+              {" "}
+              <span className="text-text-tertiary">· {active.leads.toLocaleString("en-IN")} leads</span>
             </span>
-            . Widgets and the contacts table are scoped to these files only.
-          </span>
-          <button
-            onClick={() => setAllSources(true)}
-            className="ml-auto text-[12px] font-medium text-accent hover:underline"
-          >
-            Show all files
-          </button>
-        </div>
-      )}
+            <button
+              onClick={() => setActiveSourceId(null)}
+              className="ml-auto text-[12px] font-medium text-accent hover:underline"
+            >
+              Show all uploads
+            </button>
+          </div>
+        );
+      })()}
 
       {/* 0. KPI hero strip — Talktime + Spend + Performance funnel, the same
           three widgets that anchor the listing page so per-outreach metrics
