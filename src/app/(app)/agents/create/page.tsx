@@ -343,7 +343,7 @@ export default function CreateAgentPage() {
                   {/* Persona name */}
                   <div>
                     <label className={labelCls}>Persona name</label>
-                    <input type="text" value={persona} onChange={(e) => setPersona(e.target.value)} placeholder="e.g., Priya"
+                    <input type="text" value={persona} onChange={(e) => setPersona(e.target.value)} placeholder="e.g., Vox"
                       className={inputCls} />
                     <div className="text-[11px] text-text-tertiary mt-1">The name the agent uses when speaking to leads.</div>
                   </div>

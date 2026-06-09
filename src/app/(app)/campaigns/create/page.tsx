@@ -124,7 +124,7 @@ export default function CreateCampaignPage() {
                   <div
                     className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200 ${
                       isComplete
-                        ? "bg-accent text-white"
+                        ? "bg-status-success text-white"
                         : isCurrent
                         ? "bg-accent text-white ring-4 ring-accent/10"
                         : "bg-surface-secondary text-text-tertiary"
@@ -152,7 +152,7 @@ export default function CreateCampaignPage() {
                 {i < steps.length - 1 && (
                   <div
                     className={`w-10 h-[2px] mx-1 mt-[-18px] transition-colors duration-200 ${
-                      i < currentStep ? "bg-accent" : "bg-border"
+                      i < currentStep ? "bg-status-success" : "bg-border"
                     }`}
                   />
                 )}

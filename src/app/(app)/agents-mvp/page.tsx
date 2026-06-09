@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { motion } from "framer-motion";
 import type { Variants } from "framer-motion";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Zap, Bot, Phone, MessageCircle, Plus, Sparkles, Play, Pause,
   Clock, ArrowRight, Pencil, Upload, FileText, X,
@@ -60,13 +60,37 @@ const agentsMvp = [
   },
 ];
 
+// Wrap the body in Suspense because it consumes useSearchParams.
+// Without this Next.js 16 fails the production build with
+// "useSearchParams() should be wrapped in a suspense boundary"
+// during static prerender — see /agents-mvp?create=1&onboarding=1
+// deep-link flow.
 export default function AgentsMvpPage() {
+  return (
+    <Suspense fallback={null}>
+      <AgentsMvpInner />
+    </Suspense>
+  );
+}
+
+function AgentsMvpInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { isEmpty } = useDemoMode();
   const agents = isEmpty ? [] : agentsMvp;
   const [isCreating, setIsCreating] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [createMode, setCreateMode] = useState<"select" | "ai" | "manual">("select");
+
+  // Deep-link support — landing on /agents-mvp?create=1 auto-opens the
+  // Create Agent panel so callers (outreach AgentPicker, sidebar shortcuts)
+  // can drop a user straight into the create flow.
+  useEffect(() => {
+    if (searchParams?.get("create") === "1") {
+      setShowCreateForm(true);
+      setCreateMode("select");
+    }
+  }, [searchParams]);
   const [projectContext, setProjectContext] = useState("");
   const [contextSource, setContextSource] = useState<"project" | "campaign" | "manual" | "">("");
   const [selectedProject, setSelectedProject] = useState("");
@@ -77,6 +101,20 @@ export default function AgentsMvpPage() {
     setTimeout(() => {
       setIsCreating(false);
       setShowCreateForm(false);
+      // Onboarding hand-off — if the user arrived from /welcome with
+      // ?onboarding=1, mark the agent step done and route them back
+      // to the welcome plan so they can move to outreach. Otherwise
+      // the create flow ends on the agent detail page as before.
+      const isOnboarding = searchParams?.get("onboarding") === "1";
+      if (isOnboarding) {
+        try {
+          sessionStorage.setItem("onboarding_agent_done", "true");
+        } catch {
+          /* ignore */
+        }
+        router.push("/welcome");
+        return;
+      }
       router.push("/agents-mvp/amvp-1");
     }, 3000);
   };

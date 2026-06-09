@@ -536,7 +536,7 @@ export default function CreateWorkflowPage() {
                     <textarea
                       value={aiRoutingPrompt}
                       onChange={(e) => setAiRoutingPrompt(e.target.value)}
-                      placeholder="Describe how leads should be routed. E.g., 'Route leads with budget > 1Cr to Priya, others to Arjun.'"
+                      placeholder="Describe how leads should be routed. E.g., 'Route leads with budget > 1Cr to Vox, others to Atlas.'"
                       rows={3}
                       className="w-full px-3 py-2 text-[13px] border border-border rounded-input bg-white text-text-primary focus:outline-none focus:border-accent transition-colors duration-150 placeholder:text-text-tertiary resize-none"
                     />

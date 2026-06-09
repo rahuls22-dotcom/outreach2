@@ -9,6 +9,8 @@ import { SpotRoot } from "@/components/spot/spot-root";
 import { useSpotStore } from "@/lib/spot/store";
 import { useCurrentScope, useCurrentWorkspaceLabel } from "@/lib/workspace-store";
 import { isAuthed } from "@/lib/auth";
+import { WAProvider } from "@/lib/whatsapp-context";
+import { WorkspaceProvider } from "@/lib/workspace-context";
 
 /**
  * Watches workspace scope and resets Spot whenever it changes — the
@@ -89,18 +91,22 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <AuthGate>
       <DemoModeProvider>
         <ProductsProvider>
-          <div className="min-h-screen bg-surface-page">
-            <Sidebar />
-            <main className="ml-sidebar">
-              {isSpotRoute ? (
-                children
-              ) : (
-                <div className="max-w-[1400px] mx-auto px-8 py-8">{children}</div>
-              )}
-            </main>
-            <SpotRoot />
-            <SpotWorkspaceSync />
-          </div>
+          <WorkspaceProvider>
+            <WAProvider>
+              <div className="min-h-screen bg-surface-page">
+                <Sidebar />
+                <main className="ml-sidebar">
+                  {isSpotRoute ? (
+                    children
+                  ) : (
+                    <div className="max-w-[1400px] mx-auto px-8 py-8">{children}</div>
+                  )}
+                </main>
+                <SpotRoot />
+                <SpotWorkspaceSync />
+              </div>
+            </WAProvider>
+          </WorkspaceProvider>
         </ProductsProvider>
       </DemoModeProvider>
     </AuthGate>

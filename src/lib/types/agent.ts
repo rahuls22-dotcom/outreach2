@@ -63,7 +63,7 @@ export interface WhatsAppConfig {
 // ─── Agent Identity ─────────────────────────────────────────────────
 
 export interface AgentIdentity {
-  persona: string; // "Priya"
+  persona: string; // "Vox"
   tone: AgentTone;
   languages: string[];
   language_behavior: LanguageBehavior;

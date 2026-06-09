@@ -25,7 +25,7 @@ export interface AgentItem {
 export const agentsList: AgentItem[] = [
   {
     id: "va-1",
-    name: "Priya — Qualification Agent",
+    name: "Vox — Qualification Agent",
     channel: "voice",
     template: "qualifying",
     languages: ["English", "Hindi", "Kannada"],
@@ -38,7 +38,7 @@ export const agentsList: AgentItem[] = [
   },
   {
     id: "va-2",
-    name: "Arjun — Follow-up Agent",
+    name: "Atlas — Follow-up Agent",
     channel: "voice",
     template: "qualifying",
     languages: ["English", "Hindi"],
@@ -51,7 +51,7 @@ export const agentsList: AgentItem[] = [
   },
   {
     id: "va-3",
-    name: "Neha — Survey Agent",
+    name: "Nova — Survey Agent",
     channel: "voice",
     template: "blank",
     languages: ["English"],
@@ -66,12 +66,12 @@ export const agentsList: AgentItem[] = [
 
 // Voices for Step 3
 export const voiceOptions = [
-  { id: "v-1", name: "Priya", gender: "Female", languages: ["EN", "HI", "KN"] },
-  { id: "v-2", name: "Arjun", gender: "Male", languages: ["EN", "HI"] },
-  { id: "v-3", name: "Meera", gender: "Female", languages: ["EN", "HI", "TA"] },
-  { id: "v-4", name: "Raj", gender: "Male", languages: ["EN", "HI", "KN"] },
-  { id: "v-5", name: "Ananya", gender: "Female", languages: ["EN", "HI", "MR"] },
-  { id: "v-6", name: "Kiran", gender: "Male", languages: ["EN", "HI", "TE"] },
+  { id: "v-1", name: "Vox", gender: "Female", languages: ["EN", "HI", "KN"] },
+  { id: "v-2", name: "Atlas", gender: "Male", languages: ["EN", "HI"] },
+  { id: "v-3", name: "Lyra", gender: "Female", languages: ["EN", "HI", "TA"] },
+  { id: "v-4", name: "Orbit", gender: "Male", languages: ["EN", "HI", "KN"] },
+  { id: "v-5", name: "Halo", gender: "Female", languages: ["EN", "HI", "MR"] },
+  { id: "v-6", name: "Echo", gender: "Male", languages: ["EN", "HI", "TE"] },
 ];
 
 export const languageOptions = [
@@ -287,7 +287,7 @@ export const defaultObjectives: Objective[] = [
 export const newAgentsList: AgentListItem[] = [
   {
     id: "va-1",
-    name: "Priya — Qualification Agent",
+    name: "Vox — Qualification Agent",
     description: "Qualifies inbound leads for luxury real estate properties in Bangalore",
     template: "qualifying",
     status: "active",
@@ -303,7 +303,7 @@ export const newAgentsList: AgentListItem[] = [
   },
   {
     id: "va-2",
-    name: "Arjun — Follow-up Agent",
+    name: "Atlas — Follow-up Agent",
     description: "Re-engages cold leads and handles follow-up conversations",
     template: "follow_up",
     status: "active",
@@ -319,7 +319,7 @@ export const newAgentsList: AgentListItem[] = [
   },
   {
     id: "va-3",
-    name: "Neha — Survey Agent",
+    name: "Nova — Survey Agent",
     description: "Conducts satisfaction surveys and collects feedback",
     template: "survey",
     status: "draft",
@@ -335,16 +335,16 @@ export const newAgentsList: AgentListItem[] = [
   },
 ];
 
-/** Full agent detail (objective-based) for Priya */
+/** Full agent detail (objective-based) for Vox */
 export const newAgentDetail: Agent = {
   id: "va-1",
-  name: "Priya — Qualification Agent",
+  name: "Vox — Qualification Agent",
   description: "Qualifies inbound leads for luxury real estate properties in Bangalore",
   status: "active",
   template: "qualifying",
 
   identity: {
-    persona: "Priya",
+    persona: "Vox",
     tone: "conversational",
     languages: ["English", "Hindi", "Kannada"],
     language_behavior: "match_lead",
@@ -371,14 +371,14 @@ export const newAgentDetail: Agent = {
 
   voice_config: {
     voice_id: "v-1",
-    voice_name: "Priya",
+    voice_name: "Vox",
     max_duration_min: 5,
     silence_timeout_sec: 10,
     interruption_handling: true,
   },
 
   whatsapp_config: {
-    first_message_template: "Hi {{lead_name}}, this is Priya from Godrej Properties. 🏡 I saw you were interested in {{project_name}}. Would you like to know more about our exclusive offers?",
+    first_message_template: "Hi {{lead_name}}, this is Vox from Godrej Properties. 🏡 I saw you were interested in {{project_name}}. Would you like to know more about our exclusive offers?",
     quick_replies: ["Yes, tell me more", "Schedule a site visit", "Send brochure", "Not interested"],
     reply_timeout_hours: 24,
     rich_media: [
@@ -409,12 +409,12 @@ export const newAgentDetail: Agent = {
 
 /** Voice options with new type structure */
 export const newVoiceOptions: VoiceOption[] = [
-  { id: "v-1", name: "Priya", gender: "Female", languages: ["English", "Hindi", "Kannada"] },
-  { id: "v-2", name: "Arjun", gender: "Male", languages: ["English", "Hindi"] },
-  { id: "v-3", name: "Meera", gender: "Female", languages: ["English", "Hindi", "Tamil"] },
-  { id: "v-4", name: "Raj", gender: "Male", languages: ["English", "Hindi", "Kannada"] },
-  { id: "v-5", name: "Ananya", gender: "Female", languages: ["English", "Hindi", "Marathi"] },
-  { id: "v-6", name: "Kiran", gender: "Male", languages: ["English", "Hindi", "Telugu"] },
+  { id: "v-1", name: "Vox", gender: "Female", languages: ["English", "Hindi", "Kannada"] },
+  { id: "v-2", name: "Atlas", gender: "Male", languages: ["English", "Hindi"] },
+  { id: "v-3", name: "Lyra", gender: "Female", languages: ["English", "Hindi", "Tamil"] },
+  { id: "v-4", name: "Orbit", gender: "Male", languages: ["English", "Hindi", "Kannada"] },
+  { id: "v-5", name: "Halo", gender: "Female", languages: ["English", "Hindi", "Marathi"] },
+  { id: "v-6", name: "Echo", gender: "Male", languages: ["English", "Hindi", "Telugu"] },
 ];
 
 // ═══════════════════════════════════════════════════════════════════
@@ -538,7 +538,7 @@ export const agentMvpDetails: Record<string, AgentMvpDetail> = {
     systemPromptSections: 22,
     greetingTemplate: "Good {{greeting_time}}, am I speaking with {{salutation}} {{customer_name}}?",
     voiceId: "v-1",
-    voiceName: "Ekta (Revspot)",
+    voiceName: "Pulse (Revspot)",
     llmConfig: { provider: "Groq", model: "GPT-OSS 120B", temperature: 0.2 },
     sttConfig: { provider: "Deepgram", model: "Nova 3", language: "Hindi (hi)" },
     languageConfig: { primary: "English", additional: ["Hindi", "Kannada"] },
@@ -563,9 +563,9 @@ export const agentMvpDetails: Record<string, AgentMvpDetail> = {
     phoneNumber: "+918065481620",
     systemPrompt: "You are a friendly follow-up agent for Godrej Properties. You are calling leads who previously expressed interest in Godrej Reflections but haven't taken the next step. Your goal is to understand what held them back, address concerns, and help them move forward. Be empathetic and never pushy.",
     systemPromptSections: 15,
-    greetingTemplate: "Hi {{customer_name}}, this is Priya from Godrej Properties. We spoke earlier about Godrej Reflections — do you have a moment?",
+    greetingTemplate: "Hi {{customer_name}}, this is Vox from Godrej Properties. We spoke earlier about Godrej Reflections — do you have a moment?",
     voiceId: "v-1",
-    voiceName: "Priya (Revspot)",
+    voiceName: "Vox (Revspot)",
     llmConfig: { provider: "OpenAI", model: "GPT-4o", temperature: 0.3 },
     sttConfig: { provider: "Deepgram", model: "Nova 3", language: "English (en)" },
     languageConfig: { primary: "English", additional: ["Hindi"] },
