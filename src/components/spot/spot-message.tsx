@@ -674,28 +674,21 @@ function ClarifyQuestionsPart({ kind }: { kind: "scale" | "optimize" | "test-ang
   );
 }
 
-/** A line spoken by the Analyst Agent in an analyst↔Spot review. Distinct
- *  attribution (purple "Analyst Agent" avatar + label) so the conversation
- *  reads as a dialogue between two agents, not a Spot monologue. */
+/** A line spoken by the Analyst Agent in an analyst↔Spot review. Kept quiet
+ *  and monochrome — a hairline left rule + a small muted label — so it reads
+ *  as the analyst's voice in the transcript without shouting (Spot's own lines
+ *  render as plain text). */
 function AnalystLinePart({ text }: { text: string }) {
   return (
-    <div className="mb-2.5 flex gap-2.5">
-      <div
-        className="flex-shrink-0 mt-0.5 w-6 h-6 rounded-full flex items-center justify-center"
-        style={{ background: "#F1EFFE", border: "1px solid #DAD5F7" }}
-      >
-        <BarChart3 size={12} strokeWidth={1.9} style={{ color: "#6D5AE6" }} />
+    <div
+      className="mb-3 pl-3.5"
+      style={{ borderLeft: "1.5px solid #E8E8E6" }}
+    >
+      <div className="text-[10.5px] uppercase tracking-wider font-medium text-text-tertiary mb-1">
+        Analyst Agent
       </div>
-      <div className="flex-1 min-w-0">
-        <div
-          className="text-[10px] uppercase tracking-wider font-semibold mb-0.5"
-          style={{ color: "#6D5AE6" }}
-        >
-          Analyst Agent
-        </div>
-        <div className="text-[12.5px] leading-[1.55] text-text-primary">
-          <RichText text={text} />
-        </div>
+      <div className="text-[12.5px] leading-[1.55] text-text-secondary">
+        <RichText text={text} />
       </div>
     </div>
   );
