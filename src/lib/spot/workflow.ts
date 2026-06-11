@@ -73,7 +73,8 @@ export type WorkflowKind =
   | "scale"
   | "optimize"
   | "test-angles"
-  | "campaign-dive";
+  | "campaign-dive"
+  | "analyst-review";
 
 /** Files the right canvas can show — Claude-Code-style file browser
  *  of the product workspace. The chat header owns the picker (so the
@@ -160,6 +161,7 @@ export const STEP_ORDER_BY_KIND: Record<WorkflowKind, readonly WorkflowStep[]> =
   optimize: OPTIMIZE_STEPS,
   "test-angles": ANGLES_STEPS,
   "campaign-dive": ["campaign-dive"], // single-step
+  "analyst-review": ["campaign-dive"], // single-step · chat-only
 };
 
 /** Per-kind visible step rail. */
@@ -170,6 +172,7 @@ export const VISIBLE_STEPS_BY_KIND: Record<WorkflowKind, readonly WorkflowStep[]
   "test-angles": ANGLES_STEPS.filter((s) => s !== "done"),
   // Single-step flow — no rail.
   "campaign-dive": [],
+  "analyst-review": [],
 };
 
 export type WorkflowBudget = {
@@ -305,11 +308,27 @@ export type CampaignDiveWorkflow = {
   startedAt: number;
 };
 
+/** Analyst review · a chat-only conversation between the Analyst Agent and
+ *  Spot, surfaced from a project card's "View analysis". No canvas, no steps —
+ *  it ends with a CTA that kicks off the recommended flow. */
+export type AnalystReviewWorkflow = {
+  kind: "analyst-review";
+  step: WorkflowStep; // "campaign-dive" placeholder · single-step
+  productId: string;
+  productName: string;
+  /** The flow Spot recommends running off the analysis. */
+  recommendedFlow: "scale" | "optimize" | "test-angles" | "launch";
+  /** CTA label for the recommended action. */
+  recommendedLabel: string;
+  startedAt: number;
+};
+
 /** Any workflow currently active in the Spot store. */
 export type SpotWorkflow =
   | LaunchWorkflow
   | DiagnosticWorkflow
-  | CampaignDiveWorkflow;
+  | CampaignDiveWorkflow
+  | AnalystReviewWorkflow;
 
 export const EMPTY_APPROVALS: WorkflowApprovals = {
   personaIds: [],
@@ -1101,6 +1120,8 @@ export function stepIntroMessage(
   // Campaign-dive has no scripted intro — chat is seeded directly in
   // startCampaignDive · skip the intro lookup.
   if (w.kind === "campaign-dive") return null;
+  // Analyst review is chat-only with a scripted thread — no step intros.
+  if (w.kind === "analyst-review") return null;
   // Extended-flow steps (scale / optimize / test-angles) have their own
   // intro copy — dispatch to extended-flows for anything not in the
   // launch flow's switch below.

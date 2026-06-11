@@ -18,6 +18,7 @@ import {
   type WorkflowStep,
 } from "./workflow";
 import { PRODUCTS } from "../products-data";
+import { analystConversationFor } from "./analyst-data";
 import { campaignsForAccount } from "./import-campaigns-data";
 
 type PanelState = {
@@ -87,6 +88,8 @@ type PanelState = {
   startOptimizeFlow: (product: { id: string; name: string }) => void;
   /** Start the Test New Angles workflow against an existing product. */
   startTestAnglesFlow: (product: { id: string; name: string }) => void;
+  /** Open the Analyst Agent ↔ Spot conversation for a project (chat-only). */
+  startAnalystReview: (product: { id: string; name: string }) => void;
   /** Start the campaign-dive surface · chat-left + campaign-detail right.
    *  Called by the "Spot it" button on campaign / ad-set / ad rows. */
   startCampaignDive: (entity: {
@@ -851,6 +854,68 @@ export const useSpotStore = create<PanelState>((set) => ({
     });
   },
 
+  startAnalystReview: (product) => {
+    const prod = PRODUCTS.find((p) => p.id === product.id);
+    if (!prod) return;
+    const conv = analystConversationFor(prod);
+    const thread: SpotMessage[] = [
+      {
+        role: "spot",
+        parts: [
+          {
+            type: "text",
+            text: `My Analyst Agent just finished its scan of **${product.name}** — here's the conversation we had. Net: ${conv.summary}`,
+          },
+        ],
+      },
+      ...conv.turns.map(
+        (t): SpotMessage => ({
+          role: "spot",
+          parts: [
+            t.speaker === "analyst"
+              ? { type: "analyst-line", text: t.text }
+              : { type: "text", text: t.text },
+          ],
+        }),
+      ),
+      {
+        role: "spot",
+        parts: [
+          {
+            type: "text",
+            text: `That's the read. Recommendation: **${conv.action}** — want me to draft the plan?`,
+          },
+          {
+            type: "analyst-cta",
+            flow: conv.flow,
+            productId: product.id,
+            productName: product.name,
+            label: conv.action,
+          },
+        ],
+      },
+    ];
+    set(() => ({
+      open: true,
+      maximized: false,
+      canvasOpen: false,
+      viewHomeOverride: false,
+      clickedCtas: new Set<string>(),
+      scope: { kind: "project", label: product.name, target: product.id },
+      pendingQuery: null,
+      workflow: {
+        kind: "analyst-review",
+        step: "campaign-dive",
+        productId: product.id,
+        productName: product.name,
+        recommendedFlow: conv.flow,
+        recommendedLabel: conv.action,
+        startedAt: Date.now(),
+      },
+      thread,
+    }));
+  },
+
   startCampaignDive: (entity) => {
     // Open the chat + canvas split-screen with the campaign in focus.
     // The chat seeds with a short framing message so the user can start
@@ -924,8 +989,11 @@ export const useSpotStore = create<PanelState>((set) => ({
           }
           return { ...s.workflow, step: upcoming, approvals };
         }
-        // Campaign-dive is single-step — no advancement state to track.
-        if (s.workflow.kind === "campaign-dive") {
+        // Single-step flows — no advancement state to track.
+        if (
+          s.workflow.kind === "campaign-dive" ||
+          s.workflow.kind === "analyst-review"
+        ) {
           return { ...s.workflow, step: upcoming };
         }
         // Diagnostic flows — when advancing from `plan` to `live`,
@@ -1158,7 +1226,8 @@ export const useSpotStore = create<PanelState>((set) => ({
       if (
         !s.workflow ||
         s.workflow.kind === "launch-campaign" ||
-        s.workflow.kind === "campaign-dive"
+        s.workflow.kind === "campaign-dive" ||
+        s.workflow.kind === "analyst-review"
       )
         return {};
       return {
@@ -1174,7 +1243,8 @@ export const useSpotStore = create<PanelState>((set) => ({
       if (
         !s.workflow ||
         s.workflow.kind === "launch-campaign" ||
-        s.workflow.kind === "campaign-dive"
+        s.workflow.kind === "campaign-dive" ||
+        s.workflow.kind === "analyst-review"
       )
         return {};
       // Don't overwrite anything the user has already set — only fill blanks.

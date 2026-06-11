@@ -674,6 +674,71 @@ function ClarifyQuestionsPart({ kind }: { kind: "scale" | "optimize" | "test-ang
   );
 }
 
+/** A line spoken by the Analyst Agent in an analyst↔Spot review. Distinct
+ *  attribution (purple "Analyst Agent" avatar + label) so the conversation
+ *  reads as a dialogue between two agents, not a Spot monologue. */
+function AnalystLinePart({ text }: { text: string }) {
+  return (
+    <div className="mb-2.5 flex gap-2.5">
+      <div
+        className="flex-shrink-0 mt-0.5 w-6 h-6 rounded-full flex items-center justify-center"
+        style={{ background: "#F1EFFE", border: "1px solid #DAD5F7" }}
+      >
+        <BarChart3 size={12} strokeWidth={1.9} style={{ color: "#6D5AE6" }} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div
+          className="text-[10px] uppercase tracking-wider font-semibold mb-0.5"
+          style={{ color: "#6D5AE6" }}
+        >
+          Analyst Agent
+        </div>
+        <div className="text-[12.5px] leading-[1.55] text-text-primary">
+          <RichText text={text} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** The recommended-action CTA closing an analyst review — kicks off the
+ *  matching flow (scale / optimize / test-angles / launch) for the project. */
+function AnalystCtaPart({
+  flow,
+  productId,
+  productName,
+  label,
+}: {
+  flow: "scale" | "optimize" | "test-angles" | "launch";
+  productId: string;
+  productName: string;
+  label: string;
+}) {
+  const startScaleFlow = useSpotStore((s) => s.startScaleFlow);
+  const startOptimizeFlow = useSpotStore((s) => s.startOptimizeFlow);
+  const startTestAnglesFlow = useSpotStore((s) => s.startTestAnglesFlow);
+  const startLaunchFlow = useSpotStore((s) => s.startLaunchFlow);
+  const go = () => {
+    const p = { id: productId, name: productName };
+    if (flow === "scale") startScaleFlow(p);
+    else if (flow === "optimize") startOptimizeFlow(p);
+    else if (flow === "test-angles") startTestAnglesFlow(p);
+    else startLaunchFlow(p);
+  };
+  return (
+    <div className="mt-1.5 mb-1">
+      <button
+        type="button"
+        onClick={go}
+        className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-button bg-[#111] text-[#FAFAF8] hover:bg-black text-[12px] font-medium"
+      >
+        {label}
+        <ArrowRight size={12} strokeWidth={2} />
+      </button>
+    </div>
+  );
+}
+
 function PartRenderer({ part }: { part: SpotPart }) {
   switch (part.type) {
     case "headline":
@@ -692,6 +757,17 @@ function PartRenderer({ part }: { part: SpotPart }) {
       return <ImportPickerPart />;
     case "clarify-questions":
       return <ClarifyQuestionsPart kind={part.kind} />;
+    case "analyst-line":
+      return <AnalystLinePart text={part.text} />;
+    case "analyst-cta":
+      return (
+        <AnalystCtaPart
+          flow={part.flow}
+          productId={part.productId}
+          productName={part.productName}
+          label={part.label}
+        />
+      );
     case "tool-call":
       return <ToolCallPart agent={part.agent} detail={part.detail} status={part.status} />;
     case "text":
