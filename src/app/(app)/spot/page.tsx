@@ -43,7 +43,7 @@ import { SpotLoader } from "@/components/spot/spot-loader";
 import { MessageBubble, TypingDots } from "@/components/spot/spot-message";
 import { useSpotStore } from "@/lib/spot/store";
 import { generateReply } from "@/lib/spot/replies";
-import { useCurrentUser } from "@/lib/workspace-store";
+import { useCurrentUser, useCurrentWorkspaceLabel } from "@/lib/workspace-store";
 import { useDemoMode } from "@/lib/demo-mode";
 import { projectsList } from "@/lib/campaign-data";
 import { SPOT_SESSIONS, type SpotSession } from "@/lib/spot/mock-history";
@@ -154,6 +154,7 @@ function composerPlaceholderFor(workflow: SpotWorkflow | null): string | undefin
 
 export default function SpotPage() {
   const user = useCurrentUser();
+  const workspaceLabel = useCurrentWorkspaceLabel();
   const { isEmpty: demoEmpty } = useDemoMode();
   const scope = useSpotStore((s) => s.scope);
   const setScope = useSpotStore((s) => s.setScope);
@@ -189,7 +190,7 @@ export default function SpotPage() {
     // /spot without an active workflow. Without this, the scope sticks
     // on whatever the last workflow set it to (a product or campaign).
     if (!workflow) {
-      setScope({ kind: "workspace", label: "Workspace" });
+      setScope({ kind: "workspace", label: workspaceLabel });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -346,14 +347,17 @@ export default function SpotPage() {
                       ? `Angle test · ${workflow.productName}`
                       : workflow.kind === "campaign-dive"
                         ? `Spot it · ${workflow.entityName}`
-                        : `Launching · ${workflow.productName}`}
+                        : workflow.kind === "analyst-review"
+                          ? `Analyst review · ${workflow.productName}`
+                          : `Launching · ${workflow.productName}`}
               </div>
             </div>
             {/* File picker · Claude-style preview button. Lives on the
                 LEFT (the input side) so the user opens/closes canvas
                 files from the same place they type. */}
-            <ChatHeaderFilePicker compact />
-            {!canvasOpen && (
+            {/* Analyst review is chat-only — no canvas files to browse. */}
+            {workflow.kind !== "analyst-review" && <ChatHeaderFilePicker compact />}
+            {!canvasOpen && workflow.kind !== "analyst-review" && (
               <button
                 type="button"
                 onClick={() => useSpotStore.getState().toggleCanvas()}
@@ -1097,6 +1101,7 @@ function ScopePicker({
   onOpenChange: (b: boolean) => void;
 }) {
   const startNewProductFlow = useSpotStore((s) => s.startNewProductFlow);
+  const workspaceLabel = useCurrentWorkspaceLabel();
   const wrapRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -1143,10 +1148,10 @@ function ScopePicker({
             Workspace
           </div>
           <ScopeRow
-            label="Workspace"
+            label={workspaceLabel}
             active={scope.kind === "workspace"}
             onSelect={() => {
-              onChange({ kind: "workspace", label: "Workspace" });
+              onChange({ kind: "workspace", label: workspaceLabel });
               onOpenChange(false);
             }}
           />
@@ -1306,6 +1311,7 @@ function ActiveProductsRail() {
   const startScaleFlow = useSpotStore((s) => s.startScaleFlow);
   const startOptimizeFlow = useSpotStore((s) => s.startOptimizeFlow);
   const startTestAnglesFlow = useSpotStore((s) => s.startTestAnglesFlow);
+  const startAnalystReview = useSpotStore((s) => s.startAnalystReview);
   const top = PRODUCTS.slice(0, 3);
 
   // Empty-state preview — no products in the workspace yet.
@@ -1443,11 +1449,11 @@ function ActiveProductsRail() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => startLaunchFlow({ id: p.id, name: p.name })}
+                  onClick={() => startAnalystReview({ id: p.id, name: p.name })}
                   className="inline-flex items-center h-7 px-2 rounded-button text-[11px] text-text-tertiary hover:text-text-primary"
-                  title="Open the launch workflow for this project"
+                  title="See the Analyst Agent's conversation with Spot behind this recommendation"
                 >
-                  Launch
+                  View analysis
                 </button>
               </div>
             </div>

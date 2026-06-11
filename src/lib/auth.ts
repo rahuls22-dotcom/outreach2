@@ -65,3 +65,15 @@ export function signOut(): void {
     // ignore
   }
 }
+
+/** Mark the browser as signed in without a password — used by the
+ *  passwordless email/code login. Sets the same token isAuthed() checks,
+ *  so the AuthGate lets the user through. */
+export function markAuthed(): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(STORAGE_KEY, CURRENT_TOKEN);
+  } catch {
+    // ignore
+  }
+}

@@ -272,6 +272,7 @@ export function WorkflowPane() {
     diagPhase &&
     workflow.kind !== "launch-campaign" &&
     workflow.kind !== "campaign-dive" &&
+    workflow.kind !== "analyst-review" &&
     !workflow.ready
   );
 

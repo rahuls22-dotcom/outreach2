@@ -42,6 +42,19 @@ export type SpotPart =
   // chat (left panel) so the user answers right where Spot is talking.
   // The right canvas mirrors the captured brief.
   | { type: "clarify-questions"; kind: "scale" | "optimize" | "test-angles" }
+  // A line spoken by the Analyst Agent (not Spot). Rendered with its own
+  // "Analyst Agent" attribution so the analyst↔Spot conversation reads as a
+  // dialogue between two agents.
+  | { type: "analyst-line"; text: string }
+  // The recommended-action CTA at the end of an analyst review — kicks off the
+  // matching flow (scale / optimize / test-angles / launch) for the project.
+  | {
+      type: "analyst-cta";
+      flow: "scale" | "optimize" | "test-angles" | "launch";
+      productId: string;
+      productName: string;
+      label: string;
+    }
   // Tool / agent call narration — renders a compact status row that
   // says "Spawning Persona Researcher…" with a spinner. Status flips
   // to "done" with a check once the workflow advances.
