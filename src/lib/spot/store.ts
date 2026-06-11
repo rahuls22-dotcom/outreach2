@@ -18,7 +18,7 @@ import {
   type WorkflowStep,
 } from "./workflow";
 import { PRODUCTS } from "../products-data";
-import { analystConversationFor } from "./analyst-data";
+import { analystReportFor } from "./analyst-data";
 import { campaignsForAccount } from "./import-campaigns-data";
 
 type PanelState = {
@@ -857,34 +857,19 @@ export const useSpotStore = create<PanelState>((set) => ({
   startAnalystReview: (product) => {
     const prod = PRODUCTS.find((p) => p.id === product.id);
     if (!prod) return;
-    const conv = analystConversationFor(prod);
+    const conv = analystReportFor(prod);
     const thread: SpotMessage[] = [
+      // The Analyst Agent kicks off the conversation — opener + collapsible
+      // markdown report.
       {
         role: "spot",
-        parts: [
-          {
-            type: "text",
-            text: `My Analyst Agent just finished its scan of **${product.name}** — here's the conversation we had. Net: ${conv.summary}`,
-          },
-        ],
+        parts: [{ type: "analyst-report", productId: product.id }],
       },
-      ...conv.turns.map(
-        (t): SpotMessage => ({
-          role: "spot",
-          parts: [
-            t.speaker === "analyst"
-              ? { type: "analyst-line", text: t.text }
-              : { type: "text", text: t.text },
-          ],
-        }),
-      ),
+      // Spot reasons through it and lands the recommendation + CTA.
       {
         role: "spot",
         parts: [
-          {
-            type: "text",
-            text: `That's the read. Recommendation: **${conv.action}** — want me to draft the plan?`,
-          },
+          { type: "text", text: conv.reasoning },
           {
             type: "analyst-cta",
             flow: conv.flow,

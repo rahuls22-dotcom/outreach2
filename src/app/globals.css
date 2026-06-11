@@ -731,3 +731,22 @@ body[data-deep-dive] aside,
 body[data-deep-dive] [data-app-sidebar] {
   visibility: hidden !important;
 }
+
+/* ── Login · premium dark showcase ───────────────────────────────
+ * Slow-drifting gold aurora + a faint shimmer that travels across the
+ * diagonal blinds, so the brand panel feels alive without distracting
+ * from the sign-in. */
+@keyframes login-aurora {
+  0%, 100% { transform: translate(-3%, -2%) scale(1); opacity: 0.6; }
+  50%      { transform: translate(4%, 3%) scale(1.15); opacity: 0.9; }
+}
+@keyframes login-aurora-2 {
+  0%, 100% { transform: translate(3%, 4%) scale(1.1); opacity: 0.45; }
+  50%      { transform: translate(-4%, -3%) scale(1); opacity: 0.7; }
+}
+@keyframes login-sheen {
+  0%   { transform: translateX(-30%) translateY(-10%); opacity: 0; }
+  35%  { opacity: 0.5; }
+  65%  { opacity: 0.5; }
+  100% { transform: translateX(30%) translateY(10%); opacity: 0; }
+}

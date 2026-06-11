@@ -1,7 +1,11 @@
 "use client";
 
-import { AlertTriangle, Check, Info, ChevronRight, ArrowRight, Cog, Rocket, Download, BarChart3, Sparkles } from "lucide-react";
+import { AlertTriangle, Check, Info, ChevronRight, ChevronDown, ArrowRight, Cog, Rocket, Download, BarChart3, FileText, Sparkles } from "lucide-react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { PRODUCTS } from "@/lib/products-data";
+import { analystReportFor } from "@/lib/spot/analyst-data";
+import { Markdown } from "@/components/memory/md-render";
 import { SpotMark } from "./spot-mark";
 import { SpotLoader } from "./spot-loader";
 import { RichText } from "./rich-text";
@@ -674,21 +678,63 @@ function ClarifyQuestionsPart({ kind }: { kind: "scale" | "optimize" | "test-ang
   );
 }
 
-/** A line spoken by the Analyst Agent in an analyst↔Spot review. Kept quiet
- *  and monochrome — a hairline left rule + a small muted label — so it reads
- *  as the analyst's voice in the transcript without shouting (Spot's own lines
- *  render as plain text). */
-function AnalystLinePart({ text }: { text: string }) {
+/** The Analyst Agent's message — it opens the conversation. An attributed
+ *  opener, then a collapsible drop-down holding the full report as the markdown
+ *  the Analyst Agent actually produced (rendered with the app's Markdown
+ *  component). Spot's reasoning + the CTA follow in the next message. */
+function AnalystReportPart({ productId }: { productId: string }) {
+  const [open, setOpen] = useState(false);
+  const prod = PRODUCTS.find((p) => p.id === productId);
+  if (!prod) return null;
+  const report = analystReportFor(prod);
+
   return (
-    <div
-      className="mb-3 pl-3.5"
-      style={{ borderLeft: "1.5px solid #E8E8E6" }}
-    >
-      <div className="text-[10.5px] uppercase tracking-wider font-medium text-text-tertiary mb-1">
-        Analyst Agent
+    <div className="mb-1.5">
+      {/* Attribution — this message is from the Analyst Agent, not Spot. */}
+      <div className="flex items-center gap-2 mb-1.5">
+        <span
+          className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center"
+          style={{ background: "#F4F4F2", border: "1px solid #E8E8E6" }}
+        >
+          <BarChart3 size={11} strokeWidth={1.9} className="text-text-tertiary" />
+        </span>
+        <span className="text-[10.5px] uppercase tracking-wider font-medium text-text-tertiary">
+          Analyst Agent
+        </span>
       </div>
-      <div className="text-[12.5px] leading-[1.55] text-text-secondary">
-        <RichText text={text} />
+
+      {/* Opener — the Analyst kicks the conversation off. */}
+      <div className="text-[12.5px] leading-[1.55] text-text-primary mb-2.5">
+        <RichText text={report.opener} />
+      </div>
+
+      {/* Collapsible report · the markdown file the agent produced. */}
+      <div className="rounded-card border border-border bg-white overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-left hover:bg-surface-page transition-colors"
+        >
+          <FileText size={13} strokeWidth={1.8} className="text-text-tertiary flex-shrink-0" />
+          <div className="flex-1 min-w-0">
+            <div className="text-[12px] font-medium text-text-primary">
+              {open ? "Hide the full report" : "Read the full report"}
+            </div>
+            <div className="text-[11px] text-text-tertiary truncate">
+              {report.headline} · markdown
+            </div>
+          </div>
+          <ChevronDown
+            size={15}
+            strokeWidth={1.8}
+            className={`text-text-tertiary transition-transform ${open ? "rotate-180" : ""}`}
+          />
+        </button>
+        {open && (
+          <div className="px-3 py-3 border-t border-border-subtle">
+            <Markdown source={report.reportMd} />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -750,8 +796,8 @@ function PartRenderer({ part }: { part: SpotPart }) {
       return <ImportPickerPart />;
     case "clarify-questions":
       return <ClarifyQuestionsPart kind={part.kind} />;
-    case "analyst-line":
-      return <AnalystLinePart text={part.text} />;
+    case "analyst-report":
+      return <AnalystReportPart productId={part.productId} />;
     case "analyst-cta":
       return (
         <AnalystCtaPart

@@ -42,10 +42,10 @@ export type SpotPart =
   // chat (left panel) so the user answers right where Spot is talking.
   // The right canvas mirrors the captured brief.
   | { type: "clarify-questions"; kind: "scale" | "optimize" | "test-angles" }
-  // A line spoken by the Analyst Agent (not Spot). Rendered with its own
-  // "Analyst Agent" attribution so the analyst↔Spot conversation reads as a
-  // dialogue between two agents.
-  | { type: "analyst-line"; text: string }
+  // The Analyst Agent's report — a collapsed drop-down. Closed by default
+  // (Spot's one-liner sits above it); expands to the full detailed write-up +
+  // the analyst↔Spot conversation. The renderer looks the report up by id.
+  | { type: "analyst-report"; productId: string }
   // The recommended-action CTA at the end of an analyst review — kicks off the
   // matching flow (scale / optimize / test-angles / launch) for the project.
   | {

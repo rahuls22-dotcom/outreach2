@@ -58,22 +58,6 @@ import {
   PLAN_STATUS_LABEL,
 } from "@/lib/spot/extended-flows";
 
-// Pull live suggestions from the products library so we never propose
-// launching a product that doesn't exist. First slot = top product
-// (highest spend); second slot = persona research on the second product.
-const SUGGESTIONS: string[] = (() => {
-  const ranked = [...PRODUCTS].sort(
-    (a, b) => b.performance.totalSpend - a.performance.totalSpend,
-  );
-  const out: string[] = [];
-  if (ranked[0]) out.push(`Launch a campaign for ${ranked[0].name}`);
-  if (ranked[1]) out.push(`Run persona research on ${ranked[1].name}`);
-  if (out.length === 0) {
-    out.push("Create a new project and research it");
-  }
-  return out;
-})();
-
 function firstName(n: string) {
   return n.split(" ")[0] || n;
 }
@@ -155,7 +139,6 @@ function composerPlaceholderFor(workflow: SpotWorkflow | null): string | undefin
 export default function SpotPage() {
   const user = useCurrentUser();
   const workspaceLabel = useCurrentWorkspaceLabel();
-  const { isEmpty: demoEmpty } = useDemoMode();
   const scope = useSpotStore((s) => s.scope);
   const setScope = useSpotStore((s) => s.setScope);
   const thread = useSpotStore((s) => s.thread);
@@ -527,7 +510,7 @@ export default function SpotPage() {
           the welcome moment feels intimate and Claude-like.
           Pushed down with pt-32 (vs the old pt-14) so the hero sits in
           the visual sweet spot rather than crowding the top edge. */}
-      <div className="max-w-[780px] mx-auto w-full px-6 pt-32">
+      <div className="max-w-[780px] mx-auto w-full px-6 pt-24">
         {/* Resume banner — when a workflow is parked. We give the building
             and review states their own visual treatment so the user
             understands what's happening at a glance. */}
@@ -535,12 +518,12 @@ export default function SpotPage() {
           <WorkflowParkBanner workflow={workflow} onResume={resumeWorkflow} />
         )}
 
-        {/* Hero — bigger, breathing Spot mark. The breathe loader's soft
+        {/* Hero — large, breathing Spot mark. The breathe loader's soft
             pulsing aura signals "Spot is alive · ambient agents working"
             even when the user hasn't asked anything yet. */}
-        <div className="flex flex-col items-center text-center mb-7">
-          <SpotLoader mode="breathe" size={60} className="!gap-0" />
-          <h1 className="text-[28px] leading-[1.2] font-semibold text-text-primary mt-3">
+        <div className="flex flex-col items-center text-center mb-6">
+          <SpotLoader mode="breathe" size={92} className="!gap-0" />
+          <h1 className="text-[28px] leading-[1.2] font-semibold text-text-primary mt-4">
             {timeGreeting()}, {firstName(user.name)}.
           </h1>
           <p className="text-[13.5px] text-text-secondary mt-1.5 max-w-[480px] leading-relaxed">
@@ -558,30 +541,12 @@ export default function SpotPage() {
           onScopeOpenChange={setScopeOpen}
           inputRef={inputRef}
         />
-
-        {/* Suggestion chips — smaller, more subtle so they don't compete
-            with the Spot focus. Show just 2 chips at reduced size. */}
-        <div className="flex flex-wrap items-center justify-center gap-1.5 mt-3">
-          {(demoEmpty
-            ? ["Create a new project and research it", "What can you help me with?"]
-            : SUGGESTIONS
-          ).slice(0, 2).map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => send(s)}
-              className="inline-flex items-center h-7 px-2.5 rounded-full border border-border-subtle bg-transparent hover:bg-white hover:border-border text-[11.5px] text-text-tertiary hover:text-text-secondary transition-colors"
-            >
-              {s}
-            </button>
-          ))}
-        </div>
       </div>
 
       {/* Lower half: wider canvas. Active products row + Sessions
-          panel. Sits well below the fold so Spot stays the focus —
-          users can scroll for context but the hero owns the welcome. */}
-      <div className="max-w-[1200px] mx-auto w-full px-6 pt-20 pb-20">
+          panel. Sits just below the composer so the projects are
+          glanceable without a big scroll. */}
+      <div className="max-w-[1200px] mx-auto w-full px-6 pt-10 pb-20">
         <ActiveProductsRail />
         <div className="mt-5">
           <SessionsCard />

@@ -2,22 +2,36 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AnimatePresence, motion } from "framer-motion";
-import { ArrowRight, Check, Loader2, Mail, RotateCw } from "lucide-react";
+import { AnimatePresence, motion, type Variants } from "framer-motion";
+import {
+  ArrowRight,
+  Check,
+  Loader2,
+  Mail,
+  RotateCw,
+  Search,
+  Sparkles,
+  Rocket,
+  LineChart,
+} from "lucide-react";
 import { OtpInput } from "@/components/auth/otp-input";
+import { SpotLoader } from "@/components/spot/spot-loader";
 import { DEMO_OTP, maskEmail, orgsForEmail, type Org } from "@/lib/auth-mock";
 import { markAuthed } from "@/lib/auth";
 
-// Passwordless sign-in. Email and code share one card — the code block is
-// revealed inline once we "send" it. A known multi-org email shows the org
-// chooser; everything else resolves to a single org and goes straight in.
+// Passwordless sign-in on a premium dark surface — a living gold aurora behind
+// diagonal "blinds", the Revspot wordmark, and a tease of what Spot actually
+// does (research → creative → launch → optimize). The card reveals the code
+// inline once "sent". A known multi-org email shows the org chooser; everything
+// else goes straight in.
 //
-// Auth is a demo gate (see lib/auth) — any valid email + the demo code lands
-// the user in. On success we mark the browser authed and bounce to ?next
-// (default /spot), which is what the app's AuthGate checks.
+// Auth is a demo gate (lib/auth): any valid email + the demo code lands you in.
+// On success we mark the browser authed and bounce to ?next (default /spot).
 
 const RESEND_SECONDS = 30;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const GOLD = "#C9A86A";
 
 type Step = "auth" | "org";
 
@@ -42,7 +56,6 @@ export default function LoginPage() {
 
   const emailValid = EMAIL_RE.test(email.trim());
 
-  /** Mark authed + redirect to the page the gate sent us from (or /spot). */
   const finish = () => {
     markAuthed();
     const next =
@@ -103,13 +116,16 @@ export default function LoginPage() {
 
   return (
     <div
-      className="min-h-screen lg:grid lg:grid-cols-[1.05fr_1fr] xl:grid-cols-2"
-      style={{ background: "#0A0A09" }}
+      className="min-h-screen lg:grid lg:grid-cols-[1.12fr_1fr]"
+      style={{ background: "#09090B" }}
     >
       <BrandPanel />
 
       {/* Right — sign-in surface (dark). */}
-      <div className="relative flex min-h-screen flex-col px-6 py-7 sm:px-10" style={{ background: "#0A0A09" }}>
+      <div
+        className="relative flex min-h-screen flex-col px-6 py-7 sm:px-10"
+        style={{ background: "#0A0A0C" }}
+      >
         <header className="flex items-center gap-2.5 lg:hidden">
           <BrandLogo size="sm" />
         </header>
@@ -144,8 +160,8 @@ export default function LoginPage() {
             </AnimatePresence>
 
             <div
-              className="mt-9 text-center text-[10.5px] uppercase tracking-[0.28em] font-medium"
-              style={{ color: "#5A5954" }}
+              className="mt-9 text-center text-[10px] uppercase tracking-[0.3em] font-medium"
+              style={{ color: "#56554F" }}
             >
               Revspot · Agentic OS
             </div>
@@ -153,8 +169,8 @@ export default function LoginPage() {
         </main>
 
         <footer
-          className="flex items-center justify-end gap-3 text-[11px]"
-          style={{ color: "#6A6964" }}
+          className="flex items-center justify-center gap-3 text-[11px]"
+          style={{ color: "#66655F" }}
         >
           <a href="#" className="hover:text-white/80 transition-colors">Privacy</a>
           <span style={{ color: "#2A2A28" }}>·</span>
@@ -165,59 +181,180 @@ export default function LoginPage() {
   );
 }
 
-// ── Brand panel (dark · diagonal gold blinds) ───────────────────
-function BrandPanel() {
-  return (
-    <aside className="relative hidden flex-col justify-between overflow-hidden p-12 xl:p-16 lg:flex" style={{ background: "#0A0A09" }}>
-      <BlindsBackground />
+/* ── Brand panel · the hook ──────────────────────────────────────── */
 
-      {/* Legibility veil — keep type crisp over the blinds. */}
+const CAPABILITIES: { icon: typeof Search; text: string }[] = [
+  { icon: Search, text: "Researches every lead — fit, intent, and readiness" },
+  { icon: Sparkles, text: "Drafts the creatives, forms, and campaign architecture" },
+  { icon: Rocket, text: "Launches on Meta, then optimizes around the clock" },
+  { icon: LineChart, text: "Surfaces the buyers who are actually ready to move" },
+];
+
+const stagger: Variants = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.08, delayChildren: 0.15 } },
+};
+const riseIn: Variants = {
+  hidden: { opacity: 0, y: 14 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.5, ease: [0.16, 1, 0.3, 1] } },
+};
+
+function BrandPanel() {
+  const [m, setM] = useState({ x: 38, y: 40 });
+  return (
+    <aside
+      onMouseMove={(e) => {
+        const r = e.currentTarget.getBoundingClientRect();
+        setM({
+          x: ((e.clientX - r.left) / r.width) * 100,
+          y: ((e.clientY - r.top) / r.height) * 100,
+        });
+      }}
+      className="relative hidden flex-col justify-between overflow-hidden p-12 xl:p-16 lg:flex"
+      style={{ background: "#09090B" }}
+    >
+      <Backdrop mouse={m} />
+
+      {/* Legibility veil — keep type crisp over the field. */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 z-[1]"
         style={{
           background:
-            "linear-gradient(180deg, rgba(10,10,9,0.55) 0%, transparent 24%, transparent 52%, rgba(10,10,9,0.82) 100%)",
+            "linear-gradient(180deg, rgba(9,9,11,0.6) 0%, transparent 26%, transparent 46%, rgba(9,9,11,0.86) 100%)",
         }}
       />
 
-      <div className="pointer-events-none relative z-10">
+      <motion.div
+        className="relative z-10"
+        initial={{ opacity: 0, y: -8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, ease: "easeOut" }}
+      >
         <BrandLogo />
-      </div>
+      </motion.div>
 
-      <div className="pointer-events-none relative z-10 max-w-[34rem]">
-        <h2 className="text-[46px] font-semibold leading-[1.02] tracking-[-0.035em] xl:text-[58px]">
+      <motion.div
+        className="relative z-10 max-w-[34rem]"
+        variants={stagger}
+        initial="hidden"
+        animate="show"
+      >
+        {/* Spot lockup — the breathing orb introduces Spot as the character
+            running it all, paired with its role. */}
+        <motion.div variants={riseIn} className="flex items-center gap-3 mb-6">
+          <div className="relative">
+            <div
+              aria-hidden
+              className="absolute inset-0 rounded-full"
+              style={{
+                background: "radial-gradient(circle, rgba(201,168,106,0.4) 0%, transparent 68%)",
+                filter: "blur(9px)",
+                transform: "scale(1.7)",
+              }}
+            />
+            <SpotLoader mode="breathe" size={42} className="!gap-0 relative" />
+          </div>
+          <div>
+            <div className="text-[15px] font-semibold text-white leading-tight">Spot</div>
+            <div className="text-[10px] uppercase tracking-[0.18em] font-semibold mt-0.5" style={{ color: "#E0C89A" }}>
+              Your AI Head of Growth
+            </div>
+          </div>
+        </motion.div>
+
+        <motion.h2
+          variants={riseIn}
+          className="text-[44px] font-semibold leading-[1.0] tracking-[-0.035em] xl:text-[56px]"
+        >
           <span className="block text-white">Most leads look interested.</span>
-          <span className="block" style={{ color: "#C9A86A" }}>Very few are ready.</span>
-        </h2>
-        <p className="mt-7 max-w-[30rem] text-[15px] leading-relaxed xl:text-[16px]" style={{ color: "rgba(255,255,255,0.5)" }}>
-          Verified data, behavioral signals, and profile intelligence, combined
-          to surface the buyers who are actually ready to move.
-        </p>
-      </div>
+          <span className="block" style={{ color: GOLD }}>Very few are ready.</span>
+        </motion.h2>
+
+        <motion.p
+          variants={riseIn}
+          className="mt-6 max-w-[30rem] text-[15px] leading-relaxed xl:text-[15.5px]"
+          style={{ color: "rgba(255,255,255,0.52)" }}
+        >
+          Spot runs your entire growth function — and surfaces the buyers worth
+          your team's time.
+        </motion.p>
+
+        <motion.ul variants={riseIn} className="mt-8 space-y-3">
+          {CAPABILITIES.map(({ icon: Icon, text }) => (
+            <li key={text} className="flex items-center gap-3">
+              <span
+                className="flex-shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-[9px]"
+                style={{ background: "rgba(201,168,106,0.12)", border: "1px solid rgba(201,168,106,0.22)" }}
+              >
+                <Icon size={13} strokeWidth={1.9} style={{ color: "#E0C89A" }} />
+              </span>
+              <span className="text-[13.5px]" style={{ color: "rgba(255,255,255,0.72)" }}>
+                {text}
+              </span>
+            </li>
+          ))}
+        </motion.ul>
+      </motion.div>
     </aside>
   );
 }
 
-/** Diagonal "venetian blind" sheen in warm gold over near-black — a
- *  dependency-free CSS take on the brand panel's animated field. */
-function BlindsBackground() {
+/** Living gold field — a cursor-following spotlight, two slow-drifting
+ *  auroras, a travelling sheen, and the diagonal blinds, all in warm gold
+ *  over near-black. */
+function Backdrop({ mouse }: { mouse: { x: number; y: number } }) {
   return (
-    <div
-      aria-hidden
-      className="absolute inset-0 z-0"
-      style={{
-        background: [
-          // Soft gold spotlight, centre-left.
-          "radial-gradient(58% 48% at 40% 44%, rgba(201,168,106,0.20) 0%, rgba(201,168,106,0.05) 46%, transparent 72%)",
-          // The slats — diagonal gold sheen bands.
-          "repeating-linear-gradient(218deg, rgba(0,0,0,0) 0px, rgba(0,0,0,0) 30px, rgba(201,168,106,0.045) 36px, rgba(201,168,106,0.16) 44px, rgba(201,168,106,0.045) 52px, rgba(0,0,0,0) 58px, rgba(0,0,0,0) 78px)",
-          // Edge vignette so the slats fade at the frame.
-          "radial-gradient(120% 120% at 50% 50%, transparent 55%, rgba(10,10,9,0.7) 100%)",
-          "#0A0A09",
-        ].join(", "),
-      }}
-    />
+    <div aria-hidden className="absolute inset-0 z-0 overflow-hidden">
+      {/* Diagonal blinds */}
+      <div
+        className="absolute inset-0"
+        style={{
+          background:
+            "repeating-linear-gradient(218deg, rgba(0,0,0,0) 0px, rgba(0,0,0,0) 32px, rgba(201,168,106,0.04) 38px, rgba(201,168,106,0.14) 46px, rgba(201,168,106,0.04) 54px, rgba(0,0,0,0) 60px, rgba(0,0,0,0) 84px)",
+        }}
+      />
+      {/* Cursor spotlight — the gold field lifts where the mouse lands. */}
+      <div
+        className="absolute inset-0 transition-[background] duration-200 ease-out"
+        style={{
+          background: `radial-gradient(34% 42% at ${mouse.x}% ${mouse.y}%, rgba(224,200,154,0.26) 0%, rgba(201,168,106,0.08) 42%, transparent 68%)`,
+        }}
+      />
+      {/* Aurora 1 */}
+      <div
+        className="absolute"
+        style={{
+          inset: "-20%",
+          background: "radial-gradient(38% 38% at 38% 42%, rgba(201,168,106,0.30) 0%, rgba(201,168,106,0.06) 45%, transparent 70%)",
+          filter: "blur(20px)",
+          animation: "login-aurora 16s ease-in-out infinite",
+        }}
+      />
+      {/* Aurora 2 */}
+      <div
+        className="absolute"
+        style={{
+          inset: "-20%",
+          background: "radial-gradient(34% 34% at 66% 70%, rgba(224,200,154,0.18) 0%, transparent 62%)",
+          filter: "blur(26px)",
+          animation: "login-aurora-2 21s ease-in-out infinite",
+        }}
+      />
+      {/* Travelling sheen */}
+      <div
+        className="absolute inset-0"
+        style={{
+          background: "linear-gradient(218deg, transparent 40%, rgba(232,212,168,0.10) 50%, transparent 60%)",
+          animation: "login-sheen 9s ease-in-out infinite",
+        }}
+      />
+      {/* Vignette */}
+      <div
+        className="absolute inset-0"
+        style={{ background: "radial-gradient(120% 120% at 50% 45%, transparent 52%, rgba(9,9,11,0.72) 100%)" }}
+      />
+    </div>
   );
 }
 
@@ -231,7 +368,7 @@ function BrandLogo({ size = "md" }: { size?: "sm" | "md" }) {
         style={{
           background: "linear-gradient(150deg, #1d1d1b 0%, #0e0e0d 100%)",
           border: "1px solid #2C2C28",
-          boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)",
+          boxShadow: "inset 0 1px 0 rgba(201,168,106,0.12)",
         }}
       >
         R
@@ -241,7 +378,7 @@ function BrandLogo({ size = "md" }: { size?: "sm" | "md" }) {
   );
 }
 
-// ── Combined email + code step ──────────────────────────────────
+/* ── Combined email + code step ──────────────────────────────────── */
 function AuthStep({
   email,
   setEmail,
@@ -284,7 +421,7 @@ function AuthStep({
               <span className="font-medium text-white">{maskEmail(email)}</span>.
             </>
           ) : (
-            "Enter your work email and we'll send a sign-in code."
+            "Enter your work email and Spot will send you a sign-in code."
           )
         }
       />
@@ -305,15 +442,10 @@ function AuthStep({
               autoFocus={!codeSent}
               disabled={codeSent || loading}
               className="w-full h-11 px-3.5 text-[13.5px] rounded-input focus:outline-none transition-all disabled:opacity-60"
-              style={{
-                background: "#161614",
-                border: "1px solid #2A2A26",
-                color: "#F5F4EF",
-              }}
+              style={{ background: "#161618", border: "1px solid #2A2A2E", color: "#F5F4EF" }}
             />
           </div>
 
-          {/* Code block — revealed inline once sent. */}
           <AnimatePresence initial={false}>
             {codeSent && (
               <motion.div
@@ -352,24 +484,26 @@ function AuthStep({
             )}
           </AnimatePresence>
 
-          {/* Primary action — Continue (email) → Verify (code). */}
+          {/* Primary action — warm gold gradient so the CTA carries the brand. */}
           <button
             type="submit"
             disabled={loading || (codeSent ? otp.length < 6 : !emailValid)}
-            className="w-full h-11 inline-flex items-center justify-center gap-2 text-[13.5px] font-medium rounded-button transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            style={{ background: "#3A3A36", color: "#F5F4EF" }}
-            onMouseEnter={(e) => { if (!e.currentTarget.disabled) e.currentTarget.style.background = "#46463F"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = "#3A3A36"; }}
+            className="w-full h-11 inline-flex items-center justify-center gap-2 text-[13.5px] font-semibold rounded-button transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{
+              background: "linear-gradient(180deg, #E7CF9E 0%, #C9A86A 100%)",
+              color: "#1A160C",
+              boxShadow: "0 6px 18px -8px rgba(201,168,106,0.6)",
+            }}
           >
             {loading ? (
               <>
-                <Loader2 size={15} strokeWidth={2} className="animate-spin" />
+                <Loader2 size={15} strokeWidth={2.4} className="animate-spin" />
                 {codeSent ? "Verifying…" : "Continuing…"}
               </>
             ) : (
               <>
                 {codeSent ? "Verify" : "Continue"}
-                <ArrowRight size={14} strokeWidth={2} />
+                <ArrowRight size={14} strokeWidth={2.4} />
               </>
             )}
           </button>
@@ -413,7 +547,7 @@ function AuthStep({
   );
 }
 
-// ── Org chooser ─────────────────────────────────────────────────
+/* ── Org chooser ─────────────────────────────────────────────────── */
 function OrgStep({ email, orgs, onChoose }: { email: string; orgs: Org[]; onChoose: (org: Org) => void }) {
   return (
     <>
@@ -433,9 +567,9 @@ function OrgStep({ email, orgs, onChoose }: { email: string; orgs: Org[]; onChoo
               type="button"
               onClick={() => onChoose(org)}
               className="group w-full flex items-center gap-3 px-3 py-2.5 rounded-card transition-colors text-left"
-              style={{ background: "#161614", border: "1px solid #2A2A26" }}
+              style={{ background: "#161618", border: "1px solid #2A2A2E" }}
               onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#3A3A35"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#2A2A26"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#2A2A2E"; }}
             >
               <span
                 className="flex items-center justify-center w-7 h-7 rounded-[6px] text-white text-[12px] font-semibold shrink-0"
@@ -460,7 +594,7 @@ function OrgStep({ email, orgs, onChoose }: { email: string; orgs: Org[]; onChoo
   );
 }
 
-// ── Shared chrome ───────────────────────────────────────────────
+/* ── Shared chrome ───────────────────────────────────────────────── */
 function StepShell({ children }: { children: React.ReactNode }) {
   return (
     <motion.div
@@ -487,7 +621,11 @@ function Card({ children }: { children: React.ReactNode }) {
   return (
     <div
       className="rounded-card px-7 py-7"
-      style={{ background: "#121211", border: "1px solid #232320" }}
+      style={{
+        background: "#121214",
+        border: "1px solid #232326",
+        boxShadow: "0 24px 60px -28px rgba(0,0,0,0.7)",
+      }}
     >
       {children}
     </div>
