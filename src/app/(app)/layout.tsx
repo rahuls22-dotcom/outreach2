@@ -1,14 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useRef } from "react";
+import { usePathname } from "next/navigation";
 import { Sidebar } from "@/components/layout/sidebar";
 import { DemoModeProvider } from "@/lib/demo-mode";
 import { ProductsProvider } from "@/lib/products";
 import { SpotRoot } from "@/components/spot/spot-root";
 import { useSpotStore } from "@/lib/spot/store";
 import { useCurrentScope, useCurrentWorkspaceLabel } from "@/lib/workspace-store";
-import { isAuthed } from "@/lib/auth";
 import { WAProvider } from "@/lib/whatsapp-context";
 import { WorkspaceProvider } from "@/lib/workspace-context";
 
@@ -50,65 +49,33 @@ function SpotWorkspaceSync() {
   return null;
 }
 
-/** Auth gate · redirects to /login if the browser isn't signed in.
- *  Renders nothing during the auth check so we don't briefly show
- *  the app shell to an unauthenticated visitor. */
-function AuthGate({ children }: { children: React.ReactNode }) {
-  const router = useRouter();
-  const pathname = usePathname();
-  // null = checking (SSR + before useEffect runs)
-  // true = authenticated → render children
-  // false = not authenticated → redirect to login
-  const [state, setState] = useState<null | boolean>(null);
-
-  useEffect(() => {
-    const ok = isAuthed();
-    setState(ok);
-    if (!ok) {
-      const next = encodeURIComponent(pathname || "/spot");
-      router.replace(`/login?next=${next}`);
-    }
-  }, [router, pathname]);
-
-  if (state !== true) {
-    return (
-      <div
-        className="min-h-screen"
-        style={{ background: "#0A0A09" }}
-        aria-hidden
-      />
-    );
-  }
-  return <>{children}</>;
-}
-
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   // /spot is its own canvas — it owns full width/height and supplies its
   // own background. Everywhere else gets the platform shell padding.
+  // Auth is enforced server-side in middleware.ts (signed session cookie);
+  // unauthenticated requests never reach this layout.
   const isSpotRoute = pathname === "/spot";
   return (
-    <AuthGate>
-      <DemoModeProvider>
-        <ProductsProvider>
-          <WorkspaceProvider>
-            <WAProvider>
-              <div className="min-h-screen bg-surface-page">
-                <Sidebar />
-                <main className="ml-sidebar">
-                  {isSpotRoute ? (
-                    children
-                  ) : (
-                    <div className="max-w-[1400px] mx-auto px-8 py-8">{children}</div>
-                  )}
-                </main>
-                <SpotRoot />
-                <SpotWorkspaceSync />
-              </div>
-            </WAProvider>
-          </WorkspaceProvider>
-        </ProductsProvider>
-      </DemoModeProvider>
-    </AuthGate>
+    <DemoModeProvider>
+      <ProductsProvider>
+        <WorkspaceProvider>
+          <WAProvider>
+            <div className="min-h-screen bg-surface-page">
+              <Sidebar />
+              <main className="ml-sidebar">
+                {isSpotRoute ? (
+                  children
+                ) : (
+                  <div className="max-w-[1400px] mx-auto px-8 py-8">{children}</div>
+                )}
+              </main>
+              <SpotRoot />
+              <SpotWorkspaceSync />
+            </div>
+          </WAProvider>
+        </WorkspaceProvider>
+      </ProductsProvider>
+    </DemoModeProvider>
   );
 }

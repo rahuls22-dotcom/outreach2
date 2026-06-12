@@ -527,8 +527,8 @@ export function Sidebar() {
             type="button"
             aria-label="Sign out"
             title="Sign out"
-            onClick={() => {
-              signOut();
+            onClick={async () => {
+              await signOut();
               router.replace("/login");
             }}
             className="p-1 text-text-tertiary hover:text-text-secondary transition-colors"

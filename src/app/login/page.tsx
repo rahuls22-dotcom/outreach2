@@ -17,8 +17,7 @@ import {
 import { OtpInput } from "@/components/auth/otp-input";
 import { SpotLoader } from "@/components/spot/spot-loader";
 import GradientBlinds from "./gradient-blinds";
-import { DEMO_OTP, maskEmail, orgsForEmail, type Org } from "@/lib/auth-mock";
-import { markAuthed } from "@/lib/auth";
+import { maskEmail, orgsForEmail, type Org } from "@/lib/auth-mock";
 
 // Passwordless sign-in on a premium dark surface — a living gold aurora behind
 // diagonal "blinds", the Revspot wordmark, and a tease of what Spot actually
@@ -26,8 +25,10 @@ import { markAuthed } from "@/lib/auth";
 // inline once "sent". A known multi-org email shows the org chooser; everything
 // else goes straight in.
 //
-// Auth is a demo gate (lib/auth): any valid email + the demo code lands you in.
-// On success we mark the browser authed and bounce to ?next (default /spot).
+// Auth is a demo gate: any valid email + the sign-in code lands you in. The
+// code is verified server-side (POST /api/login), which sets a signed httpOnly
+// session cookie; middleware.ts is the real boundary. On success we bounce to
+// ?next (default /spot).
 
 const RESEND_SECONDS = 30;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -63,7 +64,6 @@ export default function LoginPage() {
   const emailValid = EMAIL_RE.test(email.trim());
 
   const finish = () => {
-    markAuthed();
     const next =
       new URLSearchParams(window.location.search).get("next") || "/spot";
     router.replace(next);
@@ -84,25 +84,35 @@ export default function LoginPage() {
     }, 600);
   };
 
-  const verify = (code?: string) => {
+  const verify = async (code?: string) => {
     const value = code ?? otp;
     if (value.length < 6 || loading) return;
     setLoading(true);
     setError("");
-    setTimeout(() => {
-      if (value !== DEMO_OTP) {
+    try {
+      const res = await fetch("/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: value }),
+      });
+      if (!res.ok) {
         setError("That code isn't right. Check it and try again.");
         setOtp("");
         setLoading(false);
         return;
       }
+      // Code accepted → session cookie is now set. The org chooser is pure UX.
       if (orgs.length > 1) {
         setStep("org");
         setLoading(false);
       } else {
         finish();
       }
-    }, 600);
+    } catch {
+      setError("Something went wrong. Please try again.");
+      setOtp("");
+      setLoading(false);
+    }
   };
 
   const resend = () => {
@@ -430,11 +440,7 @@ function AuthStep({
                       <Check size={13} strokeWidth={2} />
                       New code sent.
                     </p>
-                  ) : (
-                    <p className="text-[12px] mt-2.5" style={{ color: "#8A8980" }}>
-                      Demo code: <span className="font-mono" style={{ color: "#C9C8C1" }}>{DEMO_OTP}</span>
-                    </p>
-                  )}
+                  ) : null}
                 </div>
               </motion.div>
             )}

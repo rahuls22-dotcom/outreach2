@@ -30,9 +30,8 @@ export const ORGS: Record<string, Org> = {
   propstar: { id: "propstar", name: "Propstar", color: "#334155" },
 };
 
-// Static demo code. A real build would send this out-of-band; we surface it as
-// a hint on the OTP screen so the flow is testable.
-export const DEMO_OTP = "123456";
+// The sign-in code is verified server-side in /api/login (env: LOGIN_CODE),
+// never in this client module — so it isn't exported here.
 
 // email → org ids the account can access. Lower-cased keys.
 const DIRECTORY: Record<string, string[]> = {
