@@ -1,10 +1,9 @@
 "use client";
 
-import { AlertTriangle, Check, Info, ChevronRight, ChevronDown, ArrowRight, Cog, Rocket, Download, BarChart3, FileText, Sparkles } from "lucide-react";
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { AlertTriangle, Check, Info, ChevronRight, ChevronDown, ArrowRight, Cog, Rocket, Download, BarChart3, FileText, Sparkles, Square } from "lucide-react";
+import { useState, useEffect } from "react";
 import { PRODUCTS } from "@/lib/products-data";
-import { analystReportFor } from "@/lib/spot/analyst-data";
+import { analystReportFor, importedReviewFor } from "@/lib/spot/analyst-data";
 import { Markdown } from "@/components/memory/md-render";
 import { SpotMark } from "./spot-mark";
 import { SpotLoader } from "./spot-loader";
@@ -253,10 +252,9 @@ const CHOICE_ICON: Record<SpotChoiceIcon, typeof Rocket> = {
  * option's `action` to the right store call (or navigation).
  */
 function ChoicePart({ prompt, options }: { prompt?: string; options: SpotChoiceOption[] }) {
-  const router = useRouter();
   const advanceWorkflow = useSpotStore((s) => s.advanceWorkflow);
   const startImportCampaigns = useSpotStore((s) => s.startImportCampaigns);
-  const exitWorkflow = useSpotStore((s) => s.exitWorkflow);
+  const startImportReview = useSpotStore((s) => s.startImportReview);
   const appendMessage = useSpotStore((s) => s.appendMessage);
   const markClicked = useSpotStore((s) => s.markCtaClicked);
   // Hide the whole choice once any option has been chosen.
@@ -278,8 +276,9 @@ function ChoicePart({ prompt, options }: { prompt?: string; options: SpotChoiceO
         advanceWorkflow(undefined, "launch-strategy");
         break;
       case "analyse-performance":
-        exitWorkflow();
-        router.push("/campaigns");
+        // Hand the imported campaigns to the Analyst Agent instead of dumping
+        // the user on the Campaigns page — opens an analyst review conversation.
+        startImportReview();
         break;
     }
   };
@@ -383,10 +382,10 @@ function ImportCheckBox({ checked, indeterminate }: { checked: boolean; indeterm
 
 function ImportStatTile({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <div className="bg-white px-2 py-2 text-center">
-      <div className="text-[13.5px] font-semibold tabular text-text-primary leading-none">{value}</div>
-      <div className="text-[8.5px] uppercase tracking-wider font-semibold text-text-tertiary mt-1">{label}</div>
-      {sub && <div className="text-[8.5px] text-[#15803D] mt-0.5">{sub}</div>}
+    <div className="px-2 py-2.5 text-center">
+      <div className="text-[14px] font-semibold tabular text-text-primary leading-none">{value}</div>
+      <div className="text-[8.5px] uppercase tracking-wider font-semibold text-text-tertiary mt-1.5">{label}</div>
+      {sub && <div className="text-[8.5px] text-text-tertiary mt-0.5">{sub}</div>}
     </div>
   );
 }
@@ -451,45 +450,49 @@ function ImportPickerPart() {
     const sum = summariseImport(ids);
     const importedRows = campaigns.filter((c) => ids.includes(c.id));
     return (
-      <div className="mb-2.5 rounded-[12px] border overflow-hidden" style={{ borderColor: "#A7F3D0" }}>
-        {/* Success header */}
-        <div
-          className="px-3.5 py-3 flex items-center gap-2.5"
-          style={{ background: "linear-gradient(180deg, #ECFDF5 0%, #FFFFFF 100%)", borderBottom: "1px solid var(--border-subtle)" }}
-        >
+      <div className="mb-2.5 rounded-card border border-border bg-white overflow-hidden">
+        {/* Header — quiet gold check, monochrome copy (Spot system) */}
+        <div className="px-3.5 py-3 flex items-center gap-2.5 border-b border-border-subtle">
           <span
-            className="inline-flex items-center justify-center w-8 h-8 rounded-full flex-shrink-0"
-            style={{ background: "rgba(34,197,94,0.14)", border: "1px solid rgba(34,197,94,0.4)" }}
+            className="inline-flex items-center justify-center w-7 h-7 rounded-full flex-shrink-0"
+            style={{
+              background: "linear-gradient(135deg, rgba(201,168,106,0.18) 0%, rgba(224,192,131,0.10) 100%)",
+              border: "1px solid rgba(201,168,106,0.45)",
+            }}
           >
-            <Check size={16} strokeWidth={2.6} className="text-[#15803D]" />
+            <Check size={13} strokeWidth={2.6} style={{ color: "#9A7B3F" }} />
           </span>
-          <div className="min-w-0">
-            <div className="text-[13.5px] font-semibold text-text-primary leading-tight">
+          <div className="min-w-0 flex-1">
+            <div className="text-[13px] font-semibold text-text-primary leading-tight">
               {sum.count} campaign{sum.count === 1 ? "" : "s"} imported
             </div>
             <div className="text-[11px] text-text-tertiary truncate">
-              Pulled into {w.productName}&apos;s memory{account ? ` · ${account.name}` : ""}
+              Into {w.productName}&apos;s memory{account ? ` · ${account.name}` : ""}
             </div>
           </div>
         </div>
 
-        {/* Stat tiles */}
-        <div className="grid grid-cols-4" style={{ gap: 1, background: "var(--border-subtle)" }}>
+        {/* Stat row — hairline dividers, monochrome values */}
+        <div className="grid grid-cols-4 divide-x divide-border-subtle border-b border-border-subtle">
           <ImportStatTile label="Campaigns" value={`${sum.count}`} sub={`${sum.active} active`} />
           <ImportStatTile label="Spend · 30d" value={importInr(sum.spend)} />
           <ImportStatTile label="Leads · 30d" value={sum.leads.toLocaleString("en-IN")} />
           <ImportStatTile label="Blended CPL" value={importInr(sum.blendedCpl)} />
         </div>
 
-        {/* Imported list */}
-        <div className="px-3.5 py-2.5 bg-white border-t border-border-subtle">
-          <div className="text-[9.5px] uppercase tracking-wider font-semibold text-text-tertiary mb-1.5">
+        {/* Imported list — gold dot = active, grey = paused */}
+        <div className="px-3.5 py-2.5">
+          <div className="text-[9.5px] uppercase tracking-wider font-semibold text-text-tertiary mb-2">
             Imported into memory
           </div>
-          <ul className="space-y-1">
+          <ul className="space-y-1.5">
             {importedRows.map((c) => (
               <li key={c.id} className="flex items-center gap-2 text-[11.5px]">
-                <Check size={11} strokeWidth={2.6} className="text-[#15803D] flex-shrink-0" />
+                <span
+                  className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                  style={{ background: c.status === "active" ? "#C9A86A" : "#D2D2CC" }}
+                  title={c.status === "active" ? "Active" : "Paused"}
+                />
                 <span className="flex-1 truncate text-text-secondary">{c.name}</span>
                 <span className="text-text-tertiary tabular flex-shrink-0">{importInr(c.spend)}</span>
               </li>
@@ -619,6 +622,204 @@ function ToolCallPart({ agent, detail, status }: { agent: string; detail?: strin
   );
 }
 
+/* ─── Agent working block ────────────────────────────────────────────
+ * The live "Spot is working" surface — mirrors a real agentic trace:
+ * a row of PHASE chips (the agent's phase nomenclature), the SKILL / tool
+ * calls Spot is running, and a footer (Thinking… · elapsed · tokens ·
+ * tool count · Stop). The timer is real (since the block mounted);
+ * the tool list + token count are scripted per workflow kind for the demo. */
+
+const AGENT_PHASES: Record<string, string[]> = {
+  "launch-campaign": ["init", "create-product", "deep-research", "mcp-tools", "product-brief", "update-memory"],
+  scale: ["init", "analyze", "clarify", "plan", "deploy"],
+  optimize: ["init", "analyze", "clarify", "plan", "deploy"],
+  "test-angles": ["init", "analyze", "clarify", "angles", "deploy"],
+};
+
+const AGENT_TOOLS: Record<string, string[]> = {
+  "launch-campaign": [
+    "ToolSearch",
+    "mcp spot research crawl site",
+    "mcp spot audience graph match",
+    "mcp spot analysis get meta campaign structure",
+    "Grep brand memory",
+    "mcp spot memory update project",
+  ],
+  scale: [
+    "ToolSearch",
+    "mcp spot analysis get meta campaign structure",
+    "mcp spot reporting performance trend",
+    "mcp spot insights anomaly signal",
+    "Grep winning angles",
+  ],
+  optimize: [
+    "ToolSearch",
+    "mcp spot analysis get meta campaign structure",
+    "mcp spot reporting ads get creative details",
+    "mcp spot insights auction ranking benchmarks",
+    "Grep landing pages",
+  ],
+  "test-angles": [
+    "ToolSearch",
+    "mcp spot analysis get meta campaign structure",
+    "mcp spot reporting ads get creative details",
+    "mcp spot ads library search",
+    "Grep do-not-mention list",
+  ],
+};
+
+function activePhaseIndex(kind: string, step: string): number {
+  if (kind === "launch-campaign") {
+    if (step === "product-setup") return 1; // create-product
+    if (step === "kickoff") return 2; // deep-research
+    if (step === "launch-strategy") return 3; // mcp-tools
+    if (step === "launch-plan") return 4; // product-brief
+    return 5; // building / review → update-memory
+  }
+  if (step.endsWith("-analyze")) return 1;
+  if (step.endsWith("-clarify")) return 2;
+  if (step.endsWith("-plan")) return 3;
+  if (step.endsWith("-live")) return 4;
+  return 1;
+}
+
+function fmtElapsed(s: number): string {
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  return m > 0 ? `${m}m ${sec}s` : `${sec}s`;
+}
+
+export function AgentWorkingBlock({
+  working,
+  workflowKind,
+  workflowStep,
+}: {
+  working: boolean;
+  workflowKind: string | null;
+  workflowStep: string | null;
+}) {
+  const [elapsed, setElapsed] = useState(0);
+  const [revealed, setRevealed] = useState(1);
+  const [expanded, setExpanded] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
+
+  useEffect(() => {
+    if (!working) {
+      setElapsed(0);
+      setRevealed(1);
+      setDismissed(false);
+      return;
+    }
+    const t0 = Date.now();
+    const tick = setInterval(() => setElapsed(Math.floor((Date.now() - t0) / 1000)), 250);
+    const rev = setInterval(() => setRevealed((r) => r + 1), 650);
+    return () => {
+      clearInterval(tick);
+      clearInterval(rev);
+    };
+    // Re-seed the reveal each time the working step changes.
+  }, [working, workflowStep]);
+
+  if (!working || dismissed || !workflowKind || !AGENT_PHASES[workflowKind]) return null;
+  const phases = AGENT_PHASES[workflowKind];
+  const tools = AGENT_TOOLS[workflowKind] ?? AGENT_TOOLS["launch-campaign"];
+  const activeIdx = activePhaseIndex(workflowKind, workflowStep ?? "");
+  const shownTools = tools.slice(0, Math.max(1, Math.min(revealed, tools.length)));
+  const toolCount = shownTools.length;
+  const tokens = Math.min(8800, 460 + elapsed * 680 + toolCount * 210);
+
+  // Slim, low-profile line by default — no white card. Click the summary to
+  // expand the phase chips + tool rows; Stop just dismisses the indicator
+  // (it never tears down the workflow / chat).
+  return (
+    <div className="mb-2 text-[11.5px]">
+      <div className="flex items-center gap-2 text-text-tertiary">
+        <Cog
+          size={11}
+          strokeWidth={1.8}
+          className="text-text-secondary animate-spin flex-shrink-0"
+          style={{ animationDuration: "2s" }}
+        />
+        <button
+          type="button"
+          onClick={() => setExpanded((e) => !e)}
+          className="inline-flex items-center gap-1.5 hover:text-text-primary transition-colors"
+        >
+          <span className="text-text-secondary font-medium">Working…</span>
+          <span>·</span>
+          <span className="tabular">{fmtElapsed(elapsed)}</span>
+          <span>·</span>
+          <span className="tabular">↓{(tokens / 1000).toFixed(1)}k</span>
+          <span>·</span>
+          <span className="tabular">
+            {toolCount} tool{toolCount === 1 ? "" : "s"}
+          </span>
+          <ChevronRight
+            size={11}
+            strokeWidth={1.8}
+            className={`transition-transform ${expanded ? "rotate-90" : ""}`}
+          />
+        </button>
+        <button
+          type="button"
+          onClick={() => setDismissed(true)}
+          className="ml-1 inline-flex items-center gap-1 text-text-tertiary hover:text-text-primary transition-colors"
+          title="Hide the working trace"
+        >
+          <Square size={8} strokeWidth={2.4} />
+          <span className="text-[10.5px]">Stop</span>
+        </button>
+      </div>
+
+      {/* Expanded detail — phases + tool rows (opt-in) */}
+      {expanded && (
+        <div className="mt-1.5 ml-1 pl-2.5 border-l border-border-subtle">
+          <div className="flex flex-wrap items-center gap-1 mb-1.5">
+            {phases.map((p, i) => {
+              const done = i < activeIdx;
+              const active = i === activeIdx;
+              return (
+                <span
+                  key={p}
+                  className="inline-flex items-center gap-1 h-[18px] px-1.5 rounded-full text-[9.5px] font-medium whitespace-nowrap"
+                  style={
+                    active
+                      ? { background: "linear-gradient(135deg,#C9A86A 0%,#E0C083 100%)", color: "#0A0A09" }
+                      : done
+                        ? { background: "var(--surface-secondary)", color: "var(--text-secondary)" }
+                        : { color: "var(--text-tertiary)", border: "1px solid var(--border-subtle)" }
+                  }
+                >
+                  {done && <Check size={8} strokeWidth={2.6} />}
+                  {p}
+                </span>
+              );
+            })}
+          </div>
+          {shownTools.map((name, i) => {
+            const last = i === shownTools.length - 1;
+            return (
+              <div key={`${name}-${i}`} className="flex items-center gap-2 h-6 text-[11px]">
+                {last ? (
+                  <Cog
+                    size={10}
+                    strokeWidth={1.8}
+                    className="text-text-tertiary animate-spin flex-shrink-0"
+                    style={{ animationDuration: "2s" }}
+                  />
+                ) : (
+                  <Check size={10} strokeWidth={2.4} className="text-[#15803D] flex-shrink-0" />
+                )}
+                <span className="text-text-secondary truncate font-mono text-[10.5px]">{name}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /**
  * ClarifyQuestionsPart · the diagnostic clarify questions, rendered
  * inline in the chat (left panel) so the user answers right where Spot
@@ -683,7 +884,6 @@ function ClarifyQuestionsPart({ kind }: { kind: "scale" | "optimize" | "test-ang
  *  the Analyst Agent actually produced (rendered with the app's Markdown
  *  component). Spot's reasoning + the CTA follow in the next message. */
 function AnalystReportPart({ productId }: { productId: string }) {
-  const [open, setOpen] = useState(false);
   const prod = PRODUCTS.find((p) => p.id === productId);
   if (!prod) return null;
   const report = analystReportFor(prod);
@@ -703,9 +903,52 @@ function AnalystReportPart({ productId }: { productId: string }) {
         </span>
       </div>
 
+      {/* Opener — the Analyst kicks the conversation off. The full write-up
+          renders as a markdown file in the Analysis panel on the right. */}
+      <div className="text-[12.5px] leading-[1.55] text-text-primary mb-1.5">
+        <RichText text={report.opener} />
+      </div>
+      <div className="inline-flex items-center gap-1.5 text-[11px] text-text-tertiary">
+        <FileText size={11} strokeWidth={1.8} />
+        Full report&apos;s open in the Analysis panel →
+      </div>
+    </div>
+  );
+}
+
+/** The Analyst Agent's review of freshly-imported campaigns — same shape as
+ *  AnalystReportPart, but the report is built from the imported campaign set
+ *  (not a product in PRODUCTS, since the project may be brand-new). */
+function ImportReportPart({
+  campaignIds,
+  accountId,
+  productName,
+}: {
+  campaignIds: string[];
+  accountId: string;
+  productName: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const review = importedReviewFor(campaignIds, accountId, productName);
+
+  return (
+    <div className="mb-1.5">
+      {/* Attribution — this message is from the Analyst Agent, not Spot. */}
+      <div className="flex items-center gap-2 mb-1.5">
+        <span
+          className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center"
+          style={{ background: "#F4F4F2", border: "1px solid #E8E8E6" }}
+        >
+          <BarChart3 size={11} strokeWidth={1.9} className="text-text-tertiary" />
+        </span>
+        <span className="text-[10.5px] uppercase tracking-wider font-medium text-text-tertiary">
+          Analyst Agent
+        </span>
+      </div>
+
       {/* Opener — the Analyst kicks the conversation off. */}
       <div className="text-[12.5px] leading-[1.55] text-text-primary mb-2.5">
-        <RichText text={report.opener} />
+        <RichText text={review.opener} />
       </div>
 
       {/* Collapsible report · the markdown file the agent produced. */}
@@ -721,7 +964,7 @@ function AnalystReportPart({ productId }: { productId: string }) {
               {open ? "Hide the full report" : "Read the full report"}
             </div>
             <div className="text-[11px] text-text-tertiary truncate">
-              {report.headline} · markdown
+              {review.headline} · markdown
             </div>
           </div>
           <ChevronDown
@@ -732,7 +975,7 @@ function AnalystReportPart({ productId }: { productId: string }) {
         </button>
         {open && (
           <div className="px-3 py-3 border-t border-border-subtle">
-            <Markdown source={report.reportMd} />
+            <Markdown source={review.reportMd} />
           </div>
         )}
       </div>
@@ -798,6 +1041,14 @@ function PartRenderer({ part }: { part: SpotPart }) {
       return <ClarifyQuestionsPart kind={part.kind} />;
     case "analyst-report":
       return <AnalystReportPart productId={part.productId} />;
+    case "import-report":
+      return (
+        <ImportReportPart
+          campaignIds={part.campaignIds}
+          accountId={part.accountId}
+          productName={part.productName}
+        />
+      );
     case "analyst-cta":
       return (
         <AnalystCtaPart

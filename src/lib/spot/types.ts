@@ -46,6 +46,10 @@ export type SpotPart =
   // (Spot's one-liner sits above it); expands to the full detailed write-up +
   // the analyst↔Spot conversation. The renderer looks the report up by id.
   | { type: "analyst-report"; productId: string }
+  // The Analyst Agent's review of freshly-imported campaigns — same shape as
+  // analyst-report (attributed opener + collapsible markdown), but built from
+  // the imported campaign set rather than a product in PRODUCTS.
+  | { type: "import-report"; campaignIds: string[]; accountId: string; productName: string }
   // The recommended-action CTA at the end of an analyst review — kicks off the
   // matching flow (scale / optimize / test-angles / launch) for the project.
   | {

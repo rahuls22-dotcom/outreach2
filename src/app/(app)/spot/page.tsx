@@ -40,7 +40,7 @@ import {
 } from "lucide-react";
 import { SpotMark } from "@/components/spot/spot-mark";
 import { SpotLoader } from "@/components/spot/spot-loader";
-import { MessageBubble, TypingDots } from "@/components/spot/spot-message";
+import { MessageBubble, TypingDots, AgentWorkingBlock } from "@/components/spot/spot-message";
 import { useSpotStore } from "@/lib/spot/store";
 import { generateReply } from "@/lib/spot/replies";
 import { useCurrentUser, useCurrentWorkspaceLabel } from "@/lib/workspace-store";
@@ -305,7 +305,7 @@ export default function SpotPage() {
           className="flex flex-col bg-[var(--chat-bg)]"
           style={canvasOpen ? { width: `${chatWidth}px`, flex: "0 0 auto" } : { flex: 1 }}
         >
-          <div className="flex items-center gap-2.5 px-4 py-3 border-b border-border-subtle bg-white/70 backdrop-blur-sm">
+          <div className="relative z-30 flex items-center gap-2.5 px-4 py-3 border-b border-border-subtle bg-white/70 backdrop-blur-sm">
             <button
               type="button"
               onClick={showHomeView}
@@ -355,47 +355,62 @@ export default function SpotPage() {
               the composer pinned at the bottom. The question card
               lives inside the thread at the end. */}
           <div ref={threadScrollRef} className="flex-1 overflow-y-auto scroll px-4 py-4">
-            {thread.map((m, i) => (
-              <MessageBubble key={i} message={m} animate={i === thread.length - 1} />
-            ))}
-            {pending && <TypingDots />}
-            <AgentTrailIndicator working={isAgentRunning || pending} />
+            {/* When the canvas is closed (e.g. analyst review) the chat goes
+                full-width and reads poorly — constrain it to a centered,
+                readable column. With the canvas open the panel is already
+                narrow, so the cap simply no-ops. */}
+            <div className={canvasOpen ? "w-full" : "max-w-[760px] mx-auto w-full"}>
+              {thread.map((m, i) => (
+                <MessageBubble key={i} message={m} animate={i === thread.length - 1} />
+              ))}
+              {pending && <TypingDots />}
+              <AgentWorkingBlock
+                working={isAgentRunning}
+                workflowKind={workflow.kind}
+                workflowStep={workflow.step}
+              />
+              {isAgentRunning &&
+                !["launch-campaign", "scale", "optimize", "test-angles"].includes(
+                  workflow.kind,
+                ) && <AgentTrailIndicator working />}
 
-            {/* Inline question card · appears once Spot has finished
-                preparing the intake. Three sequential questions:
-                name → URL → files. Submitting the last one closes
-                the card and kicks off deep research. */}
-            {workflow.kind === "launch-campaign" &&
-              workflow.step === "product-setup" &&
-              workflow.productSetupModalOpen === true &&
-              !workflow.productSetupAnswers?.name && (
-                <ProductSetupQuestionCard
-                  onSubmit={(data) => submitProductSetupForm(data)}
-                  onClose={() => exitWorkflow()}
-                />
-              )}
-
+              {/* Inline question card · appears once Spot has finished
+                  preparing the intake. Three sequential questions:
+                  name → URL → files. Submitting the last one closes
+                  the card and kicks off deep research. */}
+              {workflow.kind === "launch-campaign" &&
+                workflow.step === "product-setup" &&
+                workflow.productSetupModalOpen === true &&
+                !workflow.productSetupAnswers?.name && (
+                  <ProductSetupQuestionCard
+                    onSubmit={(data) => submitProductSetupForm(data)}
+                    onClose={() => exitWorkflow()}
+                  />
+                )}
+            </div>
           </div>
           <div className="border-t border-border-subtle px-3 py-3 bg-white/50 backdrop-blur-sm">
-            <Composer
-              value={draft}
-              onChange={setDraft}
-              onSend={() => send()}
-              scope={scope}
-              onChangeScope={setScope}
-              scopeOpen={scopeOpen}
-              onScopeOpenChange={setScopeOpen}
-              inputRef={inputRef}
-              placeholder={composerPlaceholderFor(workflow)}
-              onAttachFiles={
-                workflow.kind === "launch-campaign" &&
-                workflow.step === "product-setup" &&
-                workflow.productSetupStage === "files"
-                  ? (names) =>
-                      useSpotStore.getState().attachProductSetupFiles(names)
-                  : undefined
-              }
-            />
+            <div className={canvasOpen ? "w-full" : "max-w-[760px] mx-auto w-full"}>
+              <Composer
+                value={draft}
+                onChange={setDraft}
+                onSend={() => send()}
+                scope={scope}
+                onChangeScope={setScope}
+                scopeOpen={scopeOpen}
+                onScopeOpenChange={setScopeOpen}
+                inputRef={inputRef}
+                placeholder={composerPlaceholderFor(workflow)}
+                onAttachFiles={
+                  workflow.kind === "launch-campaign" &&
+                  workflow.step === "product-setup" &&
+                  workflow.productSetupStage === "files"
+                    ? (names) =>
+                        useSpotStore.getState().attachProductSetupFiles(names)
+                    : undefined
+                }
+              />
+            </div>
           </div>
 
         </div>
@@ -445,7 +460,7 @@ export default function SpotPage() {
             into memory / plan / dashboard / assets without rejoining
             a workflow. Picker is hidden when no workflow context is
             scoped (workspace) — nothing to preview. */}
-        <div className="flex items-center gap-2 px-6 py-3 border-b border-border-subtle bg-white/70 backdrop-blur-sm">
+        <div className="relative z-30 flex items-center gap-2 px-6 py-3 border-b border-border-subtle bg-white/70 backdrop-blur-sm">
           <SpotMark size={18} />
           <div className="flex-1">
             <div className="text-[13px] font-semibold leading-tight">Spot</div>
@@ -1265,17 +1280,13 @@ function ScopeRow({
 /* ─── History panels ──────────────────────────────────────────── */
 
 /**
- * Active products rail — full-width row of product cards the user can
- * launch straight from the homepage. Clicking the launch button calls
- * startLaunchFlow which kicks off the split-screen workflow.
+ * Active products rail — full-width row of product cards. The recommended
+ * action and "View analysis" both open the Analyst Agent ↔ Spot review for
+ * the product; the action CTA inside that conversation launches the flow.
  */
 function ActiveProductsRail() {
   const { isEmpty } = useDemoMode();
-  const startLaunchFlow = useSpotStore((s) => s.startLaunchFlow);
   const startNewProductFlow = useSpotStore((s) => s.startNewProductFlow);
-  const startScaleFlow = useSpotStore((s) => s.startScaleFlow);
-  const startOptimizeFlow = useSpotStore((s) => s.startOptimizeFlow);
-  const startTestAnglesFlow = useSpotStore((s) => s.startTestAnglesFlow);
   const startAnalystReview = useSpotStore((s) => s.startAnalystReview);
   const top = PRODUCTS.slice(0, 3);
 
@@ -1307,19 +1318,11 @@ function ActiveProductsRail() {
     );
   }
 
-  // The chip action on each product card maps the diagnosis to a
-  // workflow kind. "Healthy" → scale (best-case action is to scale
-  // a winning product); "High CPL" → optimize; "Low volume + high CPL"
-  // → test new angles; etc. The mapping lives on the diagnosis itself
-  // (diagnoseProduct().flow).
-  const startFlow = (flow: string, p: { id: string; name: string }) => {
-    const pickFor = { id: p.id, name: p.name };
-    if (flow === "scale") startScaleFlow(pickFor);
-    else if (flow === "optimize") startOptimizeFlow(pickFor);
-    else if (flow === "test-angles") startTestAnglesFlow(pickFor);
-    else startLaunchFlow(pickFor);
-  };
-
+  // The recommended-action button (label from diagnoseProduct().action)
+  // opens the Analyst Agent ↔ Spot review for this product — the analyst's
+  // finding, Spot's reasoning, the collapsible detailed analysis, and the
+  // action CTA. That CTA inside the conversation is what actually launches
+  // the matching diagnostic flow (scale / optimize / test-angles / launch).
   return (
     <div>
       <div className="flex items-center mb-2.5">
@@ -1401,12 +1404,12 @@ function ActiveProductsRail() {
                 );
               })()}
 
-              {/* Action — health-driven · dispatches to the right Spot
-                  workflow based on diagnoseProduct().flow */}
+              {/* Action — health-driven label, but opens the Analyst ↔ Spot
+                  review first (the in-conversation CTA launches the flow) */}
               <div className="flex items-center gap-1 mt-auto">
                 <button
                   type="button"
-                  onClick={() => startFlow(dx.flow, p)}
+                  onClick={() => startAnalystReview({ id: p.id, name: p.name })}
                   className="inline-flex items-center gap-1 h-7 px-2.5 rounded-button bg-[#111] text-[#FAFAF8] hover:bg-black text-[11.5px] font-medium"
                 >
                   {dx.action}

@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { OtpInput } from "@/components/auth/otp-input";
 import { SpotLoader } from "@/components/spot/spot-loader";
+import GradientBlinds from "./gradient-blinds";
 import { DEMO_OTP, maskEmail, orgsForEmail, type Org } from "@/lib/auth-mock";
 import { markAuthed } from "@/lib/auth";
 
@@ -32,6 +33,11 @@ const RESEND_SECONDS = 30;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const GOLD = "#C9A86A";
+
+// Stable module-level reference — passing an inline array would change the
+// prop identity every render, tearing down + rebuilding the WebGL effect on
+// each keystroke. Toned-down antique-gold stops so the overlaid copy reads.
+const LOGIN_BLINDS_COLORS = ["#17110A", "#5C4A29", "#A2854C"];
 
 type Step = "auth" | "org";
 
@@ -200,20 +206,28 @@ const riseIn: Variants = {
 };
 
 function BrandPanel() {
-  const [m, setM] = useState({ x: 38, y: 40 });
   return (
     <aside
-      onMouseMove={(e) => {
-        const r = e.currentTarget.getBoundingClientRect();
-        setM({
-          x: ((e.clientX - r.left) / r.width) * 100,
-          y: ((e.clientY - r.top) / r.height) * 100,
-        });
-      }}
       className="relative hidden flex-col justify-between overflow-hidden p-12 xl:p-16 lg:flex"
       style={{ background: "#09090B" }}
     >
-      <Backdrop mouse={m} />
+      {/* reactbits GradientBlinds — a WebGL gold "corduroy of light" with a
+          cursor-following spotlight. Screen-blended over near-black. */}
+      <div aria-hidden className="absolute inset-0 z-0">
+        <GradientBlinds
+          gradientColors={LOGIN_BLINDS_COLORS}
+          angle={226}
+          noise={0.22}
+          blindCount={14}
+          blindMinWidth={0}
+          mouseDampening={0.15}
+          spotlightRadius={1}
+          spotlightSoftness={1.15}
+          spotlightOpacity={0.4}
+          distortAmount={0}
+          mixBlendMode="screen"
+        />
+      </div>
 
       {/* Legibility veil — keep type crisp over the field. */}
       <div
@@ -297,64 +311,6 @@ function BrandPanel() {
         </motion.ul>
       </motion.div>
     </aside>
-  );
-}
-
-/** Living gold field — a cursor-following spotlight, two slow-drifting
- *  auroras, a travelling sheen, and the diagonal blinds, all in warm gold
- *  over near-black. */
-function Backdrop({ mouse }: { mouse: { x: number; y: number } }) {
-  return (
-    <div aria-hidden className="absolute inset-0 z-0 overflow-hidden">
-      {/* Diagonal blinds */}
-      <div
-        className="absolute inset-0"
-        style={{
-          background:
-            "repeating-linear-gradient(218deg, rgba(0,0,0,0) 0px, rgba(0,0,0,0) 32px, rgba(201,168,106,0.04) 38px, rgba(201,168,106,0.14) 46px, rgba(201,168,106,0.04) 54px, rgba(0,0,0,0) 60px, rgba(0,0,0,0) 84px)",
-        }}
-      />
-      {/* Cursor spotlight — the gold field lifts where the mouse lands. */}
-      <div
-        className="absolute inset-0 transition-[background] duration-200 ease-out"
-        style={{
-          background: `radial-gradient(34% 42% at ${mouse.x}% ${mouse.y}%, rgba(224,200,154,0.26) 0%, rgba(201,168,106,0.08) 42%, transparent 68%)`,
-        }}
-      />
-      {/* Aurora 1 */}
-      <div
-        className="absolute"
-        style={{
-          inset: "-20%",
-          background: "radial-gradient(38% 38% at 38% 42%, rgba(201,168,106,0.30) 0%, rgba(201,168,106,0.06) 45%, transparent 70%)",
-          filter: "blur(20px)",
-          animation: "login-aurora 16s ease-in-out infinite",
-        }}
-      />
-      {/* Aurora 2 */}
-      <div
-        className="absolute"
-        style={{
-          inset: "-20%",
-          background: "radial-gradient(34% 34% at 66% 70%, rgba(224,200,154,0.18) 0%, transparent 62%)",
-          filter: "blur(26px)",
-          animation: "login-aurora-2 21s ease-in-out infinite",
-        }}
-      />
-      {/* Travelling sheen */}
-      <div
-        className="absolute inset-0"
-        style={{
-          background: "linear-gradient(218deg, transparent 40%, rgba(232,212,168,0.10) 50%, transparent 60%)",
-          animation: "login-sheen 9s ease-in-out infinite",
-        }}
-      />
-      {/* Vignette */}
-      <div
-        className="absolute inset-0"
-        style={{ background: "radial-gradient(120% 120% at 50% 45%, transparent 52%, rgba(9,9,11,0.72) 100%)" }}
-      />
-    </div>
   );
 }
 

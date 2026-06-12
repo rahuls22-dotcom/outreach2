@@ -18,7 +18,7 @@ import {
   type WorkflowStep,
 } from "./workflow";
 import { PRODUCTS } from "../products-data";
-import { analystReportFor } from "./analyst-data";
+import { analystReportFor, importedReviewFor } from "./analyst-data";
 import { campaignsForAccount } from "./import-campaigns-data";
 
 type PanelState = {
@@ -118,6 +118,9 @@ type PanelState = {
   setImportSelection: (ids: string[]) => void;
   /** Confirm the import → freeze the set + post the next-step choice. */
   confirmImportCampaigns: () => void;
+  /** Hand the imported campaigns to the Analyst Agent → open an analyst
+   *  review conversation (replaces /campaigns navigation). */
+  startImportReview: () => void;
   /** Jump to a specific step (used for "edit a previous step"). */
   gotoStep: (step: WorkflowStep) => void;
   setWorkflowBudget: (b: WorkflowBudget) => void;
@@ -883,7 +886,10 @@ export const useSpotStore = create<PanelState>((set) => ({
     set(() => ({
       open: true,
       maximized: false,
-      canvasOpen: false,
+      // The analysis renders as a dark markdown file in the right panel;
+      // the conversation (opener → reasoning → CTA) lives in the chat.
+      canvasOpen: true,
+      canvasFiles: ["analysis"],
       viewHomeOverride: false,
       clickedCtas: new Set<string>(),
       scope: { kind: "project", label: product.name, target: product.id },
@@ -1179,6 +1185,55 @@ export const useSpotStore = create<PanelState>((set) => ({
       return {
         workflow: { ...s.workflow, importStage: "imported", importedCampaignIds: ids },
         thread: [...s.thread, msg],
+      };
+    }),
+
+  startImportReview: () =>
+    set((s) => {
+      if (!s.workflow || s.workflow.kind !== "launch-campaign") return {};
+      const w = s.workflow;
+      const campaignIds = w.importedCampaignIds ?? [];
+      if (campaignIds.length === 0) return {};
+      const accountId = w.importAdAccountId ?? "";
+      const review = importedReviewFor(campaignIds, accountId, w.productName);
+      // New products carry productId: null — give the downstream diagnostic a
+      // stable synthetic id (the analysis canvas is keyed by flow kind, not by
+      // a PRODUCTS lookup, so any string is safe).
+      const productId = w.productId ?? "imported";
+      const thread: SpotMessage[] = [
+        {
+          role: "spot",
+          parts: [
+            { type: "import-report", campaignIds, accountId, productName: w.productName },
+          ],
+        },
+        {
+          role: "spot",
+          parts: [
+            { type: "text", text: review.reasoning },
+            {
+              type: "analyst-cta",
+              flow: review.flow,
+              productId,
+              productName: w.productName,
+              label: review.action,
+            },
+          ],
+        },
+      ];
+      return {
+        canvasOpen: false,
+        clickedCtas: new Set<string>(),
+        workflow: {
+          kind: "analyst-review",
+          step: "campaign-dive",
+          productId,
+          productName: w.productName,
+          recommendedFlow: review.flow,
+          recommendedLabel: review.action,
+          startedAt: Date.now(),
+        },
+        thread,
       };
     }),
 

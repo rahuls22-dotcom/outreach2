@@ -605,7 +605,7 @@ export function LaunchBuildingStep({ workflow }: { workflow: LaunchWorkflow }) {
  *  All real PNGs live in /public/assets/creatives/ (student-01..04,
  *  parent-01..04). The professional persona is rendered as a soft
  *  gradient so the grid still tells a complete story. */
-type ReviewCreative = {
+export type ReviewCreative = {
   id: string;
   hook: string;
   format: "Reel" | "Static" | "Carousel";
@@ -614,13 +614,13 @@ type ReviewCreative = {
   hue: number;
 };
 
-type ChannelChip = {
+export type ChannelChip = {
   label: string;
   /** Short rationale shown in a tooltip-style line under the chip row. */
   why?: string;
 };
 
-type CreativePersonaGroup = {
+export type CreativePersonaGroup = {
   persona: string;
   sub: string;
   pain: string;
@@ -630,7 +630,7 @@ type CreativePersonaGroup = {
   creatives: ReviewCreative[];
 };
 
-const CREATIVES_BY_PERSONA: CreativePersonaGroup[] = [
+export const CREATIVES_BY_PERSONA: CreativePersonaGroup[] = [
   {
     persona: "Working professional · Aspiring fluent speaker",
     sub: "25-34 · tier-1/2 cities · career-focused",

@@ -38,8 +38,8 @@ import {
 import {
   LaunchPlanStep,
   LaunchBuildingStep,
-  LaunchReviewStep,
 } from "@/components/spot/workflow/launch-build-steps";
+import { CreativesFormsReview } from "@/components/spot/workflow/creatives-forms-review";
 import { LaunchStrategyStep } from "@/components/spot/workflow/launch-strategy-step";
 import { ExecutionChecklist, LAUNCH_DEPLOY_CHECKLIST } from "@/components/spot/workflow/execution-checklist";
 import { CampaignDiveStep } from "@/components/spot/workflow/campaign-dive-step";
@@ -47,6 +47,7 @@ import { ImportCampaignsStep } from "@/components/spot/workflow/import-campaigns
 import { SpotMark } from "@/components/spot/spot-mark";
 import { SpotLoader, SpotFullscreen } from "@/components/spot/spot-loader";
 import { PRODUCTS } from "@/lib/products-data";
+import { analystReportFor } from "@/lib/spot/analyst-data";
 
 const STEP_ICONS: Record<WorkflowStep, typeof Users> = {
   // Launch flow (new consolidated structure)
@@ -130,6 +131,10 @@ export const FILE_TABS: {
  *  where Spot's findings are persisted as part of product memory. */
 export function fileTabsForWorkflow(workflow: SpotWorkflow | null) {
   if (!workflow) return FILE_TABS.filter((t) => t.key !== "analysis" && t.key !== "strategy");
+  // Analyst review is a single dark markdown file — the Analysis tab only.
+  if (workflow.kind === "analyst-review") {
+    return FILE_TABS.filter((t) => t.key === "analysis");
+  }
   const isDiagnostic =
     workflow.kind === "scale" ||
     workflow.kind === "optimize" ||
@@ -315,9 +320,13 @@ export function WorkflowPane() {
                 <span className="text-[12px] font-medium" style={{ color: "#F5F4EF" }}>
                   {meta.label}
                 </span>
-                <span className="text-[10.5px] font-mono" style={{ color: "#8A8980" }}>
-                  {meta.file}
-                </span>
+                {/* Only show the mono file path for real files (*.md / *.html).
+                    Rich views like "assets/" shouldn't read as a markdown file. */}
+                {meta.file.includes(".") && (
+                  <span className="text-[10.5px] font-mono" style={{ color: "#8A8980" }}>
+                    {meta.file}
+                  </span>
+                )}
                 <span className="flex-1" />
                 {canClose && (
                   <button
@@ -372,18 +381,9 @@ export function WorkflowPane() {
               </div>
 
               {/* Pane body · loader/celebration states take over;
-                  otherwise normal file body. The review step is a
-                  light-themed "build complete" document, so the pane
-                  goes light there (otherwise its dark text is invisible
-                  on the dark canvas). */}
-              <div
-                className="flex-1 overflow-y-auto"
-                style={
-                  isReviewing && tab !== "memory"
-                    ? { background: "#FAFAF8" }
-                    : undefined
-                }
-              >
+                  otherwise the file body renders on the dark canvas
+                  surface (right-panel dark-mode principle). */}
+              <div className="flex-1 overflow-y-auto">
                 {isImporting ? (
                   <ImportCampaignsStep workflow={workflow as LaunchWorkflow} />
                 ) : isAwaitingSetup && tab === "memory" ? (
@@ -397,9 +397,7 @@ export function WorkflowPane() {
                     }
                   />
                 ) : isReviewing && tab !== "memory" ? (
-                  <LaunchReviewStep
-                    workflow={workflow as LaunchWorkflow}
-                  />
+                  <CreativesFormsReview workflow={workflow} />
                 ) : isDeploying ? (
                   <ExecutionChecklist
                     title={
@@ -494,7 +492,7 @@ export function ChatHeaderFilePicker({ compact = false }: { compact?: boolean })
       </button>
       {open && (
         <div
-          className="absolute top-[calc(100%+4px)] right-0 z-50 bg-white border border-border rounded-card py-1 min-w-[240px]"
+          className="absolute top-[calc(100%+4px)] right-0 z-50 bg-white border border-border rounded-card py-1 min-w-[300px]"
           style={{ boxShadow: "0 8px 28px -8px rgba(0,0,0,0.14)" }}
         >
           <div className="px-3 pt-1 pb-1.5 text-[10px] uppercase tracking-wider text-text-tertiary font-medium">
@@ -515,9 +513,9 @@ export function ChatHeaderFilePicker({ compact = false }: { compact?: boolean })
                   isOpen ? "bg-surface-secondary/60" : ""
                 }`}
               >
-                <Icon size={11} strokeWidth={1.7} className="text-text-tertiary" />
-                <span className="text-text-primary">{t.label}</span>
-                <span className="text-[10.5px] font-mono text-text-tertiary ml-auto">
+                <Icon size={11} strokeWidth={1.7} className="text-text-tertiary flex-shrink-0" />
+                <span className="text-text-primary whitespace-nowrap">{t.label}</span>
+                <span className="text-[10.5px] font-mono text-text-tertiary ml-auto whitespace-nowrap flex-shrink-0">
                   {t.file}
                 </span>
                 {isOpen && (
@@ -626,6 +624,19 @@ function FileBody({
     return <CampaignDiveStep workflow={workflow} />;
   }
 
+  // Analyst review · the agent's write-up renders as a dark markdown file
+  // in the right panel; the conversation stays in the chat on the left.
+  if (workflow.kind === "analyst-review") {
+    const prod = PRODUCTS.find((p) => p.id === workflow.productId);
+    if (!prod) return null;
+    const report = analystReportFor(prod);
+    return (
+      <div className="px-6 py-6 max-w-[760px] mx-auto">
+        <Markdown source={report.reportMd} theme="dark" />
+      </div>
+    );
+  }
+
   // Active step controls overlays · "Spot is updating memory…",
   // "Spot is building the plan…", etc.
   const step = workflow.step;
@@ -659,12 +670,7 @@ function FileBody({
       workflow.step === "ang-live" &&
       tab === "assets"
     ) {
-      return (
-        <AssetsFileView
-          workflow={workflow}
-          buildingOverlay={false}
-        />
-      );
+      return <CreativesFormsReview workflow={workflow} />;
     }
     // Analysis tab · ALWAYS shows the analysis findings (Spot's audit
     // of what's currently happening) even after the workflow has
@@ -701,7 +707,7 @@ function FileBody({
     return <DashboardFileView workflow={workflow} />;
   }
   if (tab === "assets") {
-    return <AssetsFileView workflow={workflow} buildingOverlay={step === "launch-building"} />;
+    return <CreativesFormsReview workflow={workflow} />;
   }
   return null;
 }
