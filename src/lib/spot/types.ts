@@ -68,6 +68,20 @@ export type SpotPart =
       agent: string;
       detail?: string;
       status: "running" | "done";
+    }
+  // Refinement ledger event — the structured delta a studio session
+  // hands back to Spot on commit. The studio conversation never lands
+  // in this thread; only the versioned outcome does ("artifacts travel,
+  // conversations don't"). Collapsed row; expands to the change list.
+  | {
+      type: "ledger";
+      agent: string; // "Iris"
+      artifact: string; // "Angle 2 · Parent"
+      fromVersion: number;
+      toVersion: number;
+      summary: string; // "warmer palette · shorter headline"
+      changes: string[];
+      impact?: string; // plan-level consequence flag, if any
     };
 
 /** Branch actions a `choice` part can trigger. Mapped to store calls in

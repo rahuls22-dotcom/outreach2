@@ -622,6 +622,85 @@ function ToolCallPart({ agent, detail, status }: { agent: string; detail?: strin
   );
 }
 
+/* ─── Ledger part ────────────────────────────────────────────────────
+ * The structured delta a refinement studio hands back on commit. The
+ * studio chat never lands here — only this event. Collapsed by default
+ * (one quiet row, like a git log line); expands to the change list and
+ * the impact flag when present. */
+function LedgerPart({
+  agent,
+  artifact,
+  fromVersion,
+  toVersion,
+  summary,
+  changes,
+  impact,
+}: {
+  agent: string;
+  artifact: string;
+  fromVersion: number;
+  toVersion: number;
+  summary: string;
+  changes: string[];
+  impact?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div
+      className="mb-2 rounded-[8px] overflow-hidden"
+      style={{ border: "1px solid var(--spot-stroke)", background: "var(--spot-tint)" }}
+    >
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center gap-2 px-2.5 py-2 text-left"
+      >
+        <Sparkles size={11} className="flex-shrink-0" style={{ color: "#B08D4A" }} />
+        <span className="text-[11.5px] leading-[1.45] flex-1 min-w-0">
+          <span className="font-semibold">{agent} updated {artifact}</span>
+          <span className="text-text-tertiary tabular-nums"> · v{fromVersion} → v{toVersion}</span>
+          <span className="text-text-secondary"> · {summary}</span>
+        </span>
+        <span
+          className="flex-shrink-0 inline-flex items-center gap-1 text-[10px] font-medium px-1.5 h-[18px] rounded-full"
+          style={{ background: "#F0FDF4", color: "#15803D", border: "1px solid #BBF7D0" }}
+        >
+          <Check size={9} strokeWidth={2.6} /> Approved by you
+        </span>
+        <ChevronDown
+          size={12}
+          className="flex-shrink-0 text-text-tertiary transition-transform"
+          style={{ transform: open ? "rotate(180deg)" : "none" }}
+        />
+      </button>
+      {open && (
+        <div className="px-2.5 pb-2.5 pt-0.5" style={{ borderTop: "1px solid var(--spot-stroke)" }}>
+          <ul className="mt-2 space-y-1">
+            {changes.map((c, i) => (
+              <li key={i} className="flex items-start gap-1.5 text-[11.5px] text-text-secondary leading-[1.45]">
+                <Check size={10} strokeWidth={2.2} className="flex-shrink-0 relative top-[2.5px] text-[#15803D]" />
+                {c}
+              </li>
+            ))}
+          </ul>
+          {impact && (
+            <div
+              className="mt-2 flex items-start gap-1.5 text-[11px] leading-[1.45] rounded-[6px] px-2 py-1.5"
+              style={{ background: "#FEF3C7", color: "#92400E", border: "1px solid #FDE68A" }}
+            >
+              <AlertTriangle size={11} className="flex-shrink-0 relative top-[1.5px]" />
+              {impact}
+            </div>
+          )}
+          <div className="mt-2 text-[10.5px] text-text-tertiary">
+            Refined in the studio with {agent} · only the outcome lands here — the iteration stays in the room.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ─── Agent working block ────────────────────────────────────────────
  * The live "Spot is working" surface — mirrors a real agentic trace:
  * a row of PHASE chips (the agent's phase nomenclature), the SKILL / tool
@@ -1060,6 +1139,18 @@ function PartRenderer({ part }: { part: SpotPart }) {
       );
     case "tool-call":
       return <ToolCallPart agent={part.agent} detail={part.detail} status={part.status} />;
+    case "ledger":
+      return (
+        <LedgerPart
+          agent={part.agent}
+          artifact={part.artifact}
+          fromVersion={part.fromVersion}
+          toVersion={part.toVersion}
+          summary={part.summary}
+          changes={part.changes}
+          impact={part.impact}
+        />
+      );
     case "text":
       return (
         <div className="text-[12.5px] leading-[1.55] mb-1.5">

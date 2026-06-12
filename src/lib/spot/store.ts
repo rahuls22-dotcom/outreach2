@@ -1464,3 +1464,10 @@ export const guidedKindLabel: Record<GuidedKind, string> = {
   "new-campaign": "New campaign",
   "new-adset": "New ad set",
 };
+
+// Dev-only escape hatch — lets demo drivers (and Playwright) jump the
+// workflow to any step from the console without clicking through every
+// loader. Stripped from production builds by the env check.
+if (typeof window !== "undefined" && process.env.NODE_ENV !== "production") {
+  (window as unknown as { __spotStore?: typeof useSpotStore }).__spotStore = useSpotStore;
+}
