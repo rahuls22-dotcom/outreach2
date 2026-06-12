@@ -1,81 +1,18 @@
-"use client";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+import { SESSION_COOKIE, verifySessionToken } from "@/lib/session";
+import { AppShell } from "./app-shell";
 
-import { useEffect, useRef } from "react";
-import { usePathname } from "next/navigation";
-import { Sidebar } from "@/components/layout/sidebar";
-import { DemoModeProvider } from "@/lib/demo-mode";
-import { ProductsProvider } from "@/lib/products";
-import { SpotRoot } from "@/components/spot/spot-root";
-import { useSpotStore } from "@/lib/spot/store";
-import { useCurrentScope, useCurrentWorkspaceLabel } from "@/lib/workspace-store";
-import { WAProvider } from "@/lib/whatsapp-context";
-import { WorkspaceProvider } from "@/lib/workspace-context";
-
-/**
- * Watches workspace scope and resets Spot whenever it changes — the
- * panel scope and the conversation thread are about the workspace the
- * user just left, not the one they're now in. Keeps Spot in lock-step
- * with the sidebar switcher (per the workspace-switch spec).
- */
-function SpotWorkspaceSync() {
-  const scope = useCurrentScope();
-  const wsLabel = useCurrentWorkspaceLabel();
-  const setSpotScope = useSpotStore((s) => s.setScope);
-  const setThread = useSpotStore((s) => s.setThread);
-  // Only react to actual scope changes — not the initial mount, since
-  // Spot already has a sensible default at boot.
-  const initialised = useRef(false);
-  const lastKey = useRef<string>("");
-
-  useEffect(() => {
-    const key = scope.kind === "all" ? "all" : `ws:${scope.id}`;
-    if (!initialised.current) {
-      initialised.current = true;
-      lastKey.current = key;
-      return;
-    }
-    if (key === lastKey.current) return;
-    lastKey.current = key;
-    // Re-scope Spot + clear the thread. Floating launcher / open state
-    // are deliberately untouched — the panel stays open if it was open.
-    setSpotScope({
-      kind: "workspace",
-      label: wsLabel,
-      target: scope.kind === "workspace" ? scope.id : undefined,
-    });
-    setThread([]);
-  }, [scope.kind, scope.kind === "workspace" ? scope.id : "all", wsLabel, setSpotScope, setThread]);
-
-  return null;
-}
-
-export default function AppLayout({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
-  // /spot is its own canvas — it owns full width/height and supplies its
-  // own background. Everywhere else gets the platform shell padding.
-  // Auth is enforced server-side in middleware.ts (signed session cookie);
-  // unauthenticated requests never reach this layout.
-  const isSpotRoute = pathname === "/spot";
-  return (
-    <DemoModeProvider>
-      <ProductsProvider>
-        <WorkspaceProvider>
-          <WAProvider>
-            <div className="min-h-screen bg-surface-page">
-              <Sidebar />
-              <main className="ml-sidebar">
-                {isSpotRoute ? (
-                  children
-                ) : (
-                  <div className="max-w-[1400px] mx-auto px-8 py-8">{children}</div>
-                )}
-              </main>
-              <SpotRoot />
-              <SpotWorkspaceSync />
-            </div>
-          </WAProvider>
-        </WorkspaceProvider>
-      </ProductsProvider>
-    </DemoModeProvider>
-  );
+// Server-side auth gate for every (app) route. Reading the cookie via
+// next/headers forces these routes to render dynamically (never statically
+// prerendered), so the check runs on every request through the compute layer
+// — middleware alone isn't enough on AWS Amplify, where statically generated
+// pages are served from the CDN and bypass middleware. middleware.ts still
+// handles the nicer /login?next=... redirect for routes that do hit it.
+export default async function AppLayout({ children }: { children: React.ReactNode }) {
+  const token = (await cookies()).get(SESSION_COOKIE)?.value;
+  if (!(await verifySessionToken(token))) {
+    redirect("/login");
+  }
+  return <AppShell>{children}</AppShell>;
 }
