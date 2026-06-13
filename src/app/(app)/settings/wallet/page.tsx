@@ -38,7 +38,7 @@ import { LowBalanceModal } from "@/components/wallet/low-balance-modal";
 import { WalletCard } from "@/components/wallet/wallet-card";
 import { TopUpEstimatorModal } from "@/components/wallet/top-up-estimator-modal";
 import { DateRangeSelector } from "@/components/dashboard/date-range-selector";
-import { Plus, Receipt, TrendingUp, Calendar, ArrowDown, Timer, BarChart3, AlertTriangle, Send } from "lucide-react";
+import { Plus, Receipt, TrendingUp, Calendar, ArrowDown, BarChart3, AlertTriangle, Send } from "lucide-react";
 
 // The shared DateRangeSelector emits a preset string ("7", "30",
 // "thismonth", "lifetime", etc.). Our daily series is keyed by N-day
@@ -994,7 +994,11 @@ function WalletUsageChart() {
           (AI Calling → Talk time only) the legend would be noise. */}
       <div className="mb-4">
         <p className="text-[10px] font-medium text-text-tertiary uppercase tracking-[0.4px] tabular-nums">
-          {activeWallet.name} · used in last {range} days
+          {/* Neutral period phrasing — the actual window is named in
+              the page-level filter at the top. Echoing it here as
+              "used in last N days" broke for named presets (This
+              month, Last week, custom ranges, …). */}
+          {activeWallet.name} · used in this period
         </p>
         <p className="text-[24px] font-semibold text-text-primary leading-none mt-1 tabular-nums">
           {formatNum(Math.round(total))}
@@ -1491,16 +1495,21 @@ function PrepaidBalanceHero({
   const totalAvailable = planBaseline + topupBalance;
 
   // Used + remaining are computed off the combined available pool so
-  // the math ties out: used + remaining = totalAvailable.
-  const used         = rangeUtilized;
+  // the math ties out: used + remaining = totalAvailable. `used` is
+  // clamped at `totalAvailable` because a prepaid wallet can't
+  // physically spend more than its cap — once usage hits the ceiling,
+  // new actions block, and the displayed total reads as that ceiling
+  // instead of an impossible over-spend.
+  const used         = Math.min(rangeUtilized, totalAvailable);
   const remaining    = Math.max(0, totalAvailable - used);
   const usedPct      = totalAvailable > 0
     ? Math.max(0, Math.min(100, (used / totalAvailable) * 100))
     : 0;
-  const barTone =
-      usedPct >= 90 ? "#DC2626"
-    : usedPct >= 75 ? "#D97706"
-    :                 "rgba(15, 23, 42, 0.85)";
+  // Bar stays a single neutral tone regardless of % used. Earlier
+  // this escalated to amber at 75% and red at 90%, but the demo
+  // has too many ranges + toggles for that mapping to stay honest.
+  // The % number and remaining copy carry the urgency on their own.
+  const barTone = "rgba(15, 23, 42, 0.85)";
 
   return (
     <div className="bg-white border border-border rounded-card p-5">
@@ -1845,12 +1854,6 @@ function UtilizationByProductTable({ rangeDays }: { rangeDays: number }) {
       <div>
         {rows.map(({ module: m, ratio, caps }, productIdx) => {
           const ModIcon = m.icon;
-          const dl      = m.dailyLimit;
-          const dlPct   = dl && dl.count > 0 ? Math.min(100, (dl.used / dl.count) * 100) : 0;
-          const dlTone  =
-              dl && dlPct >= 90 ? "#DC2626"
-            : dl && dlPct >= 75 ? "#D97706"
-            : null;
           return (
             <div
               key={m.id}
@@ -1873,19 +1876,9 @@ function UtilizationByProductTable({ rangeDays }: { rangeDays: number }) {
                     <p className="text-[13px] font-semibold text-text-primary truncate">
                       {m.name}
                     </p>
-                    {dl && (
-                      <p className="text-[10.5px] text-text-tertiary tabular-nums inline-flex items-center gap-1.5 mt-0.5">
-                        {dlTone && (
-                          <span
-                            className="w-1.5 h-1.5 rounded-full"
-                            style={{ background: dlTone }}
-                            aria-hidden
-                          />
-                        )}
-                        <Timer size={10} strokeWidth={1.75} className="text-text-tertiary" />
-                        Daily {formatNum(dl.used)} / {formatNum(dl.count)} {dl.unit}{dl.count === 1 ? "" : "s"}
-                      </p>
-                    )}
+                    {/* Daily-limit chip moved to the module's own page
+                        header (e.g. /enrichment) — it's a per-module
+                        operational signal, not a usage breakdown line. */}
                   </div>
                 </div>
                 <div /> {/* Units col is blank on the product header */}
@@ -2130,16 +2123,6 @@ function ModulesTable({
       <div>
         {rows.map(({ module: m, used, pctOfPool, ratio, caps }, productIdx) => {
           const ModIcon = m.icon;
-          const dl      = m.dailyLimit;
-          // Daily-limit chip tone — only escalates when the org is
-          // genuinely close to the ceiling so the colour means
-          // something when it appears.
-          const dlPct   = dl && dl.count > 0 ? Math.min(100, (dl.used / dl.count) * 100) : 0;
-          const dlTone  =
-              dl && dlPct >= 90 ? "#DC2626"
-            : dl && dlPct >= 75 ? "#D97706"
-            : null;
-
           return (
             <div
               key={m.id}
@@ -2165,19 +2148,9 @@ function ModulesTable({
                     <p className="text-[13px] font-semibold text-text-primary truncate">
                       {m.name}
                     </p>
-                    {dl && (
-                      <p className="text-[10.5px] text-text-tertiary tabular-nums inline-flex items-center gap-1.5 mt-0.5">
-                        {dlTone && (
-                          <span
-                            className="w-1.5 h-1.5 rounded-full"
-                            style={{ background: dlTone }}
-                            aria-hidden
-                          />
-                        )}
-                        <Timer size={10} strokeWidth={1.75} className="text-text-tertiary" />
-                        Daily {formatNum(dl.used)} / {formatNum(dl.count)} {dl.unit}{dl.count === 1 ? "" : "s"}
-                      </p>
-                    )}
+                    {/* Daily-limit chip moved to the module's own page
+                        header (e.g. /enrichment) — it's a per-module
+                        operational signal, not a billing breakdown line. */}
                   </div>
                 </div>
                 {/* Units column — blank on the product header (the
