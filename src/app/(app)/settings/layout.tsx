@@ -2,18 +2,16 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, CreditCard, Plug, UserCircle2 } from "lucide-react";
+import { BarChart3, Plug, UserCircle2 } from "lucide-react";
 
-// Flat list in the order the user asked for: Usage answers "what's
-// been consumed?", Billing covers cycle / invoices / top-ups,
-// Integrations covers the connected systems, and Profile holds
-// account actions (including Log out). URLs stay as-is so
-// /settings/utilization keeps working for bookmarks. Agency and
-// Workspace still live at their routes for deep links but aren't
-// surfaced in the nav.
+// Billing is intentionally out of scope for now — the design
+// conversation is parked on Usage and won't touch billing-mode
+// switching, invoices, or top-up estimator surfaces until we come
+// back to it. The /settings/billing route file stays in place so
+// we can rewire the nav entry later without rebuilding the page;
+// nothing visible points at it.
 const SETTINGS_NAV = [
   { name: "Usage",        href: "/settings/utilization",  icon: BarChart3 },
-  { name: "Billing",      href: "/settings/billing",      icon: CreditCard },
   { name: "Integrations", href: "/settings/integrations", icon: Plug },
   { name: "Profile",      href: "/settings/profile",      icon: UserCircle2 },
 ];
