@@ -52,7 +52,7 @@ import {
   MessageCircle,
 } from "lucide-react";
 import { useDemoMode } from "@/lib/demo-mode";
-import { useProducts, PRODUCT_PRESETS, currentPreset, type ProductPreset } from "@/lib/products";
+import { useProducts, PRODUCT_PRESETS, currentPreset, type ProductKey, type ProductPreset } from "@/lib/products";
 import { useSpotStore } from "@/lib/spot/store";
 import { SpotMark } from "@/components/spot/spot-mark";
 import { WorkspaceSwitcher, UserRolePill } from "@/components/layout/workspace-switcher";
@@ -60,12 +60,32 @@ import { useCurrentUser } from "@/lib/workspace-store";
 import { poolSummary } from "@/lib/credits-data";
 
 // ─── Top standalone items (above sections) ───────────────────────
+// Nav items carry their own entitlement so the renderer can lock/unlock
+// each row independently without a giant URL-match ladder. `product` is
+// an array (OR semantics): an item with product: ["enrichment",
+// "contact_extraction"] unlocks when the workspace owns either product.
+// Items without a product list are brand-wide / always accessible.
+// `lockedHref` is the route the lock state navigates to; we reuse the
+// two existing /locked stubs since they map cleanly to the data vs.
+// calling worlds.
+type NavMeta = {
+  product?: ProductKey[];
+  lockedHref?: string;
+};
 const dashboardItem = { name: "Dashboard", href: "/dashboard", icon: LayoutGrid };
-const projectsItem  = { name: "Projects",  href: "/projects",  icon: FolderKanban };
-const campaignsItem = { name: "Campaigns", href: "/campaigns", icon: Monitor };
-const memoryItem    = { name: "Memory",    href: "/memory",    icon: Brain };
-const leadsItem     = { name: "Leads",     href: "/enquiries", icon: FileText };
-const outreachItem  = { name: "Outreach",  href: "/outreach",  icon: Send };
+const projectsItem: { name: string; href: string; icon: typeof LayoutGrid } & NavMeta =
+  { name: "Projects",  href: "/projects",  icon: FolderKanban };
+const campaignsItem: { name: string; href: string; icon: typeof LayoutGrid } & NavMeta =
+  { name: "Campaigns", href: "/campaigns", icon: Monitor,
+    product: ["campaigns"], lockedHref: "/locked/ai-calling-agents" };
+const memoryItem: { name: string; href: string; icon: typeof LayoutGrid } & NavMeta =
+  { name: "Memory",    href: "/memory",    icon: Brain };
+const leadsItem: { name: string; href: string; icon: typeof LayoutGrid } & NavMeta =
+  { name: "Leads",     href: "/enquiries", icon: FileText,
+    product: ["enrichment", "contact_extraction"], lockedHref: "/locked/contact-extraction" };
+const outreachItem: { name: string; href: string; icon: typeof LayoutGrid } & NavMeta =
+  { name: "Outreach",  href: "/outreach",  icon: Send,
+    product: ["ai_calling"], lockedHref: "/locked/ai-calling-agents" };
 
 function formatInrShort(n: number): string {
   if (n >= 100000) return `₹${(n / 100000).toFixed(n % 100000 === 0 ? 0 : 1)}L`;
@@ -119,18 +139,9 @@ function WalletWidget() {
   );
 }
 
-// When enrichment-only plan is on, only these hrefs survive in the Tools nav.
-// All other sections are hidden entirely.
-const ENRICHMENT_ONLY_HREFS = new Set([
-  "/enrichment",
-  "/contact-extraction",
-  "/agents-mvp",
-]);
-
-// Tools section — data and ops surfaces. Creatives + AI calling
-// agents moved out into their own Agents section because they're
-// agent work, not data tooling. Audiences also moved to Agents as
-// an agent-driven concept (coming soon).
+// Tools section — data and ops surfaces. Each item declares the
+// products that unlock it; the renderer flips it into a locked row
+// when the active product preview doesn't include any of them.
 const toolsSection = {
   label: "Tools",
   items: [
@@ -138,6 +149,8 @@ const toolsSection = {
       name: "Enrichment",
       href: "/enrichment",
       icon: UserSearch,
+      product: ["enrichment"] as ProductKey[],
+      lockedHref: "/locked/contact-extraction",
       children: [
         { name: "Dashboard", href: "/enrichment", icon: LayoutGrid },
         { name: "Enrich", href: "/enrichment/operations", icon: Activity },
@@ -148,6 +161,8 @@ const toolsSection = {
       name: "Extraction",
       href: "/contact-extraction",
       icon: ContactRound,
+      product: ["contact_extraction"] as ProductKey[],
+      lockedHref: "/locked/contact-extraction",
       children: [
         { name: "New extraction", href: "/contact-extraction/operations", icon: ScanLine },
         { name: "All contacts", href: "/contact-extraction/database", icon: ListChecks },
@@ -163,17 +178,29 @@ const toolsSection = {
 const agentsSection = {
   label: "Agents",
   items: [
-    { name: "Voice",     href: "/agents-mvp",      icon: PhoneCall },
+    { name: "Voice",     href: "/agents-mvp",      icon: PhoneCall,
+      product: ["ai_calling"] as ProductKey[], lockedHref: "/locked/ai-calling-agents" },
     { name: "WhatsApp",  href: "/agents/whatsapp", icon: MessageCircle, comingSoon: true },
-    { name: "Creatives", href: "/creatives",       icon: ImageIcon },
+    { name: "Creatives", href: "/creatives",       icon: ImageIcon,
+      product: ["campaigns"] as ProductKey[], lockedHref: "/locked/ai-calling-agents" },
   ],
 };
 
 export function Sidebar() {
   const pathname = usePathname() || "";
   const { isEmpty, toggle, enrichmentVariant, setEnrichmentVariant } = useDemoMode();
-  const { products, setProducts, enrichmentOnly } = useProducts();
+  const { products, setProducts, enrichmentOnly, has } = useProducts();
   const activePreset = currentPreset(products);
+
+  // Render-helper: given an item with optional `product` + `lockedHref`,
+  // decide whether it should render in its locked state and where the
+  // lock points. Items with no `product` are brand-wide (always
+  // accessible). All sections are visible in every preset; this just
+  // flips the row chrome.
+  const lockInfo = (item: NavMeta) => {
+    const isLocked = !!(item.product && !item.product.some(has));
+    return { isLocked, lockedHref: isLocked ? (item.lockedHref ?? null) : null };
+  };
   const spotOpen = useSpotStore((s) => s.open);
   const user = useCurrentUser();
 
@@ -228,54 +255,72 @@ export function Sidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto px-3 py-1 pb-2">
-        {/* Spot row · standalone, top. Hidden in enrichment-only mode. */}
-        {!enrichmentOnly && (
-          <div className="mb-1 space-y-0.5">
-            <Link
-              href="/spot"
-              className={`relative flex items-center gap-2.5 px-2 h-8 rounded-[6px] transition-colors duration-150 ${
-                isUnder("/spot") || spotOpen
-                  ? "bg-surface-secondary text-text-primary font-medium"
-                  : "text-text-secondary hover:bg-surface-secondary/60"
-              }`}
-              style={{ fontSize: "13.5px" }}
-            >
-              <span className="inline-flex items-center justify-center" style={{ width: 16, height: 16 }}>
-                <SpotMark size={14} />
-              </span>
-              <span>Spot</span>
-              <span
-                className="ml-auto"
-                style={{ width: 6, height: 6, borderRadius: "50%", background: "#1A1A1A" }}
-                aria-hidden
-                title="New from Spot"
-              />
-            </Link>
-          </div>
-        )}
+        {/* Spot · brand-wide, always visible. */}
+        <div className="mb-1 space-y-0.5">
+          <Link
+            href="/spot"
+            className={`relative flex items-center gap-2.5 px-2 h-8 rounded-[6px] transition-colors duration-150 ${
+              isUnder("/spot") || spotOpen
+                ? "bg-surface-secondary text-text-primary font-medium"
+                : "text-text-secondary hover:bg-surface-secondary/60"
+            }`}
+            style={{ fontSize: "13.5px" }}
+          >
+            <span className="inline-flex items-center justify-center" style={{ width: 16, height: 16 }}>
+              <SpotMark size={14} />
+            </span>
+            <span>Spot</span>
+            <span
+              className="ml-auto"
+              style={{ width: 6, height: 6, borderRadius: "50%", background: "#1A1A1A" }}
+              aria-hidden
+              title="New from Spot"
+            />
+          </Link>
+        </div>
 
-        {/* Dashboard · standalone, above the labelled sections.
-            Hidden in enrichment-only mode. */}
-        {!enrichmentOnly && (
-          <div className="mb-3 space-y-0.5">
-            <Link
-              key={dashboardItem.href}
-              href={dashboardItem.href}
-              className={navLinkClass(isUnder(dashboardItem.href))}
-              style={{ fontSize: "13.5px" }}
-            >
-              <dashboardItem.icon size={16} strokeWidth={1.5} />
-              <span>{dashboardItem.name}</span>
-            </Link>
-          </div>
-        )}
+        {/* Dashboard · brand-wide standalone, above the sections. */}
+        <div className="mb-3 space-y-0.5">
+          <Link
+            key={dashboardItem.href}
+            href={dashboardItem.href}
+            className={navLinkClass(isUnder(dashboardItem.href))}
+            style={{ fontSize: "13.5px" }}
+          >
+            <dashboardItem.icon size={16} strokeWidth={1.5} />
+            <span>{dashboardItem.name}</span>
+          </Link>
+        </div>
 
-        {/* LAUNCH section · top-level customer-facing workflows. */}
-        {!enrichmentOnly && (
-          <div className="mb-3">
-            <div className="label-section px-2 mb-1">Launch</div>
-            <div className="space-y-0.5">
-              {[projectsItem, campaignsItem, memoryItem, outreachItem].map((item) => (
+        {/* LAUNCH · always rendered; each row locks individually based
+            on the active product preview preset. Projects and Memory
+            are brand-wide; Campaigns needs campaigns, Outreach needs
+            ai_calling. */}
+        <div className="mb-3">
+          <div className="label-section px-2 mb-1">Launch</div>
+          <div className="space-y-0.5">
+            {[projectsItem, campaignsItem, memoryItem, outreachItem].map((item) => {
+              const { lockedHref } = lockInfo(item);
+              if (lockedHref) {
+                const locked = isUnder(lockedHref);
+                return (
+                  <Link
+                    key={item.href}
+                    href={lockedHref}
+                    className={`relative flex items-center gap-2.5 px-2 h-8 rounded-[6px] transition-colors duration-150 ${
+                      locked
+                        ? "bg-surface-secondary text-text-primary font-medium"
+                        : "text-text-tertiary hover:bg-surface-secondary/60 hover:text-text-secondary"
+                    }`}
+                    style={{ fontSize: "13.5px" }}
+                  >
+                    <item.icon size={16} strokeWidth={1.5} />
+                    <span>{item.name}</span>
+                    <Lock size={11} strokeWidth={1.75} className="ml-auto text-text-tertiary" aria-label="Locked" />
+                  </Link>
+                );
+              }
+              return (
                 <Link
                   key={item.href}
                   href={item.href}
@@ -285,29 +330,22 @@ export function Sidebar() {
                   <item.icon size={16} strokeWidth={1.5} />
                   <span>{item.name}</span>
                 </Link>
-              ))}
-            </div>
+              );
+            })}
           </div>
-        )}
+        </div>
 
-        {/* Tools section · the only labelled section. Filtered down to
-            enrichment + contact-extraction + agents in enrichment-only mode. */}
+        {/* Tools section · always rendered. Each item locks
+            individually based on the active product preview. */}
         {(() => {
-          const items = enrichmentOnly
-            ? toolsSection.items.filter((it) => ENRICHMENT_ONLY_HREFS.has(it.href))
-            : toolsSection.items;
+          const items = toolsSection.items;
           if (items.length === 0) return null;
           return (
             <div className="mb-3">
               <div className="label-section px-2 mb-1">{toolsSection.label}</div>
               <div className="space-y-0.5">
                 {items.map((item) => {
-                  const lockedHref =
-                    enrichmentOnly && item.href === "/contact-extraction"
-                      ? "/locked/contact-extraction"
-                      : enrichmentOnly && item.href === "/agents-mvp"
-                        ? "/locked/ai-calling-agents"
-                        : null;
+                  const { lockedHref } = lockInfo(item);
                   if (lockedHref) {
                     const locked = isUnder(lockedHref);
                     return (
@@ -435,66 +473,103 @@ export function Sidebar() {
           );
         })()}
 
-        {/* CONTACTS section · contacts the workspace owns. Today
-            just Leads; could grow to Audiences etc. Hidden in
-            enrichment-only mode same as the rest. */}
-        {!enrichmentOnly && (
-          <div className="mb-3">
-            <div className="label-section px-2 mb-1">Contacts</div>
-            <div className="space-y-0.5">
-              <Link
-                key={leadsItem.href}
-                href={leadsItem.href}
-                className={navLinkClass(isUnder(leadsItem.href))}
-                style={{ fontSize: "13.5px" }}
-              >
-                <leadsItem.icon size={16} strokeWidth={1.5} />
-                <span>{leadsItem.name}</span>
-              </Link>
-            </div>
-          </div>
-        )}
-
-        {/* AGENTS section · active agents the workspace can run.
-            Voice is the renamed AI calling surface; WhatsApp is a
-            coming-soon teaser; Creatives moves in from Tools because
-            generation is agent work, not a tool. Hidden in
-            enrichment-only mode. */}
-        {!enrichmentOnly && (
-          <div className="mb-3">
-            <div className="label-section px-2 mb-1">{agentsSection.label}</div>
-            <div className="space-y-0.5">
-              {agentsSection.items.map((item) => {
-                if (item.comingSoon) {
-                  return (
-                    <div
-                      key={item.href}
-                      className="relative flex items-center gap-2.5 px-2 h-8 rounded-[6px] text-text-tertiary cursor-default"
-                      style={{ fontSize: "13.5px" }}
-                    >
-                      <item.icon size={16} strokeWidth={1.5} />
-                      <span>{item.name}</span>
-                      <span className="ml-auto text-[8px] font-medium px-1 py-0.5 rounded bg-surface-secondary text-text-tertiary">
-                        Soon
-                      </span>
-                    </div>
-                  );
-                }
+        {/* CONTACTS section · always rendered; Leads unlocks for any
+            workspace that owns enrichment or contact-extraction. */}
+        <div className="mb-3">
+          <div className="label-section px-2 mb-1">Contacts</div>
+          <div className="space-y-0.5">
+            {(() => {
+              const { lockedHref } = lockInfo(leadsItem);
+              if (lockedHref) {
+                const locked = isUnder(lockedHref);
                 return (
                   <Link
+                    key={leadsItem.href}
+                    href={lockedHref}
+                    className={`relative flex items-center gap-2.5 px-2 h-8 rounded-[6px] transition-colors duration-150 ${
+                      locked
+                        ? "bg-surface-secondary text-text-primary font-medium"
+                        : "text-text-tertiary hover:bg-surface-secondary/60 hover:text-text-secondary"
+                    }`}
+                    style={{ fontSize: "13.5px" }}
+                  >
+                    <leadsItem.icon size={16} strokeWidth={1.5} />
+                    <span>{leadsItem.name}</span>
+                    <Lock size={11} strokeWidth={1.75} className="ml-auto text-text-tertiary" aria-label="Locked" />
+                  </Link>
+                );
+              }
+              return (
+                <Link
+                  key={leadsItem.href}
+                  href={leadsItem.href}
+                  className={navLinkClass(isUnder(leadsItem.href))}
+                  style={{ fontSize: "13.5px" }}
+                >
+                  <leadsItem.icon size={16} strokeWidth={1.5} />
+                  <span>{leadsItem.name}</span>
+                </Link>
+              );
+            })()}
+          </div>
+        </div>
+
+        {/* AGENTS section · always rendered. Voice needs ai_calling,
+            Creatives needs campaigns; WhatsApp is a coming-soon
+            teaser independent of entitlement. */}
+        <div className="mb-3">
+          <div className="label-section px-2 mb-1">{agentsSection.label}</div>
+          <div className="space-y-0.5">
+            {agentsSection.items.map((item) => {
+              if ("comingSoon" in item && item.comingSoon) {
+                return (
+                  <div
                     key={item.href}
-                    href={item.href}
-                    className={navLinkClass(isUnder(item.href))}
+                    className="relative flex items-center gap-2.5 px-2 h-8 rounded-[6px] text-text-tertiary cursor-default"
                     style={{ fontSize: "13.5px" }}
                   >
                     <item.icon size={16} strokeWidth={1.5} />
                     <span>{item.name}</span>
+                    <span className="ml-auto text-[8px] font-medium px-1 py-0.5 rounded bg-surface-secondary text-text-tertiary">
+                      Soon
+                    </span>
+                  </div>
+                );
+              }
+              const { lockedHref } = lockInfo(item);
+              if (lockedHref) {
+                const locked = isUnder(lockedHref);
+                return (
+                  <Link
+                    key={item.href}
+                    href={lockedHref}
+                    className={`relative flex items-center gap-2.5 px-2 h-8 rounded-[6px] transition-colors duration-150 ${
+                      locked
+                        ? "bg-surface-secondary text-text-primary font-medium"
+                        : "text-text-tertiary hover:bg-surface-secondary/60 hover:text-text-secondary"
+                    }`}
+                    style={{ fontSize: "13.5px" }}
+                  >
+                    <item.icon size={16} strokeWidth={1.5} />
+                    <span>{item.name}</span>
+                    <Lock size={11} strokeWidth={1.75} className="ml-auto text-text-tertiary" aria-label="Locked" />
                   </Link>
                 );
-              })}
-            </div>
+              }
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={navLinkClass(isUnder(item.href))}
+                  style={{ fontSize: "13.5px" }}
+                >
+                  <item.icon size={16} strokeWidth={1.5} />
+                  <span>{item.name}</span>
+                </Link>
+              );
+            })}
           </div>
-        )}
+        </div>
       </nav>
 
       {/* Wallet — always visible above the demo controls */}
