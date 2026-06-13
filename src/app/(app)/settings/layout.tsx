@@ -2,26 +2,26 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Building2, Sparkles, BarChart3, CreditCard, Plug } from "lucide-react";
+import { BarChart3, CreditCard, Plug, UserCircle2 } from "lucide-react";
 
-const ACCOUNT_NAV = [
-  { name: "Agency", href: "/settings/agency", icon: Building2 },
-  { name: "Workspace", href: "/settings/workspace", icon: Sparkles },
-  // "Utilization" is the home for balance + consumption. The route is
-  // /settings/utilization so the URL matches the label; the legacy
-  // /settings/wallet route still works but isn't surfaced in the nav.
-  { name: "Utilization", href: "/settings/utilization", icon: BarChart3 },
-  { name: "Billing", href: "/settings/billing", icon: CreditCard },
-];
-
-const CONNECTIONS_NAV = [
+// Flat list in the order the user asked for: Usage answers "what's
+// been consumed?", Billing covers cycle / invoices / top-ups,
+// Integrations covers the connected systems, and Profile holds
+// account actions (including Log out). URLs stay as-is so
+// /settings/utilization keeps working for bookmarks. Agency and
+// Workspace still live at their routes for deep links but aren't
+// surfaced in the nav.
+const SETTINGS_NAV = [
+  { name: "Usage",        href: "/settings/utilization",  icon: BarChart3 },
+  { name: "Billing",      href: "/settings/billing",      icon: CreditCard },
   { name: "Integrations", href: "/settings/integrations", icon: Plug },
+  { name: "Profile",      href: "/settings/profile",      icon: UserCircle2 },
 ];
 
 export default function SettingsLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
-  const renderLink = (item: { name: string; href: string; icon: typeof Building2 }) => {
+  const renderLink = (item: { name: string; href: string; icon: typeof BarChart3 }) => {
     const active = pathname === item.href || pathname.startsWith(item.href + "/");
     return (
       <Link
@@ -48,21 +48,13 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
           Manage your account, integrations, and lead delivery.
         </p>
       </div>
-      <div className="flex gap-8">
-        <aside className="w-[200px] flex-shrink-0">
-          <nav className="space-y-4">
-            <div className="space-y-0.5">
-              <div className="px-2 mb-1 text-[9.5px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">
-                Account
-              </div>
-              {ACCOUNT_NAV.map(renderLink)}
-            </div>
-            <div className="space-y-0.5">
-              <div className="px-2 mb-1 text-[9.5px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">
-                Connections
-              </div>
-              {CONNECTIONS_NAV.map(renderLink)}
-            </div>
+      <div className="flex gap-5">
+        <aside className="w-[176px] flex-shrink-0">
+          {/* Flat list — no Account/Connections sub-headers. With only
+              four items the headers were paying rent without earning
+              it: extra vertical noise for a forced grouping. */}
+          <nav className="space-y-0.5">
+            {SETTINGS_NAV.map(renderLink)}
           </nav>
         </aside>
         <main className="flex-1 min-w-0">{children}</main>
