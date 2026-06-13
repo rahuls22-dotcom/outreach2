@@ -3605,16 +3605,22 @@ function LeadCoverageBar({
         </div>
       </div>
       <div className="flex-1 min-w-0">
+        {/* Labels deliberately spell out "first-time dialing" — the
+            previous "Called / Remaining" pair was ambiguous (does
+            "Called" mean answered? connected? at-least-once dialed?).
+            "Dialled at least once" is unambiguous and the inverse
+            phrasing on Remaining ("Awaiting first dial") keeps the
+            two halves parallel in tense. */}
         <div className="flex items-center justify-between mb-1.5 text-[11.5px] flex-wrap gap-y-1">
           <span className="inline-flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-text-primary" />
-            <span className="text-text-secondary">Called</span>
+            <span className="text-text-secondary">Dialled at least once</span>
             <span className="font-medium text-text-primary tabular-nums">{called.toLocaleString()}</span>
             <span className="text-text-tertiary tabular-nums">({Math.round(calledPct)}%)</span>
           </span>
           <span className="inline-flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-border" />
-            <span className="text-text-secondary">Remaining</span>
+            <span className="text-text-secondary">Awaiting first dial</span>
             <span className="font-medium text-text-primary tabular-nums">{remaining.toLocaleString()}</span>
             <span className="text-text-tertiary tabular-nums">({Math.round(100 - calledPct)}%)</span>
           </span>
