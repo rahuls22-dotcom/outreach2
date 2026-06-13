@@ -64,9 +64,14 @@ export default function LoginPage() {
   const emailValid = EMAIL_RE.test(email.trim());
 
   const finish = () => {
-    const next =
-      new URLSearchParams(window.location.search).get("next") || "/spot";
-    router.replace(next);
+    // Always land on Spot after a fresh login — Spot is the canonical
+    // post-login surface and the place new sessions should start. The
+    // older behaviour honoured a ?next= param so the user resumed where
+    // their session had timed out, but that meant a user whose session
+    // expired on /settings/* bounced back into Settings (which now hides
+    // Billing for v1 anyway) instead of seeing Spot first. Drop the
+    // resume-where-you-were dance until we re-evaluate it.
+    router.replace("/spot");
   };
 
   const sendCode = (e?: React.FormEvent) => {
