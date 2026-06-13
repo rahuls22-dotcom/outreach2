@@ -37,6 +37,9 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Phone,
+  Mail,
+  MapPin,
+  Copy,
 } from "lucide-react";
 import { format } from "date-fns";
 import {
@@ -254,6 +257,168 @@ function StatusActionButton({
         </>
       )}
     </>
+  );
+}
+
+// ── Lead profile intelligence ──────────────────────────────────────────────
+// Derive enrichment-style profile fields off the contact id so the
+// drill-down Profile tab can show city / languages / gender / email
+// without us needing real enrichment data. Deterministic — same id
+// always lands on the same fields, so the demo doesn't churn between
+// views.
+function deriveProfileIntelligence(contact: OutreachContact): {
+  email:        string;
+  gender:       "M" | "F" | null;
+  languages:    string[];
+  location:     string;
+  locationType: string;
+} {
+  // Cheap deterministic hash over the contact id — used to pick stable
+  // values from the lookup arrays below. Same id always lands on the
+  // same email/location.
+  let h = 0;
+  for (let i = 0; i < contact.id.length; i++) {
+    h = (h * 31 + contact.id.charCodeAt(i)) | 0;
+  }
+  const pick = <T,>(arr: T[]) => arr[Math.abs(h ^ arr.length * 7919) % arr.length];
+
+  // Cities cover a Metro / Non-metro mix so the Location Type field
+  // reads as varied across leads.
+  const cities = [
+    { city: "Mumbai",      state: "Maharashtra",   type: "india_metro" },
+    { city: "Bangalore",   state: "Karnataka",     type: "india_metro" },
+    { city: "Pune",        state: "Maharashtra",   type: "india_metro" },
+    { city: "Hyderabad",   state: "Telangana",     type: "india_metro" },
+    { city: "Chennai",     state: "Tamil Nadu",    type: "india_metro" },
+    { city: "Indore",      state: "Madhya Pradesh", type: "india_non_metro" },
+    { city: "Lucknow",     state: "Uttar Pradesh", type: "india_non_metro" },
+    { city: "Coimbatore",  state: "Tamil Nadu",    type: "india_non_metro" },
+    { city: "Nagpur",      state: "Maharashtra",   type: "india_non_metro" },
+    { city: "Kochi",       state: "Kerala",        type: "india_non_metro" },
+  ];
+  const city = pick(cities);
+
+  const emailProviders = ["gmail.com", "yahoo.com", "outlook.com", "icloud.com"];
+  const firstWord = contact.name.replace(/\*/g, "").split(/\s+/)[0]?.toLowerCase() || "user";
+  const emailLocal = `${firstWord[0] || "s"}*****`;
+  const email = `${emailLocal}@${pick(emailProviders)}`;
+
+  const languagePairs = [
+    ["Hindi", "English"],
+    ["Marathi", "Hindi", "English"],
+    ["Tamil", "English"],
+    ["Telugu", "English"],
+    ["Kannada", "English"],
+    ["English"],
+    ["Hindi", "English", "Marathi"],
+  ];
+  const languages = pick(languagePairs);
+
+  return {
+    email,
+    gender:       (h % 2 === 0 ? "M" : "F"),
+    languages,
+    location:     `${city.city}, ${city.state}, India`,
+    locationType: city.type,
+  };
+}
+
+// ── Profile tab — drill-down right panel ───────────────────────────────────
+// Shows Contact Details (location/phone/email with copy buttons) and
+// two Intelligence sections (Profile + Geographical). Replaces the
+// older single-column [label, value] list which buried the rich fields
+// in noise and duplicated the Outcome (already covered by Qualification
+// status and the AI Qualification column on the contacts table).
+function ProfileTab({ contact }: { contact: OutreachContact }) {
+  const intel = useMemo(() => deriveProfileIntelligence(contact), [contact]);
+  const locationTypeLabels: Record<string, string> = {
+    india_metro:     "India Metro",
+    india_non_metro: "India Non-Metro",
+  };
+  const copyText = (s: string) => {
+    if (typeof navigator !== "undefined") navigator.clipboard?.writeText(s).catch(() => {});
+  };
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h3 className="text-[11px] font-medium text-text-tertiary uppercase tracking-[0.5px] mb-3">
+          Contact Details
+        </h3>
+        <div className="bg-surface-page rounded-[8px] divide-y divide-border-subtle">
+          <div className="flex items-center gap-3 px-4 py-3">
+            <MapPin size={14} strokeWidth={1.5} className="text-text-tertiary shrink-0" />
+            <span className="text-[13px] text-text-primary">{intel.location}</span>
+          </div>
+          <div className="flex items-center justify-between px-4 py-3">
+            <div className="flex items-center gap-3">
+              <Phone size={14} strokeWidth={1.5} className="text-text-tertiary shrink-0" />
+              <span className="text-[13px] text-text-primary">{contact.phone}</span>
+            </div>
+            <button
+              onClick={() => copyText(contact.phone)}
+              className="p-1.5 rounded text-text-tertiary hover:text-text-primary hover:bg-surface-secondary transition-colors"
+              title="Copy phone"
+            >
+              <Copy size={12} strokeWidth={1.5} />
+            </button>
+          </div>
+          <div className="flex items-center justify-between px-4 py-3">
+            <div className="flex items-center gap-3">
+              <Mail size={14} strokeWidth={1.5} className="text-text-tertiary shrink-0" />
+              <span className="text-[13px] text-text-primary">{intel.email}</span>
+            </div>
+            <button
+              onClick={() => copyText(intel.email)}
+              className="p-1.5 rounded text-text-tertiary hover:text-text-primary hover:bg-surface-secondary transition-colors"
+              title="Copy email"
+            >
+              <Copy size={12} strokeWidth={1.5} />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <h3 className="text-[11px] font-medium text-text-tertiary uppercase tracking-[0.5px] mb-3">
+          Intelligence
+        </h3>
+
+        <div className="bg-surface-page rounded-[8px] p-4 mb-3">
+          <h4 className="text-[12px] font-medium text-text-primary mb-2.5">Profile Intelligence</h4>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <div className="text-[11px] text-text-tertiary">Gender</div>
+              <div className="text-[13px] text-text-primary mt-0.5">
+                {intel.gender === "M" ? "Male" : intel.gender === "F" ? "Female" : "Not Available"}
+              </div>
+            </div>
+            <div>
+              <div className="text-[11px] text-text-tertiary">Languages</div>
+              <div className="text-[13px] text-text-primary mt-0.5">
+                {intel.languages.length > 0 ? intel.languages.join(", ") : "Not Available"}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-surface-page rounded-[8px] p-4">
+          <h4 className="text-[12px] font-medium text-text-primary mb-2.5">Geographical Intelligence</h4>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <div className="text-[11px] text-text-tertiary">Location</div>
+              <div className="text-[13px] text-text-primary mt-0.5">{intel.location}</div>
+            </div>
+            <div>
+              <div className="text-[11px] text-text-tertiary">Location Type</div>
+              <div className="text-[13px] text-text-primary mt-0.5">
+                {locationTypeLabels[intel.locationType] || intel.locationType}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -2067,29 +2232,7 @@ function LeadDrillDown({ contact, onClose }: { contact: OutreachContact; onClose
             </div>
           )}
 
-          {tab === "profile" && (
-            <div className="divide-y divide-border-subtle">
-              {[
-                // Outcome was removed — for qualified leads it duplicated
-                // Qual status verbatim, and qualStatus is the canonical
-                // qualification field used in the filter tabs and the AI
-                // Qualification column of the contacts table.
-                { label: "Phone",         value: contact.phone },
-                { label: "Lead type",     value: contact.leadType.replace("_", " ") },
-                { label: "AI qualification", value: contact.qualStatus ?? "—" },
-                { label: "Verified",      value: contact.verified ? "Yes" : "No" },
-                { label: "Sent to CRM",   value: contact.sentToCrm ? "Yes" : "No" },
-                { label: "Created",       value: format(new Date(contact.createdAt), "dd MMM yyyy, HH:mm") },
-                { label: "Updated",       value: format(new Date(contact.updatedAt), "dd MMM yyyy, HH:mm") },
-                { label: "Last called",   value: contact.calledAt ? format(new Date(contact.calledAt), "dd MMM yyyy, HH:mm") : "—" },
-              ].map((row) => (
-                <div key={row.label} className="grid grid-cols-[140px_1fr] gap-4 py-3">
-                  <span className="text-[11.5px] font-medium text-text-secondary">{row.label}</span>
-                  <span className="text-[13px] text-text-primary capitalize">{String(row.value)}</span>
-                </div>
-              ))}
-            </div>
-          )}
+          {tab === "profile" && <ProfileTab contact={contact} />}
 
           {tab === "logs" && (
             <div className="space-y-5">
@@ -2609,14 +2752,13 @@ export default function OutreachDetailPage() {
   // on a "(filtered)" qualifier so they don't accidentally export less than
   // they expected.
   const activeTabLabel = FILTER_TABS.find(t => t.id === activeFilter)?.label ?? "All";
-  const exportNoun =
-      activeFilter === "all"          ? "leads"
-    : activeFilter === "yet_to_dial"  ? "not-yet-dialed leads"
-    : activeFilter === "qualified"    ? "qualified leads"
-    : activeFilter === "follow_up"    ? "follow-up leads"
-    : "disqualified leads";
   const hasExtraFilter = popoverFilterCount > 0 || search.trim().length > 0;
-  const exportLabel = `Export ${filtered.length.toLocaleString()} ${exportNoun}${hasExtraFilter ? " (filtered)" : ""}`;
+  // Compact form — the row count alone tells the user how many rows
+  // the CSV will carry; the active tab is already shown above the
+  // table so we don't need to restate "qualified leads" / etc in the
+  // button. A trailing "· filtered" surfaces when extra filters
+  // narrow the export below the tab count.
+  const exportLabel = `Export (${filtered.length.toLocaleString()})${hasExtraFilter ? " · filtered" : ""}`;
 
   const handleExportContacts = () => {
     if (filtered.length === 0) return;
