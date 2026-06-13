@@ -106,7 +106,7 @@ function WalletWidget() {
             {formatInrShort(totalCredits)}
           </span>
           <Link
-            href="/settings/billing"
+            href="/settings/utilization"
             className="inline-flex items-center gap-0.5 text-[10px] font-medium text-text-primary hover:underline"
             title={`${formatInrShort(Math.max(0, totalCredits - utilized))} left this cycle`}
           >
