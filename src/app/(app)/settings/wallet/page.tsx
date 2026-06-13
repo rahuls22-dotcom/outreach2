@@ -67,8 +67,17 @@ function presetToDays(preset: string): number {
 // the cycle has already ended. For these, "USED TILL NOW" is wrong
 // (nothing's still ticking) and the hero label should switch to a
 // settled-total framing that names the period.
+// Returns true when the selected range is a fully closed past window
+// (its end date is before today). "Till now" only appears when the
+// range's end is today or later.
 function isPastPreset(preset: string): boolean {
-  return preset === "yesterday" || preset === "lastweek" || preset === "lastmonth";
+  const r = getPresetRange(preset);
+  if (!r) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const end = new Date(r.end);
+  end.setHours(0, 0, 0, 0);
+  return end < today;
 }
 
 // Indian-locale "1 Mar – 23 Mar 2026" formatting. Drops the year
