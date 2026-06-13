@@ -45,7 +45,6 @@ import {
   Lock,
   PhoneCall,
   Wallet,
-  Plus,
   Send,
   Brain,
   ChevronDown,
@@ -119,20 +118,15 @@ function WalletWidget() {
             style={{ width: `${pctUsed.toFixed(1)}%`, background: tone.bar }}
           />
         </div>
-        <div className="flex items-center justify-between mt-1.5 text-[10px] tabular-nums">
+        {/* Top up affordance removed for v1 — the wallet shows the
+            running state but adding money isn't a v1 surface; it
+            comes back when we revisit billing. */}
+        <div className="flex items-center mt-1.5 text-[10px] tabular-nums">
           <span className="text-text-tertiary">
             <span className="text-text-secondary font-medium">{formatInrShort(utilized)}</span>
             <span className="mx-0.5">/</span>
             {formatInrShort(totalCredits)}
           </span>
-          <Link
-            href="/settings/utilization"
-            className="inline-flex items-center gap-0.5 text-[10px] font-medium text-text-primary hover:underline"
-            title={`${formatInrShort(Math.max(0, totalCredits - utilized))} left this cycle`}
-          >
-            <Plus size={9} strokeWidth={2.5} />
-            Top up
-          </Link>
         </div>
       </div>
     </div>
