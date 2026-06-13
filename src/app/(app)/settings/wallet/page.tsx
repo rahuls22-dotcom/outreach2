@@ -34,6 +34,7 @@ import {
 import type { Currency } from "@/lib/credits-data";
 import { useCurrencyStore } from "@/lib/currency-store";
 import { useBillingModeStore, type BillingMode, type WalletBalanceState, isBalanceBlocking } from "@/lib/billing-mode-store";
+import { useProducts } from "@/lib/products";
 import { LowBalanceModal } from "@/components/wallet/low-balance-modal";
 import { WalletCard } from "@/components/wallet/wallet-card";
 import { TopUpEstimatorModal } from "@/components/wallet/top-up-estimator-modal";
@@ -219,8 +220,8 @@ interface ChartData {
   unit:        "hour" | "day" | "week";
 }
 
-function buildChartBuckets(rangeDays: number): ChartData {
-  const seriesPerWallet = WALLETS.map((w) => sliceDailyToRange(w.daily, rangeDays));
+function buildChartBuckets(rangeDays: number, wallets = WALLETS): ChartData {
+  const seriesPerWallet = wallets.map((w) => sliceDailyToRange(w.daily, rangeDays));
   const dailyDates       = seriesPerWallet[0].map((d) => d.date);
 
   // Choose unit based on range. The thresholds keep the bar count
@@ -295,7 +296,7 @@ function buildChartBuckets(rangeDays: number): ChartData {
     }
   }
 
-  const walletTotals = WALLETS.map((_, i) =>
+  const walletTotals = wallets.map((_, i) =>
     buckets.reduce((s, b) => s + b.perWallet[i], 0)
   );
   const grandTotal = walletTotals.reduce((s, n) => s + n, 0);
@@ -333,6 +334,23 @@ export default function WalletSettingsPage({ view = "utilization" }: { view?: Wa
   // Treat the legacy "wallet" view as a synonym for "utilization" so
   // the rest of the file only has to branch on two cases.
   const v: "utilization" | "billing" = view === "billing" ? "billing" : "utilization";
+
+  // Filter wallets to only those whose product the workspace owns.
+  const { has } = useProducts();
+  const WALLET_PRODUCT_MAP: Record<string, import("@/lib/products").ProductKey> = {
+    "contact-extraction": "contact_extraction",
+    "enrichment":         "enrichment",
+    "ai-calling":         "ai_calling",
+  };
+  const activeWallets = useMemo(
+    () => WALLETS.filter((w) => {
+      const pk = WALLET_PRODUCT_MAP[w.id];
+      return pk ? has(pk) : true;
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [has],
+  );
+
   // Single credit pool — drives the hero's big remaining number.
   const pool   = useMemo(() => poolSummary(), []);
   const period = useMemo(() => periodProgress(), []);
@@ -476,7 +494,7 @@ export default function WalletSettingsPage({ view = "utilization" }: { view?: Wa
               figure reads as a settled total, not a running tally. */}
           <UsageHero
             rangeUtilized={rangeUtilized}
-            productCount={WALLETS.length}
+            productCount={activeWallets.length}
             isPast={isPastPreset(rangePreset)}
             periodLabel={(() => {
               const r = getPresetRange(rangePreset);
@@ -538,7 +556,7 @@ export default function WalletSettingsPage({ view = "utilization" }: { view?: Wa
           revert. Not rendered. */}
       {false && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {WALLETS.map((w) => (
+          {activeWallets.map((w) => (
             <WalletCard key={w.id} wallet={w} rangeDays={range} />
           ))}
         </div>
@@ -563,7 +581,7 @@ export default function WalletSettingsPage({ view = "utilization" }: { view?: Wa
           and its own inline date filter. Lives only on the
           Utilization page because it visualises consumption rather
           than money. */}
-      {v === "utilization" && <WalletUsageChart />}
+      {v === "utilization" && <WalletUsageChart range={range} />}
 
       {/* ── Activity / invoices footer ────────────────────────────────
           Lives only on the Billing route. The wallet route is the
@@ -651,6 +669,14 @@ export default function WalletSettingsPage({ view = "utilization" }: { view?: Wa
 //  because they don't carry a unit count.
 // ────────────────────────────────────────────────────────────────────
 function WalletUtilizationSection({ rangeDays }: { rangeDays: number }) {
+  const { has: hasProduct } = useProducts();
+  const activeWallets = useMemo(
+    () => WALLETS.filter((w) => {
+      const map: Record<string, import("@/lib/products").ProductKey> = { "contact-extraction": "contact_extraction", "enrichment": "enrichment", "ai-calling": "ai_calling" };
+      const pk = map[w.id]; return pk ? hasProduct(pk) : true;
+    }),
+    [hasProduct],
+  );
   // Per-product summary. Each row shows the product identity on the
   // left and a stat per capability on the right — no aggregate hero
   // number for the product. The user pointed out that "total actions
@@ -659,7 +685,7 @@ function WalletUtilizationSection({ rangeDays }: { rangeDays: number }) {
   // the only numbers that actually do: how many phone extractions,
   // how many email extractions, how many minutes talked.
   const moduleRows = useMemo(() => {
-    return WALLETS.map((w) => {
+    return activeWallets.map((w) => {
       const rangeUtilized  = sliceDailyToRange(w.daily, rangeDays).reduce((s, d) => s + d.amount, 0);
       const periodUtilized = w.utilized;
       const ratio = periodUtilized > 0 ? rangeUtilized / periodUtilized : 0;
@@ -798,12 +824,15 @@ function WalletUtilizationSection({ rangeDays }: { rangeDays: number }) {
 //  - Drops the "≈ ₹X" caption next to the credit total — money
 //    lives at the top of the page, repeating it here was noise.
 // ────────────────────────────────────────────────────────────────────
-function WalletUsageChart() {
-  // Independent date filter — the chart owns its own time window so
-  // the user can scope the trend without scrolling back to the page
-  // header. Defaults to the same 30-day preset as the page so the
-  // first view is consistent with the per-product widget above.
-  const [range, setRange] = useState<number>(30);
+function WalletUsageChart({ range }: { range: number }) {
+  const { has: hasProduct } = useProducts();
+  const activeWallets = useMemo(
+    () => WALLETS.filter((w) => {
+      const map: Record<string, import("@/lib/products").ProductKey> = { "contact-extraction": "contact_extraction", "enrichment": "enrichment", "ai-calling": "ai_calling" };
+      const pk = map[w.id]; return pk ? hasProduct(pk) : true;
+    }),
+    [hasProduct],
+  );
 
   // Active product tab. Defaults to WALLETS[0] (Contact Extraction —
   // the topmost product in the per-product utilization widget), per
@@ -813,8 +842,8 @@ function WalletUsageChart() {
 
   // Bucket the daily series for the chart's local range. Reuses the
   // page-level helper so the bucketing logic stays in one place.
-  const days = useMemo(() => buildChartBuckets(range), [range]);
-  const activeWallet = WALLETS[activeIdx];
+  const days = useMemo(() => buildChartBuckets(range, activeWallets), [range, activeWallets]);
+  const activeWallet = activeWallets[activeIdx] ?? activeWallets[0];
 
   // Capabilities of the active product (filtering out plan-feature
   // rows like AI Calling's "Concurrency"). These drive the stacked
@@ -984,24 +1013,14 @@ function WalletUsageChart() {
 
   return (
     <div className="bg-white border border-border rounded-card p-5">
-      {/* Header — title + inline date filter. The DateRangeSelector
-          lives in the widget chrome so the user can scope the trend
-          right where they're reading it. */}
-      <div className="flex items-start justify-between gap-3 mb-3 flex-wrap">
-        <div className="min-w-0">
-          <h3 className="text-[13px] font-semibold text-text-primary flex items-center gap-1.5">
-            <TrendingUp size={13} strokeWidth={1.6} className="text-text-tertiary" />
-            Usage over time
-          </h3>
-          <p className="text-[11.5px] text-text-secondary mt-0.5">
-            {unitWord} consumption in units for one product at a time. Switch products via the tabs below.
-          </p>
-        </div>
-        <DateRangeSelector
-          compact
-          defaultPreset="30"
-          onChange={(preset) => setRange(presetToDays(preset))}
-        />
+      <div className="mb-3">
+        <h3 className="text-[13px] font-semibold text-text-primary flex items-center gap-1.5">
+          <TrendingUp size={13} strokeWidth={1.6} className="text-text-tertiary" />
+          Usage over time
+        </h3>
+        <p className="text-[11.5px] text-text-secondary mt-0.5">
+          {unitWord} consumption in units for one product at a time. Switch products via the tabs below.
+        </p>
       </div>
 
       {/* Product tabs — three tabs (Contact Extraction · Enrichment ·
@@ -1014,7 +1033,7 @@ function WalletUsageChart() {
         role="tablist"
         aria-label="Product"
       >
-        {WALLETS.map((w, i) => {
+        {activeWallets.map((w, i) => {
           const active = i === activeIdx;
           return (
             <button
@@ -1923,11 +1942,19 @@ function UsageHero({
 //  treatment as the Billing table).
 // ────────────────────────────────────────────────────────────────────
 function UtilizationByProductTable({ rangeDays }: { rangeDays: number }) {
+  const { has: hasProduct } = useProducts();
+  const activeWallets = useMemo(
+    () => WALLETS.filter((w) => {
+      const map: Record<string, import("@/lib/products").ProductKey> = { "contact-extraction": "contact_extraction", "enrichment": "enrichment", "ai-calling": "ai_calling" };
+      const pk = map[w.id]; return pk ? hasProduct(pk) : true;
+    }),
+    [hasProduct],
+  );
   // Per-product derived rows. We scale each capability's units by
   // the ratio of range-spend to period-spend so the displayed unit
   // count maps to the selected date range.
   const rows = useMemo(() => {
-    return WALLETS.map((w) => {
+    return activeWallets.map((w) => {
       const series = sliceDailyToRange(w.daily, rangeDays);
       const used   = series.reduce((s, d) => s + d.amount, 0);
       const ratio  = w.utilized > 0 ? used / w.utilized : 0;
@@ -2163,6 +2190,14 @@ function ModulesTable({
   billingMode?: BillingMode;
 }) {
   const [sortKey, setSortKey] = useState<SortKey>("used");
+  const { has: hasProduct } = useProducts();
+  const activeWallets = useMemo(
+    () => WALLETS.filter((w) => {
+      const map: Record<string, import("@/lib/products").ProductKey> = { "contact-extraction": "contact_extraction", "enrichment": "enrichment", "ai-calling": "ai_calling" };
+      const pk = map[w.id]; return pk ? hasProduct(pk) : true;
+    }),
+    [hasProduct],
+  );
 
   // One row per product, with embedded capability sub-rows that
   // always render. Earlier this table hid the capability detail
@@ -2172,7 +2207,7 @@ function ModulesTable({
   // underneath them. Sort applies only to product order — capability
   // rows always stay attached to their parent product.
   const rows = useMemo(() => {
-    return WALLETS.map((w) => {
+    return activeWallets.map((w) => {
       const series    = sliceDailyToRange(w.daily, rangeDays);
       const used      = series.reduce((s, d) => s + d.amount, 0);
       const pctOfPool = totalPool > 0 ? (used / totalPool) * 100 : 0;
