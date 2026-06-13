@@ -709,7 +709,7 @@ function WalletUtilizationSection({ rangeDays }: { rangeDays: number }) {
         }));
       return { module: w, caps };
     });
-  }, [rangeDays]);
+  }, [activeWallets, rangeDays]);
 
   return (
     <div>
@@ -1970,7 +1970,7 @@ function UtilizationByProductTable({ rangeDays }: { rangeDays: number }) {
       const caps   = w.capabilities.filter((c) => !c.included);
       return { module: w, ratio, caps };
     });
-  }, [rangeDays]);
+  }, [activeWallets, rangeDays]);
 
   // Three-column grid — name + units + cost. Share column dropped
   // because its denominator (per-product cap units) wasn't comparable
@@ -2230,7 +2230,7 @@ function ModulesTable({
       if (sortKey === "pct")  return b.pctOfPool - a.pctOfPool;
       return a.module.name.localeCompare(b.module.name);
     });
-  }, [rangeDays, totalPool, sortKey]);
+  }, [activeWallets, rangeDays, totalPool, sortKey]);
 
   // Shared grid template for all rows + header + footer. Five
   // columns: name | units | rate | used | % of plan. Tweaking the
