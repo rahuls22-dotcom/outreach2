@@ -1936,10 +1936,15 @@ function UtilizationByProductTable({ rangeDays }: { rangeDays: number }) {
       </div>
 
       {/* Footnote anchored to the Units* column. Replaces the old
-          subtitle that lived in the (now-dropped) table header. */}
+          subtitle that lived in the (now-dropped) table header.
+          Deliberately omits the time window — the date-range picker
+          right above the table is the source of truth for which window
+          is showing, so restating it here drifted out of sync as soon
+          as someone picked a preset like "This month" or "Lifetime"
+          (or a custom range) whose label wasn't "Last N days". */}
       <div className="px-5 py-2.5 border-t border-border-subtle text-[10.5px] text-text-tertiary">
         <sup className="mr-0.5">*</sup>
-        Last {rangeDays} days · successful only
+        Only successful actions are charged.
       </div>
     </div>
   );
