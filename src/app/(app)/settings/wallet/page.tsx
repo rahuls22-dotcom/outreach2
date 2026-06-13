@@ -37,7 +37,7 @@ import { useBillingModeStore, type BillingMode, type WalletBalanceState, isBalan
 import { LowBalanceModal } from "@/components/wallet/low-balance-modal";
 import { WalletCard } from "@/components/wallet/wallet-card";
 import { TopUpEstimatorModal } from "@/components/wallet/top-up-estimator-modal";
-import { DateRangeSelector } from "@/components/dashboard/date-range-selector";
+import { DateRangeSelector, getPresetRange } from "@/components/dashboard/date-range-selector";
 import { Plus, Receipt, TrendingUp, Calendar, ArrowDown, BarChart3, AlertTriangle, Send } from "lucide-react";
 
 // The shared DateRangeSelector emits a preset string ("7", "30",
@@ -60,6 +60,33 @@ function presetToDays(preset: string): number {
     case "lifetime":   return 90;
     default:           return 30;
   }
+}
+
+// A "past" preset is one whose window is fully closed in the past —
+// the cycle has already ended. For these, "USED TILL NOW" is wrong
+// (nothing's still ticking) and the hero label should switch to a
+// settled-total framing that names the period.
+function isPastPreset(preset: string): boolean {
+  return preset === "yesterday" || preset === "lastweek" || preset === "lastmonth";
+}
+
+// Indian-locale "1 Mar – 23 Mar 2026" formatting. Drops the year
+// from the start when it matches the end (the common case), keeps
+// it when they straddle a year boundary (lifetime / custom).
+function formatPeriod(start: Date, end: Date): string {
+  const sY = start.getFullYear();
+  const eY = end.getFullYear();
+  const startStr = start.toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    ...(sY !== eY ? { year: "numeric" } : {}),
+  });
+  const endStr = end.toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+  return `${startStr} – ${endStr}`;
 }
 
 // Indian comma-grouping number format — used everywhere a raw
@@ -317,6 +344,11 @@ export default function WalletSettingsPage({ view = "utilization" }: { view?: Wa
   // a day count so the existing data helpers don't care which
   // DateRangeSelector preset triggered the change.
   const [range, setRange] = useState<number>(30);
+  // Track the preset value (not just the day count) so the
+  // UsageHero label can flip between rolling and past-period
+  // framing, and so we can name the actual window in the past
+  // case. Defaults match the day-count preset default ("30").
+  const [rangePreset, setRangePreset] = useState<string>("30");
 
   // Range-windowed total — recomputed on every range change.
   const rangeUtilized = useMemo(() => utilizedInRange(range), [range]);
@@ -387,7 +419,10 @@ export default function WalletSettingsPage({ view = "utilization" }: { view?: Wa
           <DateRangeSelector
             compact
             defaultPreset="30"
-            onChange={(preset) => setRange(presetToDays(preset))}
+            onChange={(preset) => {
+              setRange(presetToDays(preset));
+              setRangePreset(preset);
+            }}
           />
           {/* Add money is a billing/wallet action — only relevant on
               the Billing page and only for prepaid customers. Postpaid
@@ -434,8 +469,20 @@ export default function WalletSettingsPage({ view = "utilization" }: { view?: Wa
         <div className="space-y-4">
           {/* Top widget — total used across all modules in the active
               date-range window. Pure consumption story; no Remaining
-              or balance comparison (those belong on Billing). */}
-          <UsageHero rangeUtilized={rangeUtilized} productCount={WALLETS.length} />
+              or balance comparison (those belong on Billing). When the
+              selected window is a closed past period (yesterday / last
+              week / last month), the hero label flips from "USED TILL
+              NOW" to "USED IN PERIOD" and names the window so the
+              figure reads as a settled total, not a running tally. */}
+          <UsageHero
+            rangeUtilized={rangeUtilized}
+            productCount={WALLETS.length}
+            isPast={isPastPreset(rangePreset)}
+            periodLabel={(() => {
+              const r = getPresetRange(rangePreset);
+              return formatPeriod(r.start, r.end);
+            })()}
+          />
           <UtilizationByProductTable rangeDays={range} />
         </div>
       )}
@@ -1824,25 +1871,32 @@ function PostpaidUtilizationEmpty() {
 //  story; the Usage tab is consumption-only.
 //
 //  Label flips between "USED TILL NOW" (rolling preset: today, this
-//  week, this month, last N days, lifetime) and "USAGE IN THIS
-//  PERIOD" (closed past preset: yesterday, last week, last month) —
-//  but the prototype's DateRangeSelector currently only emits a day
-//  count, not a preset name, so we always render the rolling tone
-//  here for now. When the picker grows preset-name awareness, pass
-//  `isPast` in from the parent and the copy adapts.
+//  week, this month, last N days, lifetime) and "USED IN PERIOD"
+//  (closed past preset: yesterday, last week, last month). The past
+//  variant also names the window explicitly so "₹31,067" reads as a
+//  settled total for that period, not a running tally — the
+//  rolling-tense label was actively misleading for past windows.
 // ────────────────────────────────────────────────────────────────────
 function UsageHero({
   rangeUtilized,
   productCount,
+  isPast,
+  periodLabel,
 }: {
   rangeUtilized: number;
   productCount: number;
+  isPast: boolean;
+  periodLabel: string;
 }) {
   const productSuffix = productCount === 1 ? "product" : "products";
+  const label = isPast ? "USED IN PERIOD" : "USED TILL NOW";
+  const bodyCopy = isPast
+    ? `${periodLabel} · Across all ${productCount} ${productSuffix}.`
+    : `Across all ${productCount} ${productSuffix}.`;
   return (
     <div className="bg-white border border-border rounded-card p-5">
       <p className="text-[10px] font-medium text-text-tertiary uppercase tracking-[0.4px] mb-1">
-        USED TILL NOW
+        {label}
       </p>
       <p
         className="text-[36px] font-semibold text-text-primary leading-none tracking-[-0.01em] tabular-nums"
@@ -1851,7 +1905,7 @@ function UsageHero({
         {formatAmount(rangeUtilized, "INR")}
       </p>
       <p className="text-[11.5px] text-text-tertiary mt-1.5">
-        Across all {productCount} {productSuffix}.
+        {bodyCopy}
       </p>
     </div>
   );
