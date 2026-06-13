@@ -42,9 +42,6 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
     <div>
       <div className="mb-6">
         <h1 className="text-[20px] font-semibold text-text-primary">Settings</h1>
-        <p className="text-[12.5px] text-text-secondary mt-0.5">
-          Manage your account, integrations, and lead delivery.
-        </p>
       </div>
       <div className="flex gap-5">
         <aside className="w-[176px] flex-shrink-0">
