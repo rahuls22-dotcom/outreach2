@@ -17,12 +17,18 @@ import {
   type ReactNode,
 } from "react";
 
-export type ProductKey = "enrichment" | "ai_calling" | "campaigns";
+// Contact Extraction is a separate product from Enrichment — the
+// workspace may own one without the other. Added to keep the demo
+// presets honest ("Contact Extraction only" is a real customer
+// shape we want to preview); route gating still treats the four
+// keys independently.
+export type ProductKey = "enrichment" | "contact_extraction" | "ai_calling" | "campaigns";
 
 export const ALL_PRODUCTS: { key: ProductKey; label: string }[] = [
-  { key: "enrichment", label: "Enrichment" },
-  { key: "ai_calling", label: "AI Calling" },
-  { key: "campaigns", label: "Campaigns" },
+  { key: "enrichment",         label: "Enrichment" },
+  { key: "contact_extraction", label: "Contact Extraction" },
+  { key: "ai_calling",         label: "AI Calling" },
+  { key: "campaigns",          label: "Campaigns" },
 ];
 
 interface ProductsContextValue {
@@ -35,7 +41,36 @@ interface ProductsContextValue {
   enrichmentOnly: boolean;
 }
 
-const DEFAULT_PRODUCTS: ProductKey[] = ["enrichment", "ai_calling", "campaigns"];
+const DEFAULT_PRODUCTS: ProductKey[] = ["enrichment", "contact_extraction", "ai_calling", "campaigns"];
+
+// Named presets — each maps to a "preview mode" toggle in the sidebar's
+// Demo controls. Lets the demo flip the whole workspace to a customer
+// profile in one click instead of toggling individual products. Sales
+// uses these because they mirror real customer mixes.
+export type ProductPreset =
+  | "full"
+  | "enrichment_only"
+  | "voice_only"
+  | "contact_extraction_only"
+  | "voice_plus_enrichment";
+
+export const PRODUCT_PRESETS: Record<ProductPreset, ProductKey[]> = {
+  full:                    ["enrichment", "contact_extraction", "ai_calling", "campaigns"],
+  enrichment_only:         ["enrichment"],
+  voice_only:              ["ai_calling", "campaigns"],
+  contact_extraction_only: ["contact_extraction"],
+  voice_plus_enrichment:   ["enrichment", "ai_calling", "campaigns"],
+};
+
+// Resolve which preset (if any) the current product set matches — used
+// to highlight the active button in the sidebar's Demo controls.
+export function currentPreset(products: ProductKey[]): ProductPreset | null {
+  const norm = [...products].sort().join(",");
+  for (const [key, list] of Object.entries(PRODUCT_PRESETS)) {
+    if ([...list].sort().join(",") === norm) return key as ProductPreset;
+  }
+  return null;
+}
 
 const ProductsContext = createContext<ProductsContextValue>({
   products: DEFAULT_PRODUCTS,
@@ -48,7 +83,12 @@ const ProductsContext = createContext<ProductsContextValue>({
 const STORAGE_KEY = "revspot:products";
 
 function isValidProduct(v: string): v is ProductKey {
-  return v === "enrichment" || v === "ai_calling" || v === "campaigns";
+  return (
+    v === "enrichment" ||
+    v === "contact_extraction" ||
+    v === "ai_calling" ||
+    v === "campaigns"
+  );
 }
 
 export function ProductsProvider({ children }: { children: ReactNode }) {

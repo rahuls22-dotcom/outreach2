@@ -34,11 +34,12 @@ import {
 import type { Currency } from "@/lib/credits-data";
 import { useCurrencyStore } from "@/lib/currency-store";
 import { useBillingModeStore, type BillingMode, type WalletBalanceState, isBalanceBlocking } from "@/lib/billing-mode-store";
+import { useProducts } from "@/lib/products";
 import { LowBalanceModal } from "@/components/wallet/low-balance-modal";
 import { WalletCard } from "@/components/wallet/wallet-card";
 import { TopUpEstimatorModal } from "@/components/wallet/top-up-estimator-modal";
-import { DateRangeSelector } from "@/components/dashboard/date-range-selector";
-import { Plus, Receipt, TrendingUp, Calendar, ArrowDown, Timer, BarChart3, AlertTriangle, Send } from "lucide-react";
+import { DateRangeSelector, getPresetRange } from "@/components/dashboard/date-range-selector";
+import { Plus, Receipt, TrendingUp, Calendar, ArrowDown, BarChart3, AlertTriangle, Send } from "lucide-react";
 
 // The shared DateRangeSelector emits a preset string ("7", "30",
 // "thismonth", "lifetime", etc.). Our daily series is keyed by N-day
@@ -60,6 +61,33 @@ function presetToDays(preset: string): number {
     case "lifetime":   return 90;
     default:           return 30;
   }
+}
+
+// A "past" preset is one whose window is fully closed in the past —
+// the cycle has already ended. For these, "USED TILL NOW" is wrong
+// (nothing's still ticking) and the hero label should switch to a
+// settled-total framing that names the period.
+function isPastPreset(preset: string): boolean {
+  return preset === "yesterday" || preset === "lastweek" || preset === "lastmonth";
+}
+
+// Indian-locale "1 Mar – 23 Mar 2026" formatting. Drops the year
+// from the start when it matches the end (the common case), keeps
+// it when they straddle a year boundary (lifetime / custom).
+function formatPeriod(start: Date, end: Date): string {
+  const sY = start.getFullYear();
+  const eY = end.getFullYear();
+  const startStr = start.toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    ...(sY !== eY ? { year: "numeric" } : {}),
+  });
+  const endStr = end.toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+  return `${startStr} – ${endStr}`;
 }
 
 // Indian comma-grouping number format — used everywhere a raw
@@ -192,8 +220,8 @@ interface ChartData {
   unit:        "hour" | "day" | "week";
 }
 
-function buildChartBuckets(rangeDays: number): ChartData {
-  const seriesPerWallet = WALLETS.map((w) => sliceDailyToRange(w.daily, rangeDays));
+function buildChartBuckets(rangeDays: number, wallets = WALLETS): ChartData {
+  const seriesPerWallet = wallets.map((w) => sliceDailyToRange(w.daily, rangeDays));
   const dailyDates       = seriesPerWallet[0].map((d) => d.date);
 
   // Choose unit based on range. The thresholds keep the bar count
@@ -268,7 +296,7 @@ function buildChartBuckets(rangeDays: number): ChartData {
     }
   }
 
-  const walletTotals = WALLETS.map((_, i) =>
+  const walletTotals = wallets.map((_, i) =>
     buckets.reduce((s, b) => s + b.perWallet[i], 0)
   );
   const grandTotal = walletTotals.reduce((s, n) => s + n, 0);
@@ -306,6 +334,23 @@ export default function WalletSettingsPage({ view = "utilization" }: { view?: Wa
   // Treat the legacy "wallet" view as a synonym for "utilization" so
   // the rest of the file only has to branch on two cases.
   const v: "utilization" | "billing" = view === "billing" ? "billing" : "utilization";
+
+  // Filter wallets to only those whose product the workspace owns.
+  const { has } = useProducts();
+  const WALLET_PRODUCT_MAP: Record<string, import("@/lib/products").ProductKey> = {
+    "contact-extraction": "contact_extraction",
+    "enrichment":         "enrichment",
+    "ai-calling":         "ai_calling",
+  };
+  const activeWallets = useMemo(
+    () => WALLETS.filter((w) => {
+      const pk = WALLET_PRODUCT_MAP[w.id];
+      return pk ? has(pk) : true;
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [has],
+  );
+
   // Single credit pool — drives the hero's big remaining number.
   const pool   = useMemo(() => poolSummary(), []);
   const period = useMemo(() => periodProgress(), []);
@@ -317,6 +362,11 @@ export default function WalletSettingsPage({ view = "utilization" }: { view?: Wa
   // a day count so the existing data helpers don't care which
   // DateRangeSelector preset triggered the change.
   const [range, setRange] = useState<number>(30);
+  // Track the preset value (not just the day count) so the
+  // UsageHero label can flip between rolling and past-period
+  // framing, and so we can name the actual window in the past
+  // case. Defaults match the day-count preset default ("30").
+  const [rangePreset, setRangePreset] = useState<string>("30");
 
   // Range-windowed total — recomputed on every range change.
   const rangeUtilized = useMemo(() => utilizedInRange(range), [range]);
@@ -377,7 +427,7 @@ export default function WalletSettingsPage({ view = "utilization" }: { view?: Wa
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="min-w-0">
           <h2 className="text-[16px] font-semibold text-text-primary">
-            {v === "utilization" ? "Utilization" : "Billing"}
+            {v === "utilization" ? "Usage" : "Billing"}
           </h2>
           {/* Subtitle removed — the section title is self-explanatory
               and the supporting copy was just restating it. The page
@@ -387,7 +437,10 @@ export default function WalletSettingsPage({ view = "utilization" }: { view?: Wa
           <DateRangeSelector
             compact
             defaultPreset="30"
-            onChange={(preset) => setRange(presetToDays(preset))}
+            onChange={(preset) => {
+              setRange(presetToDays(preset));
+              setRangePreset(preset);
+            }}
           />
           {/* Add money is a billing/wallet action — only relevant on
               the Billing page and only for prepaid customers. Postpaid
@@ -411,11 +464,17 @@ export default function WalletSettingsPage({ view = "utilization" }: { view?: Wa
           changes. On Utilization the switch matters because the
           balance hero only renders for prepaid; on Billing it
           drives the entire spend layout. */}
-      <div className="flex items-center gap-6 flex-wrap">
-        <BillingModeSwitch />
-        {billingMode === "prepaid" && <PrepaidPlanTypeSwitch />}
-        {billingMode === "prepaid" && <BalanceStateDemoSwitch />}
-      </div>
+      {/* Billing-mode demo strips · Prepaid/Postpaid + plan type +
+          balance state are billing concepts, not usage ones. Strip
+          them from the Usage tab to keep that page focused on
+          consumption. They still drive the Billing tab below. */}
+      {v === "billing" && (
+        <div className="flex items-center gap-6 flex-wrap">
+          <BillingModeSwitch />
+          {billingMode === "prepaid" && <PrepaidPlanTypeSwitch />}
+          {billingMode === "prepaid" && <BalanceStateDemoSwitch />}
+        </div>
+      )}
 
       {/* ── Utilization route ──────────────────────────────────────────
           Utilization is the consumption story — "how much of each
@@ -425,7 +484,25 @@ export default function WalletSettingsPage({ view = "utilization" }: { view?: Wa
           gets billed for it doesn't change what was consumed).
       */}
       {v === "utilization" && (
-        <UtilizationByProductTable rangeDays={range} />
+        <div className="space-y-4">
+          {/* Top widget — total used across all modules in the active
+              date-range window. Pure consumption story; no Remaining
+              or balance comparison (those belong on Billing). When the
+              selected window is a closed past period (yesterday / last
+              week / last month), the hero label flips from "USED TILL
+              NOW" to "USED IN PERIOD" and names the window so the
+              figure reads as a settled total, not a running tally. */}
+          <UsageHero
+            rangeUtilized={rangeUtilized}
+            productCount={activeWallets.length}
+            isPast={isPastPreset(rangePreset)}
+            periodLabel={(() => {
+              const r = getPresetRange(rangePreset);
+              return formatPeriod(r.start, r.end);
+            })()}
+          />
+          <UtilizationByProductTable rangeDays={range} />
+        </div>
       )}
 
       {/* ── Billing route ──────────────────────────────────────────────
@@ -479,7 +556,7 @@ export default function WalletSettingsPage({ view = "utilization" }: { view?: Wa
           revert. Not rendered. */}
       {false && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {WALLETS.map((w) => (
+          {activeWallets.map((w) => (
             <WalletCard key={w.id} wallet={w} rangeDays={range} />
           ))}
         </div>
@@ -504,7 +581,7 @@ export default function WalletSettingsPage({ view = "utilization" }: { view?: Wa
           and its own inline date filter. Lives only on the
           Utilization page because it visualises consumption rather
           than money. */}
-      {v === "utilization" && <WalletUsageChart />}
+      {v === "utilization" && <WalletUsageChart range={range} />}
 
       {/* ── Activity / invoices footer ────────────────────────────────
           Lives only on the Billing route. The wallet route is the
@@ -592,6 +669,14 @@ export default function WalletSettingsPage({ view = "utilization" }: { view?: Wa
 //  because they don't carry a unit count.
 // ────────────────────────────────────────────────────────────────────
 function WalletUtilizationSection({ rangeDays }: { rangeDays: number }) {
+  const { has: hasProduct } = useProducts();
+  const activeWallets = useMemo(
+    () => WALLETS.filter((w) => {
+      const map: Record<string, import("@/lib/products").ProductKey> = { "contact-extraction": "contact_extraction", "enrichment": "enrichment", "ai-calling": "ai_calling" };
+      const pk = map[w.id]; return pk ? hasProduct(pk) : true;
+    }),
+    [hasProduct],
+  );
   // Per-product summary. Each row shows the product identity on the
   // left and a stat per capability on the right — no aggregate hero
   // number for the product. The user pointed out that "total actions
@@ -600,7 +685,7 @@ function WalletUtilizationSection({ rangeDays }: { rangeDays: number }) {
   // the only numbers that actually do: how many phone extractions,
   // how many email extractions, how many minutes talked.
   const moduleRows = useMemo(() => {
-    return WALLETS.map((w) => {
+    return activeWallets.map((w) => {
       const rangeUtilized  = sliceDailyToRange(w.daily, rangeDays).reduce((s, d) => s + d.amount, 0);
       const periodUtilized = w.utilized;
       const ratio = periodUtilized > 0 ? rangeUtilized / periodUtilized : 0;
@@ -739,12 +824,15 @@ function WalletUtilizationSection({ rangeDays }: { rangeDays: number }) {
 //  - Drops the "≈ ₹X" caption next to the credit total — money
 //    lives at the top of the page, repeating it here was noise.
 // ────────────────────────────────────────────────────────────────────
-function WalletUsageChart() {
-  // Independent date filter — the chart owns its own time window so
-  // the user can scope the trend without scrolling back to the page
-  // header. Defaults to the same 30-day preset as the page so the
-  // first view is consistent with the per-product widget above.
-  const [range, setRange] = useState<number>(30);
+function WalletUsageChart({ range }: { range: number }) {
+  const { has: hasProduct } = useProducts();
+  const activeWallets = useMemo(
+    () => WALLETS.filter((w) => {
+      const map: Record<string, import("@/lib/products").ProductKey> = { "contact-extraction": "contact_extraction", "enrichment": "enrichment", "ai-calling": "ai_calling" };
+      const pk = map[w.id]; return pk ? hasProduct(pk) : true;
+    }),
+    [hasProduct],
+  );
 
   // Active product tab. Defaults to WALLETS[0] (Contact Extraction —
   // the topmost product in the per-product utilization widget), per
@@ -754,8 +842,8 @@ function WalletUsageChart() {
 
   // Bucket the daily series for the chart's local range. Reuses the
   // page-level helper so the bucketing logic stays in one place.
-  const days = useMemo(() => buildChartBuckets(range), [range]);
-  const activeWallet = WALLETS[activeIdx];
+  const days = useMemo(() => buildChartBuckets(range, activeWallets), [range, activeWallets]);
+  const activeWallet = activeWallets[activeIdx] ?? activeWallets[0];
 
   // Capabilities of the active product (filtering out plan-feature
   // rows like AI Calling's "Concurrency"). These drive the stacked
@@ -808,13 +896,21 @@ function WalletUsageChart() {
   // Active product's display unit suffix. When all capabilities share
   // a unit (Enrichment: both "enrichment", AI Calling: just "min") we
   // use that unit. When they differ (Contact Extraction: phones vs
-  // emails) the sum doesn't share a meaningful unit, so we fall back
-  // to "actions".
+  // emails) we fall back to the module's own verb — "extractions"
+  // for contact-extraction, "enrichments" for enrichment — so the
+  // headline number stays in the module's domain instead of becoming
+  // a meaningless "actions".
+  const moduleFallbackUnit: Record<string, string> = {
+    "contact-extraction": "extraction",
+    "enrichment":         "enrichment",
+    "ai-calling":         "min",
+  };
   const productUnitLabel = (() => {
     if (activeCaps.length === 0) return "";
     const first = activeCaps[0].unitLabel;
     const allSame = activeCaps.every((c) => c.unitLabel === first);
-    return allSame ? `${first}${total === 1 ? "" : "s"}` : "actions";
+    const base = allSame ? first : (moduleFallbackUnit[activeWallet.id] ?? "action");
+    return `${base}${total === 1 ? "" : "s"}`;
   })();
 
   // Pad the raw max up to a round number so the Y-axis labels can be
@@ -917,24 +1013,14 @@ function WalletUsageChart() {
 
   return (
     <div className="bg-white border border-border rounded-card p-5">
-      {/* Header — title + inline date filter. The DateRangeSelector
-          lives in the widget chrome so the user can scope the trend
-          right where they're reading it. */}
-      <div className="flex items-start justify-between gap-3 mb-3 flex-wrap">
-        <div className="min-w-0">
-          <h3 className="text-[13px] font-semibold text-text-primary flex items-center gap-1.5">
-            <TrendingUp size={13} strokeWidth={1.6} className="text-text-tertiary" />
-            Utilization over time
-          </h3>
-          <p className="text-[11.5px] text-text-secondary mt-0.5">
-            {unitWord} consumption in units for one product at a time. Switch products via the tabs below.
-          </p>
-        </div>
-        <DateRangeSelector
-          compact
-          defaultPreset="30"
-          onChange={(preset) => setRange(presetToDays(preset))}
-        />
+      <div className="mb-3">
+        <h3 className="text-[13px] font-semibold text-text-primary flex items-center gap-1.5">
+          <TrendingUp size={13} strokeWidth={1.6} className="text-text-tertiary" />
+          Usage over time
+        </h3>
+        <p className="text-[11.5px] text-text-secondary mt-0.5">
+          {unitWord} consumption in units for one product at a time. Switch products via the tabs below.
+        </p>
       </div>
 
       {/* Product tabs — three tabs (Contact Extraction · Enrichment ·
@@ -947,7 +1033,7 @@ function WalletUsageChart() {
         role="tablist"
         aria-label="Product"
       >
-        {WALLETS.map((w, i) => {
+        {activeWallets.map((w, i) => {
           const active = i === activeIdx;
           return (
             <button
@@ -988,7 +1074,11 @@ function WalletUsageChart() {
           (AI Calling → Talk time only) the legend would be noise. */}
       <div className="mb-4">
         <p className="text-[10px] font-medium text-text-tertiary uppercase tracking-[0.4px] tabular-nums">
-          {activeWallet.name} · used in last {range} days
+          {/* Neutral period phrasing — the actual window is named in
+              the page-level filter at the top. Echoing it here as
+              "used in last N days" broke for named presets (This
+              month, Last week, custom ranges, …). */}
+          {activeWallet.name} · used in this period
         </p>
         <p className="text-[24px] font-semibold text-text-primary leading-none mt-1 tabular-nums">
           {formatNum(Math.round(total))}
@@ -1485,16 +1575,21 @@ function PrepaidBalanceHero({
   const totalAvailable = planBaseline + topupBalance;
 
   // Used + remaining are computed off the combined available pool so
-  // the math ties out: used + remaining = totalAvailable.
-  const used         = rangeUtilized;
+  // the math ties out: used + remaining = totalAvailable. `used` is
+  // clamped at `totalAvailable` because a prepaid wallet can't
+  // physically spend more than its cap — once usage hits the ceiling,
+  // new actions block, and the displayed total reads as that ceiling
+  // instead of an impossible over-spend.
+  const used         = Math.min(rangeUtilized, totalAvailable);
   const remaining    = Math.max(0, totalAvailable - used);
   const usedPct      = totalAvailable > 0
     ? Math.max(0, Math.min(100, (used / totalAvailable) * 100))
     : 0;
-  const barTone =
-      usedPct >= 90 ? "#DC2626"
-    : usedPct >= 75 ? "#D97706"
-    :                 "rgba(15, 23, 42, 0.85)";
+  // Bar stays a single neutral tone regardless of % used. Earlier
+  // this escalated to amber at 75% and red at 90%, but the demo
+  // has too many ranges + toggles for that mapping to stay honest.
+  // The % number and remaining copy carry the urgency on their own.
+  const barTone = "rgba(15, 23, 42, 0.85)";
 
   return (
     <div className="bg-white border border-border rounded-card p-5">
@@ -1788,6 +1883,54 @@ function PostpaidUtilizationEmpty() {
 }
 
 // ────────────────────────────────────────────────────────────────────
+//  UsageHero — single-stat card at the top of the Usage tab. Answers
+//  "how much have I used in this window?" in one number, before the
+//  per-module breakdown table below. We deliberately don't show a
+//  Remaining / balance comparison here — that's the Billing tab's
+//  story; the Usage tab is consumption-only.
+//
+//  Label flips between "USED TILL NOW" (rolling preset: today, this
+//  week, this month, last N days, lifetime) and "USED IN PERIOD"
+//  (closed past preset: yesterday, last week, last month). The past
+//  variant also names the window explicitly so "₹31,067" reads as a
+//  settled total for that period, not a running tally — the
+//  rolling-tense label was actively misleading for past windows.
+// ────────────────────────────────────────────────────────────────────
+function UsageHero({
+  rangeUtilized,
+  productCount,
+  isPast,
+  periodLabel,
+}: {
+  rangeUtilized: number;
+  productCount: number;
+  isPast: boolean;
+  periodLabel: string;
+}) {
+  const productSuffix = productCount === 1 ? "product" : "products";
+  const label = isPast ? "USED IN PERIOD" : "USED TILL NOW";
+  const bodyCopy = isPast
+    ? `${periodLabel} · Across all ${productCount} ${productSuffix}.`
+    : `Across all ${productCount} ${productSuffix}.`;
+  return (
+    <div className="bg-white border border-border rounded-card p-5">
+      <p className="text-[10px] font-medium text-text-tertiary uppercase tracking-[0.4px] mb-1">
+        {label}
+      </p>
+      <p
+        className="text-[36px] font-semibold text-text-primary leading-none tracking-[-0.01em] tabular-nums"
+        style={{ fontVariantNumeric: "tabular-nums" }}
+      >
+        {formatAmount(rangeUtilized, "INR")}
+      </p>
+      <p className="text-[11.5px] text-text-tertiary mt-1.5">
+        {bodyCopy}
+      </p>
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
 //  UtilizationByProductTable — same flat-tree chrome as the Billing
 //  Products table, but the cells show *units* (phones extracted,
 //  enrichments run, minutes talked) instead of money. Reuses the
@@ -1799,11 +1942,19 @@ function PostpaidUtilizationEmpty() {
 //  treatment as the Billing table).
 // ────────────────────────────────────────────────────────────────────
 function UtilizationByProductTable({ rangeDays }: { rangeDays: number }) {
+  const { has: hasProduct } = useProducts();
+  const activeWallets = useMemo(
+    () => WALLETS.filter((w) => {
+      const map: Record<string, import("@/lib/products").ProductKey> = { "contact-extraction": "contact_extraction", "enrichment": "enrichment", "ai-calling": "ai_calling" };
+      const pk = map[w.id]; return pk ? hasProduct(pk) : true;
+    }),
+    [hasProduct],
+  );
   // Per-product derived rows. We scale each capability's units by
   // the ratio of range-spend to period-spend so the displayed unit
   // count maps to the selected date range.
   const rows = useMemo(() => {
-    return WALLETS.map((w) => {
+    return activeWallets.map((w) => {
       const series = sliceDailyToRange(w.daily, rangeDays);
       const used   = series.reduce((s, d) => s + d.amount, 0);
       const ratio  = w.utilized > 0 ? used / w.utilized : 0;
@@ -1812,43 +1963,30 @@ function UtilizationByProductTable({ rangeDays }: { rangeDays: number }) {
     });
   }, [rangeDays]);
 
-  // Three-column grid — name on the left, units in the middle, and a
-  // trailing column reserved for future bits (share-of-product %,
-  // daily-limit progress). For now it's empty but keeps the
-  // structural similarity to the Billing table strong.
-  const gridCols = "grid-cols-[minmax(0,1fr)_180px_80px]";
+  // Three-column grid — name + units + cost. Share column dropped
+  // because its denominator (per-product cap units) wasn't comparable
+  // across products. Cost added so Usage tells the money story too,
+  // not just consumption.
+  const gridCols = "grid-cols-[minmax(0,1fr)_180px_120px]";
 
   return (
     <div className="bg-white border border-border rounded-card overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-border-subtle">
-        <h3 className="text-[13px] font-semibold text-text-primary">Utilization by product</h3>
-        <span className="text-[11px] text-text-tertiary">
-          Last {rangeDays} days · successful actions only
-        </span>
-      </div>
+      {/* No table header row — the page already says "Usage", which
+          frames the whole tab; a second "Utilization by product"
+          banner just restated it and was noisy. The "successful only"
+          caveat moves to a footnote anchored to the Units* column. */}
 
       {/* Column headers */}
       <div className={`grid ${gridCols} gap-3 px-5 py-2 border-b border-border-subtle text-[10px] font-medium text-text-tertiary uppercase tracking-[0.4px]`}>
-        <span>Product / capability</span>
-        <span className="text-right">Units</span>
-        <span className="text-right">Share</span>
+        <span>Modules</span>
+        <span className="text-right">Units<sup className="ml-0.5">*</sup></span>
+        <span className="text-right">Cost</span>
       </div>
 
       {/* Rows */}
       <div>
         {rows.map(({ module: m, ratio, caps }, productIdx) => {
           const ModIcon = m.icon;
-          const dl      = m.dailyLimit;
-          const dlPct   = dl && dl.count > 0 ? Math.min(100, (dl.used / dl.count) * 100) : 0;
-          const dlTone  =
-              dl && dlPct >= 90 ? "#DC2626"
-            : dl && dlPct >= 75 ? "#D97706"
-            : null;
-          // Sum of capability units (only really comparable within a
-          // single product because units differ across products);
-          // used for the per-product share denominator.
-          const productUnits = caps.reduce((s, c) => s + Math.round(c.unitCount * ratio), 0);
           return (
             <div
               key={m.id}
@@ -1871,29 +2009,18 @@ function UtilizationByProductTable({ rangeDays }: { rangeDays: number }) {
                     <p className="text-[13px] font-semibold text-text-primary truncate">
                       {m.name}
                     </p>
-                    {dl && (
-                      <p className="text-[10.5px] text-text-tertiary tabular-nums inline-flex items-center gap-1.5 mt-0.5">
-                        {dlTone && (
-                          <span
-                            className="w-1.5 h-1.5 rounded-full"
-                            style={{ background: dlTone }}
-                            aria-hidden
-                          />
-                        )}
-                        <Timer size={10} strokeWidth={1.75} className="text-text-tertiary" />
-                        Daily {formatNum(dl.used)} / {formatNum(dl.count)} {dl.unit}{dl.count === 1 ? "" : "s"}
-                      </p>
-                    )}
+                    {/* Daily-limit chip moved to the module's own page
+                        header (e.g. /enrichment) — it's a per-module
+                        operational signal, not a usage breakdown line. */}
                   </div>
                 </div>
                 <div /> {/* Units col is blank on the product header */}
-                <div /> {/* Share col is blank on the product header */}
+                <div /> {/* Cost col is blank on the product header */}
               </div>
 
               {/* Capability sub-rows — units only, no money. */}
               {caps.map((c) => {
                 const capUnits = Math.round(c.unitCount * ratio);
-                const sharePct = productUnits > 0 ? (capUnits / productUnits) * 100 : 0;
                 // Drop the unit suffix on Enrichment (the label
                 // "Professional enrichment" already says everything;
                 // appending "enrichments" would be redundant). Keep
@@ -1905,8 +2032,11 @@ function UtilizationByProductTable({ rangeDays }: { rangeDays: number }) {
                     key={c.id}
                     className={`grid ${gridCols} gap-3 px-5 py-2.5 items-center border-t border-border-subtle`}
                   >
-                    <div className="flex items-center gap-2 pl-7 min-w-0">
-                      <span className="text-text-tertiary/60 text-[11px] select-none shrink-0" aria-hidden>↳</span>
+                    <div className="flex items-center gap-3 pl-7 min-w-0">
+                      {/* Vertical guide line — a quiet tree-view tick
+                          that signals parent/child without the visual
+                          drama of an arrow glyph. */}
+                      <span className="w-px h-3.5 bg-border shrink-0" aria-hidden />
                       <span className="text-[12.5px] text-text-secondary truncate">
                         {c.label}
                       </span>
@@ -1919,8 +2049,11 @@ function UtilizationByProductTable({ rangeDays }: { rangeDays: number }) {
                         </span>
                       )}
                     </div>
-                    <div className="text-right tabular-nums text-[11.5px] text-text-tertiary">
-                      {sharePct.toFixed(0)}%
+                    <div className="text-right tabular-nums text-[13px] text-text-primary">
+                      {/* Cost = units × rate. Surfaces the money story so
+                          Usage isn't only about consumption. "—" when the
+                          capability has no rate (e.g. included throttles). */}
+                      {c.rate > 0 ? formatAmount(Math.round(capUnits * c.rate), "INR") : "—"}
                     </div>
                   </div>
                 );
@@ -1928,6 +2061,18 @@ function UtilizationByProductTable({ rangeDays }: { rangeDays: number }) {
             </div>
           );
         })}
+      </div>
+
+      {/* Footnote anchored to the Units* column. Replaces the old
+          subtitle that lived in the (now-dropped) table header.
+          Deliberately omits the time window — the date-range picker
+          right above the table is the source of truth for which window
+          is showing, so restating it here drifted out of sync as soon
+          as someone picked a preset like "This month" or "Lifetime"
+          (or a custom range) whose label wasn't "Last N days". */}
+      <div className="px-5 py-2.5 border-t border-border-subtle text-[10.5px] text-text-tertiary">
+        <sup className="mr-0.5">*</sup>
+        Only successful actions are charged.
       </div>
     </div>
   );
@@ -2045,6 +2190,14 @@ function ModulesTable({
   billingMode?: BillingMode;
 }) {
   const [sortKey, setSortKey] = useState<SortKey>("used");
+  const { has: hasProduct } = useProducts();
+  const activeWallets = useMemo(
+    () => WALLETS.filter((w) => {
+      const map: Record<string, import("@/lib/products").ProductKey> = { "contact-extraction": "contact_extraction", "enrichment": "enrichment", "ai-calling": "ai_calling" };
+      const pk = map[w.id]; return pk ? hasProduct(pk) : true;
+    }),
+    [hasProduct],
+  );
 
   // One row per product, with embedded capability sub-rows that
   // always render. Earlier this table hid the capability detail
@@ -2054,7 +2207,7 @@ function ModulesTable({
   // underneath them. Sort applies only to product order — capability
   // rows always stay attached to their parent product.
   const rows = useMemo(() => {
-    return WALLETS.map((w) => {
+    return activeWallets.map((w) => {
       const series    = sliceDailyToRange(w.daily, rangeDays);
       const used      = series.reduce((s, d) => s + d.amount, 0);
       const pctOfPool = totalPool > 0 ? (used / totalPool) * 100 : 0;
@@ -2088,13 +2241,13 @@ function ModulesTable({
           information to a chip under the product name when it
           exists. */}
       <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-border-subtle">
-        <h3 className="text-[13px] font-semibold text-text-primary">Products</h3>
+        <h3 className="text-[13px] font-semibold text-text-primary">Modules</h3>
       </div>
 
       {/* Column headers — sort applies only to product rows. */}
       <div className={`grid ${gridCols} gap-3 px-5 py-2 border-b border-border-subtle text-[10px] font-medium text-text-tertiary uppercase tracking-[0.4px]`}>
         <SortHeader
-          label="Product / capability"
+          label="Modules"
           colKey="name"
           activeKey={sortKey}
           onSort={setSortKey}
@@ -2123,16 +2276,6 @@ function ModulesTable({
       <div>
         {rows.map(({ module: m, used, pctOfPool, ratio, caps }, productIdx) => {
           const ModIcon = m.icon;
-          const dl      = m.dailyLimit;
-          // Daily-limit chip tone — only escalates when the org is
-          // genuinely close to the ceiling so the colour means
-          // something when it appears.
-          const dlPct   = dl && dl.count > 0 ? Math.min(100, (dl.used / dl.count) * 100) : 0;
-          const dlTone  =
-              dl && dlPct >= 90 ? "#DC2626"
-            : dl && dlPct >= 75 ? "#D97706"
-            : null;
-
           return (
             <div
               key={m.id}
@@ -2158,19 +2301,9 @@ function ModulesTable({
                     <p className="text-[13px] font-semibold text-text-primary truncate">
                       {m.name}
                     </p>
-                    {dl && (
-                      <p className="text-[10.5px] text-text-tertiary tabular-nums inline-flex items-center gap-1.5 mt-0.5">
-                        {dlTone && (
-                          <span
-                            className="w-1.5 h-1.5 rounded-full"
-                            style={{ background: dlTone }}
-                            aria-hidden
-                          />
-                        )}
-                        <Timer size={10} strokeWidth={1.75} className="text-text-tertiary" />
-                        Daily {formatNum(dl.used)} / {formatNum(dl.count)} {dl.unit}{dl.count === 1 ? "" : "s"}
-                      </p>
-                    )}
+                    {/* Daily-limit chip moved to the module's own page
+                        header (e.g. /enrichment) — it's a per-module
+                        operational signal, not a billing breakdown line. */}
                   </div>
                 </div>
                 {/* Units column — blank on the product header (the

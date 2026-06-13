@@ -34,7 +34,7 @@ function getFirstDayOfMonth(year: number, month: number) { return new Date(year,
 function formatDate(d: Date) { return d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }); }
 function formatDateShort(d: Date) { return d.toLocaleDateString("en-IN", { day: "numeric", month: "short" }); }
 
-function getPresetRange(value: string): { start: Date; end: Date; label: string } {
+export function getPresetRange(value: string): { start: Date; end: Date; label: string } {
   const now = new Date(2026, 2, 23);
   const end = new Date(now);
   const start = new Date(now);

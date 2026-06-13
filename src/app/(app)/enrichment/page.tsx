@@ -10,6 +10,8 @@
 
 import { useMemo, useState } from "react";
 
+import { Timer } from "lucide-react";
+
 import { DataPageShell } from "@/components/data/data-page-shell";
 import { EnrichmentDashboard } from "@/components/data/enrichment-dashboard";
 import { DashboardTimeFilter } from "@/components/data/dashboard/dashboard-time-filter";
@@ -20,7 +22,15 @@ import { useEnrichmentCrmStore } from "@/lib/enrichment-crm-data";
 import { flattenRunsToLeadProfiles } from "@/lib/dashboard/flatten-leads";
 import { resolveRange } from "@/lib/dashboard/trend-bucketing";
 import { useDemoMode } from "@/lib/demo-mode";
+import { WALLETS } from "@/lib/credits-data";
 import type { TimeRange } from "@/lib/dashboard/types";
+
+// Daily limit lives on the module (credits-data). Surfacing it on the
+// module's own page header is the right home — it's a per-module
+// operational signal ("am I going to hit the cap today?"), not a
+// usage / billing breakdown line.
+const enrichmentModule = WALLETS.find((w) => w.id === "enrichment");
+const enrichmentDailyLimit = enrichmentModule?.dailyLimit;
 
 export default function EnrichmentDashboardPage() {
   const [range, setRange] = useState<TimeRange>("30d");
@@ -51,8 +61,19 @@ export default function EnrichmentDashboardPage() {
     return dropCrmSource ? flat.filter((p) => p.source !== "crm") : flat;
   }, [runs, range, customStart, customEnd, forceEmpty, dropCrmSource]);
 
+  const dl = enrichmentDailyLimit;
+
   const headerAction = (
     <div className="flex items-center gap-2 flex-wrap justify-end">
+      {dl && (
+        <div
+          className="inline-flex items-center gap-1.5 px-2.5 h-8 rounded-button border border-border-subtle bg-white text-[11.5px] font-medium tabular-nums text-text-secondary"
+          title={`Daily limit · ${dl.used.toLocaleString()} of ${dl.count.toLocaleString()} ${dl.unit}${dl.count === 1 ? "" : "s"} used today.`}
+        >
+          <Timer size={12} strokeWidth={1.75} />
+          Daily {dl.used.toLocaleString()} / {dl.count.toLocaleString()} {dl.unit}{dl.count === 1 ? "" : "s"}
+        </div>
+      )}
       <SourceFilterPills value={sourceFilter} onChange={setSourceFilter} profiles={profilesForCounts} dropCrmSource={dropCrmSource} />
       <DashboardTimeFilter
         range={range}
