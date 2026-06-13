@@ -377,7 +377,7 @@ export default function WalletSettingsPage({ view = "utilization" }: { view?: Wa
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="min-w-0">
           <h2 className="text-[16px] font-semibold text-text-primary">
-            {v === "utilization" ? "Utilization" : "Billing"}
+            {v === "utilization" ? "Usage" : "Billing"}
           </h2>
           {/* Subtitle removed — the section title is self-explanatory
               and the supporting copy was just restating it. The page
@@ -814,13 +814,21 @@ function WalletUsageChart() {
   // Active product's display unit suffix. When all capabilities share
   // a unit (Enrichment: both "enrichment", AI Calling: just "min") we
   // use that unit. When they differ (Contact Extraction: phones vs
-  // emails) the sum doesn't share a meaningful unit, so we fall back
-  // to "actions".
+  // emails) we fall back to the module's own verb — "extractions"
+  // for contact-extraction, "enrichments" for enrichment — so the
+  // headline number stays in the module's domain instead of becoming
+  // a meaningless "actions".
+  const moduleFallbackUnit: Record<string, string> = {
+    "contact-extraction": "extraction",
+    "enrichment":         "enrichment",
+    "ai-calling":         "min",
+  };
   const productUnitLabel = (() => {
     if (activeCaps.length === 0) return "";
     const first = activeCaps[0].unitLabel;
     const allSame = activeCaps.every((c) => c.unitLabel === first);
-    return allSame ? `${first}${total === 1 ? "" : "s"}` : "actions";
+    const base = allSame ? first : (moduleFallbackUnit[activeWallet.id] ?? "action");
+    return `${base}${total === 1 ? "" : "s"}`;
   })();
 
   // Pad the raw max up to a round number so the Y-axis labels can be
@@ -930,7 +938,7 @@ function WalletUsageChart() {
         <div className="min-w-0">
           <h3 className="text-[13px] font-semibold text-text-primary flex items-center gap-1.5">
             <TrendingUp size={13} strokeWidth={1.6} className="text-text-tertiary" />
-            Utilization over time
+            Usage over time
           </h3>
           <p className="text-[11.5px] text-text-secondary mt-0.5">
             {unitWord} consumption in units for one product at a time. Switch products via the tabs below.
@@ -1835,18 +1843,15 @@ function UtilizationByProductTable({ rangeDays }: { rangeDays: number }) {
 
   return (
     <div className="bg-white border border-border rounded-card overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-border-subtle">
-        <h3 className="text-[13px] font-semibold text-text-primary">Utilization by product</h3>
-        <span className="text-[11px] text-text-tertiary">
-          Last {rangeDays} days · successful actions only
-        </span>
-      </div>
+      {/* No table header row — the page already says "Usage", which
+          frames the whole tab; a second "Utilization by product"
+          banner just restated it and was noisy. The "successful only"
+          caveat moves to a footnote anchored to the Units* column. */}
 
       {/* Column headers */}
       <div className={`grid ${gridCols} gap-3 px-5 py-2 border-b border-border-subtle text-[10px] font-medium text-text-tertiary uppercase tracking-[0.4px]`}>
-        <span>Product / capability</span>
-        <span className="text-right">Units</span>
+        <span>Modules</span>
+        <span className="text-right">Units<sup className="ml-0.5">*</sup></span>
         <span className="text-right">Cost</span>
       </div>
 
@@ -1928,6 +1933,13 @@ function UtilizationByProductTable({ rangeDays }: { rangeDays: number }) {
             </div>
           );
         })}
+      </div>
+
+      {/* Footnote anchored to the Units* column. Replaces the old
+          subtitle that lived in the (now-dropped) table header. */}
+      <div className="px-5 py-2.5 border-t border-border-subtle text-[10.5px] text-text-tertiary">
+        <sup className="mr-0.5">*</sup>
+        Last {rangeDays} days · successful only
       </div>
     </div>
   );
@@ -2088,13 +2100,13 @@ function ModulesTable({
           information to a chip under the product name when it
           exists. */}
       <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-border-subtle">
-        <h3 className="text-[13px] font-semibold text-text-primary">Products</h3>
+        <h3 className="text-[13px] font-semibold text-text-primary">Modules</h3>
       </div>
 
       {/* Column headers — sort applies only to product rows. */}
       <div className={`grid ${gridCols} gap-3 px-5 py-2 border-b border-border-subtle text-[10px] font-medium text-text-tertiary uppercase tracking-[0.4px]`}>
         <SortHeader
-          label="Product / capability"
+          label="Modules"
           colKey="name"
           activeKey={sortKey}
           onSort={setSortKey}
