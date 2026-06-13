@@ -431,7 +431,13 @@ export default function WalletSettingsPage({ view = "utilization" }: { view?: Wa
           gets billed for it doesn't change what was consumed).
       */}
       {v === "utilization" && (
-        <UtilizationByProductTable rangeDays={range} />
+        <div className="space-y-4">
+          {/* Top widget — total used across all modules in the active
+              date-range window. Pure consumption story; no Remaining
+              or balance comparison (those belong on Billing). */}
+          <UsageHero rangeUtilized={rangeUtilized} productCount={WALLETS.length} />
+          <UtilizationByProductTable rangeDays={range} />
+        </div>
       )}
 
       {/* ── Billing route ──────────────────────────────────────────────
@@ -1806,6 +1812,47 @@ function PostpaidUtilizationEmpty() {
         <Receipt size={13} strokeWidth={1.8} />
         Go to Billing
       </button>
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
+//  UsageHero — single-stat card at the top of the Usage tab. Answers
+//  "how much have I used in this window?" in one number, before the
+//  per-module breakdown table below. We deliberately don't show a
+//  Remaining / balance comparison here — that's the Billing tab's
+//  story; the Usage tab is consumption-only.
+//
+//  Label flips between "USED TILL NOW" (rolling preset: today, this
+//  week, this month, last N days, lifetime) and "USAGE IN THIS
+//  PERIOD" (closed past preset: yesterday, last week, last month) —
+//  but the prototype's DateRangeSelector currently only emits a day
+//  count, not a preset name, so we always render the rolling tone
+//  here for now. When the picker grows preset-name awareness, pass
+//  `isPast` in from the parent and the copy adapts.
+// ────────────────────────────────────────────────────────────────────
+function UsageHero({
+  rangeUtilized,
+  productCount,
+}: {
+  rangeUtilized: number;
+  productCount: number;
+}) {
+  const productSuffix = productCount === 1 ? "product" : "products";
+  return (
+    <div className="bg-white border border-border rounded-card p-5">
+      <p className="text-[10px] font-medium text-text-tertiary uppercase tracking-[0.4px] mb-1">
+        USED TILL NOW
+      </p>
+      <p
+        className="text-[36px] font-semibold text-text-primary leading-none tracking-[-0.01em] tabular-nums"
+        style={{ fontVariantNumeric: "tabular-nums" }}
+      >
+        {formatAmount(rangeUtilized, "INR")}
+      </p>
+      <p className="text-[11.5px] text-text-tertiary mt-1.5">
+        Across all {productCount} {productSuffix}.
+      </p>
     </div>
   );
 }
