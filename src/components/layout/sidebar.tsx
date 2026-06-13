@@ -52,7 +52,7 @@ import {
   MessageCircle,
 } from "lucide-react";
 import { useDemoMode } from "@/lib/demo-mode";
-import { useProducts } from "@/lib/products";
+import { useProducts, PRODUCT_PRESETS, currentPreset, type ProductPreset } from "@/lib/products";
 import { useSpotStore } from "@/lib/spot/store";
 import { SpotMark } from "@/components/spot/spot-mark";
 import { WorkspaceSwitcher, UserRolePill } from "@/components/layout/workspace-switcher";
@@ -172,7 +172,8 @@ const agentsSection = {
 export function Sidebar() {
   const pathname = usePathname() || "";
   const { isEmpty, toggle, enrichmentVariant, setEnrichmentVariant } = useDemoMode();
-  const { setProducts, enrichmentOnly } = useProducts();
+  const { products, setProducts, enrichmentOnly } = useProducts();
+  const activePreset = currentPreset(products);
   const spotOpen = useSpotStore((s) => s.open);
   const user = useCurrentUser();
 
@@ -538,25 +539,49 @@ export function Sidebar() {
                     {isEmpty ? <EyeOff size={12} strokeWidth={2} /> : <Eye size={12} strokeWidth={2} />}
                     {isEmpty ? "Empty State Mode ON" : "Preview Empty States"}
                   </button>
-                  {/* Enrichment-only plan toggle. ON = workspace owns only
-                      Enrichment, which triggers the locked/upsell flows. */}
-                  <button
-                    onClick={() =>
-                      setProducts(
-                        enrichmentOnly
-                          ? ["enrichment", "ai_calling", "campaigns"]
-                          : ["enrichment"],
-                      )
-                    }
-                    className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-[6px] text-[11px] font-medium transition-all duration-150 ${
-                      enrichmentOnly
-                        ? "bg-[#EEF2FF] text-[#3730A3] border border-[#C7D2FE]"
-                        : "bg-surface-secondary text-text-tertiary hover:text-text-secondary"
-                    }`}
-                  >
-                    <Lock size={12} strokeWidth={2} />
-                    {enrichmentOnly ? "Enrichment-Only Plan ON" : "Preview Enrichment-Only"}
-                  </button>
+                  {/* Product preview presets — one button per customer
+                      shape we want to preview. Clicking an active preset
+                      toggles back to the full workspace, so the picker
+                      doubles as a "reset to everything" affordance. The
+                      presets drive the same nav gating the old single
+                      Enrichment-Only toggle did (lock screens, upsell
+                      flows), just with more shapes to flip between. */}
+                  <div className="pt-1">
+                    <div className="px-1 pb-1 text-[9.5px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">
+                      Product preview
+                    </div>
+                    <div className="grid grid-cols-1 gap-1">
+                      {([
+                        { id: "enrichment_only",         label: "Enrichment only" },
+                        { id: "voice_only",              label: "Voice AI only" },
+                        { id: "contact_extraction_only", label: "Contact Extraction only" },
+                        { id: "voice_plus_enrichment",   label: "Voice + Enrichment" },
+                      ] as { id: ProductPreset; label: string }[]).map((opt) => {
+                        const active = activePreset === opt.id;
+                        return (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            onClick={() =>
+                              setProducts(
+                                active
+                                  ? PRODUCT_PRESETS.full
+                                  : PRODUCT_PRESETS[opt.id],
+                              )
+                            }
+                            className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-[6px] text-[11px] font-medium transition-all duration-150 ${
+                              active
+                                ? "bg-[#EEF2FF] text-[#3730A3] border border-[#C7D2FE]"
+                                : "bg-surface-secondary text-text-tertiary hover:text-text-secondary"
+                            }`}
+                          >
+                            <Lock size={12} strokeWidth={2} />
+                            {active ? `${opt.label} ON` : `Preview ${opt.label}`}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
 
                   {/* Enrichment demo view · 4 chips. Drives every /enrichment
                       tab from one place so the user can A/B states without
