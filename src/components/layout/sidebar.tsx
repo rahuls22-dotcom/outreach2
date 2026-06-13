@@ -23,7 +23,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import {
   LayoutGrid,
   FolderKanban,
@@ -48,7 +48,8 @@ import {
   Plus,
   Send,
   Brain,
-  LogOut,
+  ChevronDown,
+  MessageCircle,
 } from "lucide-react";
 import { useDemoMode } from "@/lib/demo-mode";
 import { useProducts } from "@/lib/products";
@@ -56,7 +57,7 @@ import { useSpotStore } from "@/lib/spot/store";
 import { SpotMark } from "@/components/spot/spot-mark";
 import { WorkspaceSwitcher, UserRolePill } from "@/components/layout/workspace-switcher";
 import { useCurrentUser } from "@/lib/workspace-store";
-import { signOut } from "@/lib/auth";
+import { poolSummary } from "@/lib/credits-data";
 
 // ─── Top standalone items (above sections) ───────────────────────
 const dashboardItem = { name: "Dashboard", href: "/dashboard", icon: LayoutGrid };
@@ -66,14 +67,6 @@ const memoryItem    = { name: "Memory",    href: "/memory",    icon: Brain };
 const leadsItem     = { name: "Leads",     href: "/enquiries", icon: FileText };
 const outreachItem  = { name: "Outreach",  href: "/outreach",  icon: Send };
 
-// Demo wallet — representative balance shown in the sidebar so the user
-// always knows how much head-room they have before they need to top up.
-const WALLET = {
-  totalMinutes: 5000,
-  usedMinutes: 3250,
-  rupeesPerMinute: 8,
-};
-
 function formatInrShort(n: number): string {
   if (n >= 100000) return `₹${(n / 100000).toFixed(n % 100000 === 0 ? 0 : 1)}L`;
   if (n >= 1000) return `₹${(n / 1000).toFixed(n % 1000 === 0 ? 0 : 1)}K`;
@@ -81,15 +74,12 @@ function formatInrShort(n: number): string {
 }
 
 function WalletWidget() {
-  const { totalMinutes, usedMinutes, rupeesPerMinute } = WALLET;
-  const remaining = Math.max(0, totalMinutes - usedMinutes);
-  const pctUsed = totalMinutes > 0 ? Math.min(100, (usedMinutes / totalMinutes) * 100) : 0;
-  const tone =
-    pctUsed >= 90
-      ? { bar: "#DC2626", text: "text-[#DC2626]" }
-      : pctUsed >= 75
-        ? { bar: "#D97706", text: "text-[#92400E]" }
-        : { bar: "rgba(15, 23, 42, 0.78)", text: "text-text-primary" };
+  // Sourced from the same `poolSummary()` helper the billing/usage
+  // pages use — so the sidebar's number never disagrees with what the
+  // user sees on /settings/billing. Displayed in ₹ instead of minutes
+  // because the wallet itself is denominated in money.
+  const { utilized, totalCredits, pctUsed } = poolSummary();
+  const tone = { bar: "rgba(15, 23, 42, 0.78)", text: "text-text-primary" };
 
   return (
     <div className="px-3 pb-2">
@@ -111,18 +101,18 @@ function WalletWidget() {
         </div>
         <div className="flex items-center justify-between mt-1.5 text-[10px] tabular-nums">
           <span className="text-text-tertiary">
-            <span className="text-text-secondary font-medium">{usedMinutes.toLocaleString()}</span>
+            <span className="text-text-secondary font-medium">{formatInrShort(utilized)}</span>
             <span className="mx-0.5">/</span>
-            {totalMinutes.toLocaleString()} min
+            {formatInrShort(totalCredits)}
           </span>
-          <button
-            type="button"
+          <Link
+            href="/settings/billing"
             className="inline-flex items-center gap-0.5 text-[10px] font-medium text-text-primary hover:underline"
-            title={`${remaining.toLocaleString()} min · ${formatInrShort(remaining * rupeesPerMinute)} left`}
+            title={`${formatInrShort(Math.max(0, totalCredits - utilized))} left this cycle`}
           >
             <Plus size={9} strokeWidth={2.5} />
             Top up
-          </button>
+          </Link>
         </div>
       </div>
     </div>
@@ -137,12 +127,10 @@ const ENRICHMENT_ONLY_HREFS = new Set([
   "/agents-mvp",
 ]);
 
-// Tools section — pulled from MVP intact. Order:
-//   Enrichment (Dashboard / Enrich / History)
-//   Contact extraction (New extraction / All contacts)
-//   Creatives
-//   AI calling agents
-//   Audiences (Soon)
+// Tools section — data and ops surfaces. Creatives + AI calling
+// agents moved out into their own Agents section because they're
+// agent work, not data tooling. Audiences also moved to Agents as
+// an agent-driven concept (coming soon).
 const toolsSection = {
   label: "Tools",
   items: [
@@ -157,7 +145,7 @@ const toolsSection = {
       ],
     },
     {
-      name: "Contact extraction",
+      name: "Extraction",
       href: "/contact-extraction",
       icon: ContactRound,
       children: [
@@ -165,15 +153,24 @@ const toolsSection = {
         { name: "All contacts", href: "/contact-extraction/database", icon: ListChecks },
       ],
     },
-    { name: "Creatives", href: "/creatives", icon: ImageIcon },
-    { name: "AI calling agents", href: "/agents-mvp", icon: PhoneCall },
-    { name: "Audiences", href: "/audiences", icon: Globe, comingSoon: true },
+  ],
+};
+
+// Agents section — every agent the workspace can run. Voice is the
+// renamed AI calling agents surface; WhatsApp is a new agent type
+// not yet shipped (rendered as Coming Soon); Creatives moves here
+// because creative generation is also agent work rather than a tool.
+const agentsSection = {
+  label: "Agents",
+  items: [
+    { name: "Voice",     href: "/agents-mvp",      icon: PhoneCall },
+    { name: "WhatsApp",  href: "/agents/whatsapp", icon: MessageCircle, comingSoon: true },
+    { name: "Creatives", href: "/creatives",       icon: ImageIcon },
   ],
 };
 
 export function Sidebar() {
   const pathname = usePathname() || "";
-  const router = useRouter();
   const { isEmpty, toggle, enrichmentVariant, setEnrichmentVariant } = useDemoMode();
   const { setProducts, enrichmentOnly } = useProducts();
   const spotOpen = useSpotStore((s) => s.open);
@@ -183,6 +180,12 @@ export function Sidebar() {
   // route default (expanded when current path is under the parent). Toggling
   // the caret sets an explicit boolean; navigating elsewhere doesn't reset it.
   const [expandedOverride, setExpandedOverride] = useState<Record<string, boolean>>({});
+
+  // All demo-mode toggles (Preview Empty States, Enrichment-Only,
+  // Enrichment demo view) live under one collapsible block. Default
+  // closed so the sidebar stays focused on real navigation; the
+  // sales-engineer can pop it open during a demo.
+  const [demoControlsOpen, setDemoControlsOpen] = useState(false);
 
   const isUnder = (href: string) => {
     if (href === "/dashboard") return pathname === "/dashboard" || pathname === "/";
@@ -214,17 +217,6 @@ export function Sidebar() {
         : "text-text-secondary hover:bg-surface-secondary/60"
     }`;
 
-  // The 6 top items above the Tools section. Each shows individually unless
-  // the workspace is in enrichment-only mode (in which case all are hidden;
-  // only Tools is left).
-  const topItems = [
-    dashboardItem,
-    projectsItem,
-    campaignsItem,
-    memoryItem,
-    leadsItem,
-    outreachItem,
-  ];
 
   return (
     <aside className="fixed left-0 top-0 h-screen w-sidebar bg-white border-r border-border flex flex-col z-50">
@@ -261,21 +253,39 @@ export function Sidebar() {
           </div>
         )}
 
-        {/* The 6 top standalone links · Dashboard, Projects, Campaigns,
-            Memory, Leads, Outreach. Hidden in enrichment-only mode. */}
+        {/* Dashboard · standalone, above the labelled sections.
+            Hidden in enrichment-only mode. */}
         {!enrichmentOnly && (
           <div className="mb-3 space-y-0.5">
-            {topItems.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={navLinkClass(isUnder(item.href))}
-                style={{ fontSize: "13.5px" }}
-              >
-                <item.icon size={16} strokeWidth={1.5} />
-                <span>{item.name}</span>
-              </Link>
-            ))}
+            <Link
+              key={dashboardItem.href}
+              href={dashboardItem.href}
+              className={navLinkClass(isUnder(dashboardItem.href))}
+              style={{ fontSize: "13.5px" }}
+            >
+              <dashboardItem.icon size={16} strokeWidth={1.5} />
+              <span>{dashboardItem.name}</span>
+            </Link>
+          </div>
+        )}
+
+        {/* LAUNCH section · top-level customer-facing workflows. */}
+        {!enrichmentOnly && (
+          <div className="mb-3">
+            <div className="label-section px-2 mb-1">Launch</div>
+            <div className="space-y-0.5">
+              {[projectsItem, campaignsItem, memoryItem, outreachItem].map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={navLinkClass(isUnder(item.href))}
+                  style={{ fontSize: "13.5px" }}
+                >
+                  <item.icon size={16} strokeWidth={1.5} />
+                  <span>{item.name}</span>
+                </Link>
+              ))}
+            </div>
           </div>
         )}
 
@@ -423,77 +433,173 @@ export function Sidebar() {
             </div>
           );
         })()}
+
+        {/* CONTACTS section · contacts the workspace owns. Today
+            just Leads; could grow to Audiences etc. Hidden in
+            enrichment-only mode same as the rest. */}
+        {!enrichmentOnly && (
+          <div className="mb-3">
+            <div className="label-section px-2 mb-1">Contacts</div>
+            <div className="space-y-0.5">
+              <Link
+                key={leadsItem.href}
+                href={leadsItem.href}
+                className={navLinkClass(isUnder(leadsItem.href))}
+                style={{ fontSize: "13.5px" }}
+              >
+                <leadsItem.icon size={16} strokeWidth={1.5} />
+                <span>{leadsItem.name}</span>
+              </Link>
+            </div>
+          </div>
+        )}
+
+        {/* AGENTS section · active agents the workspace can run.
+            Voice is the renamed AI calling surface; WhatsApp is a
+            coming-soon teaser; Creatives moves in from Tools because
+            generation is agent work, not a tool. Hidden in
+            enrichment-only mode. */}
+        {!enrichmentOnly && (
+          <div className="mb-3">
+            <div className="label-section px-2 mb-1">{agentsSection.label}</div>
+            <div className="space-y-0.5">
+              {agentsSection.items.map((item) => {
+                if (item.comingSoon) {
+                  return (
+                    <div
+                      key={item.href}
+                      className="relative flex items-center gap-2.5 px-2 h-8 rounded-[6px] text-text-tertiary cursor-default"
+                      style={{ fontSize: "13.5px" }}
+                    >
+                      <item.icon size={16} strokeWidth={1.5} />
+                      <span>{item.name}</span>
+                      <span className="ml-auto text-[8px] font-medium px-1 py-0.5 rounded bg-surface-secondary text-text-tertiary">
+                        Soon
+                      </span>
+                    </div>
+                  );
+                }
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={navLinkClass(isUnder(item.href))}
+                    style={{ fontSize: "13.5px" }}
+                  >
+                    <item.icon size={16} strokeWidth={1.5} />
+                    <span>{item.name}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </nav>
 
       {/* Wallet — always visible above the demo controls */}
       <WalletWidget />
 
-      {/* Demo mode toggles */}
-      <div className="px-3 pb-2 space-y-1.5">
-        <button
-          onClick={toggle}
-          className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-[6px] text-[11px] font-medium transition-all duration-150 ${
-            isEmpty
-              ? "bg-[#FEF3C7] text-[#92400E] border border-[#FDE68A]"
-              : "bg-surface-secondary text-text-tertiary hover:text-text-secondary"
-          }`}
-        >
-          {isEmpty ? <EyeOff size={12} strokeWidth={2} /> : <Eye size={12} strokeWidth={2} />}
-          {isEmpty ? "Empty State Mode ON" : "Preview Empty States"}
-        </button>
-        {/* Enrichment-only plan toggle. ON = workspace owns only Enrichment,
-            which triggers the locked/upsell flows. OFF = full product suite. */}
-        <button
-          onClick={() =>
-            setProducts(
-              enrichmentOnly
-                ? ["enrichment", "ai_calling", "campaigns"]
-                : ["enrichment"],
-            )
-          }
-          className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-[6px] text-[11px] font-medium transition-all duration-150 ${
-            enrichmentOnly
-              ? "bg-[#EEF2FF] text-[#3730A3] border border-[#C7D2FE]"
-              : "bg-surface-secondary text-text-tertiary hover:text-text-secondary"
-          }`}
-        >
-          <Lock size={12} strokeWidth={2} />
-          {enrichmentOnly ? "Enrichment-Only Plan ON" : "Preview Enrichment-Only"}
-        </button>
+      {/* Demo controls — collapsible. Empty State + Enrichment-Only +
+          Enrichment demo view all sit under one disclosure now. Default
+          closed because none of them is a real customer-facing control;
+          the indigo dot on the header surfaces when any control is in
+          a non-default state, so the operator can tell at a glance. */}
+      <div className="px-3 pb-2">
+        {(() => {
+          const anyActive = isEmpty || enrichmentOnly || enrichmentVariant !== "populated";
+          return (
+            <>
+              <button
+                type="button"
+                onClick={() => setDemoControlsOpen((v) => !v)}
+                className="w-full flex items-center gap-1 px-1 py-1.5 text-[9.5px] font-semibold uppercase tracking-[0.08em] text-text-tertiary hover:text-text-secondary transition-colors"
+                aria-expanded={demoControlsOpen}
+              >
+                {demoControlsOpen ? (
+                  <ChevronDown size={9} strokeWidth={2} className="shrink-0" />
+                ) : (
+                  <ChevronRight size={9} strokeWidth={2} className="shrink-0" />
+                )}
+                <span>Demo controls</span>
+                {!demoControlsOpen && anyActive && (
+                  <span className="ml-auto w-1.5 h-1.5 rounded-full bg-[#6366F1]" aria-label="A demo control is active" />
+                )}
+              </button>
+              {demoControlsOpen && (
+                <div className="space-y-1.5 mt-1">
+                  <button
+                    onClick={toggle}
+                    className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-[6px] text-[11px] font-medium transition-all duration-150 ${
+                      isEmpty
+                        ? "bg-[#FEF3C7] text-[#92400E] border border-[#FDE68A]"
+                        : "bg-surface-secondary text-text-tertiary hover:text-text-secondary"
+                    }`}
+                  >
+                    {isEmpty ? <EyeOff size={12} strokeWidth={2} /> : <Eye size={12} strokeWidth={2} />}
+                    {isEmpty ? "Empty State Mode ON" : "Preview Empty States"}
+                  </button>
+                  {/* Enrichment-only plan toggle. ON = workspace owns only
+                      Enrichment, which triggers the locked/upsell flows. */}
+                  <button
+                    onClick={() =>
+                      setProducts(
+                        enrichmentOnly
+                          ? ["enrichment", "ai_calling", "campaigns"]
+                          : ["enrichment"],
+                      )
+                    }
+                    className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-[6px] text-[11px] font-medium transition-all duration-150 ${
+                      enrichmentOnly
+                        ? "bg-[#EEF2FF] text-[#3730A3] border border-[#C7D2FE]"
+                        : "bg-surface-secondary text-text-tertiary hover:text-text-secondary"
+                    }`}
+                  >
+                    <Lock size={12} strokeWidth={2} />
+                    {enrichmentOnly ? "Enrichment-Only Plan ON" : "Preview Enrichment-Only"}
+                  </button>
 
-        {/* Enrichment demo view · 4 chips. Drives every /enrichment tab from
-            one place so the user can A/B states without leaving the sidebar. */}
-        <div className="pt-1">
-          <div className="px-1 pb-1 text-[9.5px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">
-            Enrichment demo view
-          </div>
-          <div className="grid grid-cols-2 gap-1">
-            {[
-              { key: "populated", label: "Populated" },
-              { key: "empty", label: "Empty" },
-              { key: "no-crm", label: "No CRM" },
-              { key: "no-storage", label: "No storage" },
-            ].map((opt) => {
-              const active = enrichmentVariant === opt.key;
-              return (
-                <button
-                  key={opt.key}
-                  onClick={() => setEnrichmentVariant(opt.key as typeof enrichmentVariant)}
-                  className={`px-2 py-1.5 rounded-[6px] text-[11px] font-medium transition-all duration-150 ${
-                    active
-                      ? "bg-text-primary text-white"
-                      : "bg-surface-secondary text-text-tertiary hover:text-text-secondary"
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
+                  {/* Enrichment demo view · 4 chips. Drives every /enrichment
+                      tab from one place so the user can A/B states without
+                      leaving the sidebar. */}
+                  <div className="pt-1">
+                    <div className="px-1 pb-1 text-[9.5px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">
+                      Enrichment demo view
+                    </div>
+                    <div className="grid grid-cols-2 gap-1">
+                      {[
+                        { key: "populated", label: "Populated" },
+                        { key: "empty", label: "Empty" },
+                        { key: "no-crm", label: "No CRM" },
+                        { key: "no-storage", label: "No storage" },
+                      ].map((opt) => {
+                        const active = enrichmentVariant === opt.key;
+                        return (
+                          <button
+                            key={opt.key}
+                            onClick={() => setEnrichmentVariant(opt.key as typeof enrichmentVariant)}
+                            className={`px-2 py-1.5 rounded-[6px] text-[11px] font-medium transition-all duration-150 ${
+                              active
+                                ? "bg-text-primary text-white"
+                                : "bg-surface-secondary text-text-tertiary hover:text-text-secondary"
+                            }`}
+                          >
+                            {opt.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
+          );
+        })()}
       </div>
 
-      {/* User row · name + role + email + Settings cog + sign out */}
+      {/* User row · name + role + email + Settings cog. Sign out used
+          to live here too, but it's now a first-class entry inside
+          Settings → Profile, and keeping it in the sidebar duplicated
+          the action in two places a click apart. */}
       <div className="border-t border-border px-3 py-2">
         <div className="flex items-center gap-2">
           <div className="w-[26px] h-[26px] rounded-full bg-surface-secondary flex items-center justify-center flex-shrink-0">
@@ -523,18 +629,6 @@ export function Sidebar() {
           >
             <Settings size={14} strokeWidth={1.5} />
           </Link>
-          <button
-            type="button"
-            aria-label="Sign out"
-            title="Sign out"
-            onClick={async () => {
-              await signOut();
-              router.replace("/login");
-            }}
-            className="p-1 text-text-tertiary hover:text-text-secondary transition-colors"
-          >
-            <LogOut size={13} strokeWidth={1.6} />
-          </button>
         </div>
       </div>
     </aside>

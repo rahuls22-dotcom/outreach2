@@ -411,11 +411,17 @@ export default function WalletSettingsPage({ view = "utilization" }: { view?: Wa
           changes. On Utilization the switch matters because the
           balance hero only renders for prepaid; on Billing it
           drives the entire spend layout. */}
-      <div className="flex items-center gap-6 flex-wrap">
-        <BillingModeSwitch />
-        {billingMode === "prepaid" && <PrepaidPlanTypeSwitch />}
-        {billingMode === "prepaid" && <BalanceStateDemoSwitch />}
-      </div>
+      {/* Billing-mode demo strips · Prepaid/Postpaid + plan type +
+          balance state are billing concepts, not usage ones. Strip
+          them from the Usage tab to keep that page focused on
+          consumption. They still drive the Billing tab below. */}
+      {v === "billing" && (
+        <div className="flex items-center gap-6 flex-wrap">
+          <BillingModeSwitch />
+          {billingMode === "prepaid" && <PrepaidPlanTypeSwitch />}
+          {billingMode === "prepaid" && <BalanceStateDemoSwitch />}
+        </div>
+      )}
 
       {/* ── Utilization route ──────────────────────────────────────────
           Utilization is the consumption story — "how much of each
@@ -1812,11 +1818,11 @@ function UtilizationByProductTable({ rangeDays }: { rangeDays: number }) {
     });
   }, [rangeDays]);
 
-  // Three-column grid — name on the left, units in the middle, and a
-  // trailing column reserved for future bits (share-of-product %,
-  // daily-limit progress). For now it's empty but keeps the
-  // structural similarity to the Billing table strong.
-  const gridCols = "grid-cols-[minmax(0,1fr)_180px_80px]";
+  // Three-column grid — name + units + cost. Share column dropped
+  // because its denominator (per-product cap units) wasn't comparable
+  // across products. Cost added so Usage tells the money story too,
+  // not just consumption.
+  const gridCols = "grid-cols-[minmax(0,1fr)_180px_120px]";
 
   return (
     <div className="bg-white border border-border rounded-card overflow-hidden">
@@ -1832,7 +1838,7 @@ function UtilizationByProductTable({ rangeDays }: { rangeDays: number }) {
       <div className={`grid ${gridCols} gap-3 px-5 py-2 border-b border-border-subtle text-[10px] font-medium text-text-tertiary uppercase tracking-[0.4px]`}>
         <span>Product / capability</span>
         <span className="text-right">Units</span>
-        <span className="text-right">Share</span>
+        <span className="text-right">Cost</span>
       </div>
 
       {/* Rows */}
@@ -1845,10 +1851,6 @@ function UtilizationByProductTable({ rangeDays }: { rangeDays: number }) {
               dl && dlPct >= 90 ? "#DC2626"
             : dl && dlPct >= 75 ? "#D97706"
             : null;
-          // Sum of capability units (only really comparable within a
-          // single product because units differ across products);
-          // used for the per-product share denominator.
-          const productUnits = caps.reduce((s, c) => s + Math.round(c.unitCount * ratio), 0);
           return (
             <div
               key={m.id}
@@ -1887,13 +1889,12 @@ function UtilizationByProductTable({ rangeDays }: { rangeDays: number }) {
                   </div>
                 </div>
                 <div /> {/* Units col is blank on the product header */}
-                <div /> {/* Share col is blank on the product header */}
+                <div /> {/* Cost col is blank on the product header */}
               </div>
 
               {/* Capability sub-rows — units only, no money. */}
               {caps.map((c) => {
                 const capUnits = Math.round(c.unitCount * ratio);
-                const sharePct = productUnits > 0 ? (capUnits / productUnits) * 100 : 0;
                 // Drop the unit suffix on Enrichment (the label
                 // "Professional enrichment" already says everything;
                 // appending "enrichments" would be redundant). Keep
@@ -1905,8 +1906,11 @@ function UtilizationByProductTable({ rangeDays }: { rangeDays: number }) {
                     key={c.id}
                     className={`grid ${gridCols} gap-3 px-5 py-2.5 items-center border-t border-border-subtle`}
                   >
-                    <div className="flex items-center gap-2 pl-7 min-w-0">
-                      <span className="text-text-tertiary/60 text-[11px] select-none shrink-0" aria-hidden>↳</span>
+                    <div className="flex items-center gap-3 pl-7 min-w-0">
+                      {/* Vertical guide line — a quiet tree-view tick
+                          that signals parent/child without the visual
+                          drama of an arrow glyph. */}
+                      <span className="w-px h-3.5 bg-border shrink-0" aria-hidden />
                       <span className="text-[12.5px] text-text-secondary truncate">
                         {c.label}
                       </span>
@@ -1919,8 +1923,11 @@ function UtilizationByProductTable({ rangeDays }: { rangeDays: number }) {
                         </span>
                       )}
                     </div>
-                    <div className="text-right tabular-nums text-[11.5px] text-text-tertiary">
-                      {sharePct.toFixed(0)}%
+                    <div className="text-right tabular-nums text-[13px] text-text-primary">
+                      {/* Cost = units × rate. Surfaces the money story so
+                          Usage isn't only about consumption. "—" when the
+                          capability has no rate (e.g. included throttles). */}
+                      {c.rate > 0 ? formatAmount(Math.round(capUnits * c.rate), "INR") : "—"}
                     </div>
                   </div>
                 );
