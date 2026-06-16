@@ -20,7 +20,7 @@
  *      and which wallet drove them.
  */
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   WALLETS,
@@ -39,7 +39,8 @@ import { LowBalanceModal } from "@/components/wallet/low-balance-modal";
 import { WalletCard } from "@/components/wallet/wallet-card";
 import { TopUpEstimatorModal } from "@/components/wallet/top-up-estimator-modal";
 import { DateRangeSelector, getPresetRange } from "@/components/dashboard/date-range-selector";
-import { Plus, Receipt, TrendingUp, Calendar, ArrowDown, BarChart3, AlertTriangle, Send } from "lucide-react";
+import { useAccessibleWorkspaces } from "@/lib/workspace-store";
+import { Plus, Receipt, TrendingUp, Calendar, ArrowDown, BarChart3, AlertTriangle, Send, Building2, Check, ChevronDown } from "lucide-react";
 
 // The shared DateRangeSelector emits a preset string ("7", "30",
 // "thismonth", "lifetime", etc.). Our daily series is keyed by N-day
@@ -339,6 +340,153 @@ function buildChartBuckets(rangeDays: number, wallets = WALLETS): ChartData {
 // forking the underlying data hooks.
 export type WalletPageView = "utilization" | "billing" | "wallet";
 
+// ── WorkspaceMultiSelect ────────────────────────────────────────────────────
+//
+// Compact multi-select dropdown that lets the user narrow the Usage rollup
+// to one or more workspaces. Sits next to the date filter in the Usage
+// header. Default is "all workspaces selected" so the page reads as the
+// full picture on first load; users can A/B isolate workspaces without
+// losing the date filter.
+//
+// Behaviour mirrors the DateRangeSelector trigger: same compact pill, same
+// chevron, same border/typography. The popover itself is a checkbox list
+// with a single "Select all" reset (no Clear — a zero-selected state
+// renders an empty Usage page and is never something the user wants).
+// Each row carries an "Only" affordance on hover so isolating to one or
+// two workspaces is a single click each, not a chore of unchecking
+// everything else. Minimum selection is enforced at 1 — clicking the
+// last selected checkbox is a no-op rather than silently nuking the
+// view.
+function WorkspaceMultiSelect({
+  workspaces,
+  selectedIds,
+  onChange,
+}: {
+  workspaces: { id: string; name: string; region: string }[];
+  selectedIds: string[];
+  onChange: (ids: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const allSelected = selectedIds.length === workspaces.length;
+  const label =
+    allSelected
+      ? "All workspaces"
+      : selectedIds.length === 1
+          ? workspaces.find((w) => w.id === selectedIds[0])?.name ?? "1 workspace"
+          : `${selectedIds.length} workspaces`;
+
+  const toggle = (id: string) => {
+    const checked = selectedIds.includes(id);
+    if (checked && selectedIds.length === 1) return; // no-op: keep at least one
+    onChange(
+      checked
+        ? selectedIds.filter((x) => x !== id)
+        : [...selectedIds, id],
+    );
+  };
+
+  const only = (id: string) => onChange([id]);
+
+  return (
+    <div ref={wrapRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        className="inline-flex items-center gap-2 h-8 pl-2.5 pr-2 rounded-button border border-border-subtle bg-white text-[12px] font-medium text-text-primary hover:border-text-tertiary transition-colors"
+      >
+        <Building2 size={13} strokeWidth={1.75} className="text-text-tertiary" />
+        <span>{label}</span>
+        <ChevronDown size={12} strokeWidth={2} className="text-text-tertiary" />
+      </button>
+      {open && (
+        <div
+          role="listbox"
+          aria-label="Workspaces"
+          className="absolute right-0 top-[calc(100%+4px)] z-20 w-[240px] bg-white border border-border rounded-card shadow-lg overflow-hidden"
+        >
+          <div className="flex items-center justify-between px-3 py-2 border-b border-border-subtle bg-surface-page/60">
+            <span className="text-[10.5px] font-semibold uppercase tracking-[0.4px] text-text-tertiary">
+              Workspaces
+            </span>
+            <button
+              type="button"
+              onClick={() => onChange(workspaces.map((w) => w.id))}
+              disabled={allSelected}
+              className="text-[11px] font-medium text-text-secondary hover:text-text-primary disabled:opacity-40 disabled:cursor-default"
+            >
+              Select all
+            </button>
+          </div>
+          <ul className="max-h-[260px] overflow-y-auto py-1">
+            {workspaces.map((w) => {
+              const checked = selectedIds.includes(w.id);
+              const isLastSelected = checked && selectedIds.length === 1;
+              return (
+                <li key={w.id} className="group relative">
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={checked}
+                    onClick={() => toggle(w.id)}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 pr-14 hover:bg-surface-page transition-colors text-left ${
+                      isLastSelected ? "cursor-default" : ""
+                    }`}
+                    title={isLastSelected ? "At least one workspace must stay selected" : undefined}
+                  >
+                    <span
+                      className={`flex items-center justify-center w-[14px] h-[14px] rounded border ${
+                        checked
+                          ? "bg-text-primary border-text-primary"
+                          : "bg-white border-border"
+                      }`}
+                      aria-hidden
+                    >
+                      {checked && <Check size={10} strokeWidth={3} className="text-white" />}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[12.5px] font-medium text-text-primary truncate">
+                        {w.name}
+                      </div>
+                      <div className="text-[10.5px] text-text-tertiary truncate">
+                        {w.region}
+                      </div>
+                    </div>
+                  </button>
+                  {!isLastSelected && (
+                    <button
+                      type="button"
+                      onClick={() => only(w.id)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 focus:opacity-100 text-[10.5px] font-medium text-text-secondary hover:text-text-primary px-1.5 py-0.5 rounded border border-border-subtle bg-white transition-opacity"
+                      title={`Show only ${w.name}`}
+                    >
+                      Only
+                    </button>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function WalletSettingsPage({ view = "utilization" }: { view?: WalletPageView } = {}) {
   // Treat the legacy "wallet" view as a synonym for "utilization" so
   // the rest of the file only has to branch on two cases.
@@ -376,6 +524,29 @@ export default function WalletSettingsPage({ view = "utilization" }: { view?: Wa
   // framing, and so we can name the actual window in the past
   // case. Defaults match the day-count preset default ("30").
   const [rangePreset, setRangePreset] = useState<string>("30");
+
+  // Workspace scope filter — multi-select. Usage rolls up across
+  // workspaces the user can see; the filter narrows the rollup to
+  // a chosen subset without leaving the page. Default is "all
+  // workspaces selected" so the page reads as the full picture on
+  // first load.
+  const accessibleWorkspaces = useAccessibleWorkspaces();
+  // `useAccessibleWorkspaces` returns a freshly-filtered array on every
+  // render, so depending on the array reference would re-fire the
+  // effect every render and trigger an infinite setState loop. We key
+  // off the joined-id string instead — stable across renders unless
+  // the actual set of accessible workspaces changes.
+  const accessibleWorkspaceIdsKey = accessibleWorkspaces.map((w) => w.id).join(",");
+  const [selectedWorkspaceIds, setSelectedWorkspaceIds] = useState<string[]>(() =>
+    accessibleWorkspaces.map((w) => w.id),
+  );
+  useEffect(() => {
+    setSelectedWorkspaceIds((prev) => {
+      const accessibleIds = accessibleWorkspaceIdsKey ? accessibleWorkspaceIdsKey.split(",") : [];
+      const valid = prev.filter((id) => accessibleIds.includes(id));
+      return valid.length > 0 ? valid : accessibleIds;
+    });
+  }, [accessibleWorkspaceIdsKey]);
 
   // Range-windowed total — recomputed on every range change.
   const rangeUtilized = useMemo(() => utilizedInRange(range), [range]);
@@ -443,6 +614,19 @@ export default function WalletSettingsPage({ view = "utilization" }: { view?: Wa
               cards below carry the real context. */}
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          {/* Workspace scope — multi-select. Sits to the left of the
+              date filter so the eye reads "which workspaces · which
+              window" in scanning order. Only on Usage view, and only
+              when the user has access to more than one workspace
+              (otherwise the filter would be a single non-toggleable
+              row). */}
+          {v === "utilization" && accessibleWorkspaces.length > 1 && (
+            <WorkspaceMultiSelect
+              workspaces={accessibleWorkspaces}
+              selectedIds={selectedWorkspaceIds}
+              onChange={setSelectedWorkspaceIds}
+            />
+          )}
           <DateRangeSelector
             compact
             defaultPreset="30"
