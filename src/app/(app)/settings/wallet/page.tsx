@@ -407,11 +407,11 @@ function WorkspaceMultiSelect({
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="listbox"
         aria-expanded={open}
-        className="inline-flex items-center gap-2 h-8 pl-2.5 pr-2 rounded-button border border-border-subtle bg-white text-[12px] font-medium text-text-primary hover:border-text-tertiary transition-colors"
+        className="flex items-center gap-2 h-9 px-3 bg-white border border-border rounded-input text-[13px] text-text-primary hover:border-border-hover transition-colors duration-150"
       >
-        <Building2 size={13} strokeWidth={1.75} className="text-text-tertiary" />
-        <span>{label}</span>
-        <ChevronDown size={12} strokeWidth={2} className="text-text-tertiary" />
+        <Building2 size={14} strokeWidth={1.5} className="text-text-tertiary" />
+        <span className="text-[12px]">{label}</span>
+        <ChevronDown size={14} strokeWidth={1.5} className={`text-text-tertiary transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
       {open && (
         <div
