@@ -1,8 +1,10 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { BarChart3, Plug, UserCircle2 } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { BarChart3, Plug, UserCircle2, Building2 } from "lucide-react";
+import { useCurrentUser } from "@/lib/workspace-store";
 
 // Billing is intentionally out of scope for now — the design
 // conversation is parked on Usage and won't touch billing-mode
@@ -12,12 +14,25 @@ import { BarChart3, Plug, UserCircle2 } from "lucide-react";
 // nothing visible points at it.
 const SETTINGS_NAV = [
   { name: "Usage",        href: "/settings/utilization",  icon: BarChart3 },
+  { name: "Workspaces",   href: "/settings/workspaces",   icon: Building2 },
   { name: "Integrations", href: "/settings/integrations", icon: Plug },
   { name: "Profile",      href: "/settings/profile",      icon: UserCircle2 },
 ];
 
 export default function SettingsLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const user = useCurrentUser();
+
+  // Settings is admin-only. Members reach the app shell but never the
+  // settings surface — their sidebar shows Log out, not the gear. Guard
+  // here too so a hand-typed /settings URL, or a live role switch while
+  // sitting on a settings page, bounces them home instead of leaking it.
+  useEffect(() => {
+    if (user.role !== "admin") router.replace("/");
+  }, [user.role, router]);
+
+  if (user.role !== "admin") return null;
 
   const renderLink = (item: { name: string; href: string; icon: typeof BarChart3 }) => {
     const active = pathname === item.href || pathname.startsWith(item.href + "/");

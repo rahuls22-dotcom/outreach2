@@ -9,12 +9,11 @@
  * the fold.
  */
 
-import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import type { Variants } from "framer-motion";
 import { LogOut } from "lucide-react";
 import { useCurrentUser } from "@/lib/workspace-store";
-import { signOut } from "@/lib/auth";
+import { useLogout } from "@/lib/auth-actions";
 
 const fadeUp: Variants = {
   hidden: { opacity: 0, y: 4 },
@@ -22,26 +21,13 @@ const fadeUp: Variants = {
 };
 
 export default function ProfileSettingsPage() {
-  const router = useRouter();
   const user = useCurrentUser();
+  const handleLogout = useLogout();
   const initials = user.name
     .split(" ")
     .map((w) => w[0])
     .join("")
     .slice(0, 2);
-
-  const handleLogout = async () => {
-    if (typeof window === "undefined") return;
-    const confirmed = window.confirm("Log out of Revspot?");
-    if (!confirmed) return;
-    try {
-      Object.keys(window.localStorage)
-        .filter((k) => k.startsWith("revspot:"))
-        .forEach((k) => window.localStorage.removeItem(k));
-    } catch { /* ignore */ }
-    await signOut();
-    router.push("/login");
-  };
 
   return (
     <motion.div initial="hidden" animate="show" variants={fadeUp} className="max-w-[680px]">

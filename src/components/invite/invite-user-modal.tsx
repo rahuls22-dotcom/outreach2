@@ -6,34 +6,48 @@ import { RevspotLogo } from "@/components/layout/revspot-logo";
 import { useAccessibleWorkspaces, useCurrentUser } from "@/lib/workspace-store";
 import { useInviteStore, parseEmails } from "@/lib/invite-data";
 import { useSpotStore } from "@/lib/spot/store";
-import type { UserRole } from "@/lib/workspace-data";
+import { getWorkspace, type UserRole } from "@/lib/workspace-data";
 
 export function InviteUserModal({
   open,
   onClose,
   defaultWorkspaceId,
+  lockWorkspaceId,
 }: {
   open: boolean;
   onClose: () => void;
   /** Pre-select this workspace; default is the inviter's current workspace. */
   defaultWorkspaceId?: string;
+  /** Pin the invite to this workspace and hide the picker — used when invoked
+   *  from inside a workspace, where the target is already fixed. */
+  lockWorkspaceId?: string;
 }) {
   const user = useCurrentUser();
   const accessible = useAccessibleWorkspaces();
   const addInvite = useInviteStore((s) => s.addInvite);
   const showToast = useSpotStore((s) => s.showToast);
 
+  const locked = !!lockWorkspaceId;
+  const lockedWs = lockWorkspaceId ? getWorkspace(lockWorkspaceId) : null;
+
   const [emailsText, setEmailsText] = useState("");
   const [role, setRole] = useState<UserRole>("member");
   const [wsIds, setWsIds] = useState<string[]>(
-    defaultWorkspaceId ? [defaultWorkspaceId] : accessible.length ? [accessible[0].id] : [],
+    lockWorkspaceId
+      ? [lockWorkspaceId]
+      : defaultWorkspaceId
+      ? [defaultWorkspaceId]
+      : accessible.length
+      ? [accessible[0].id]
+      : [],
   );
   const [message, setMessage] = useState("");
 
   if (!open) return null;
 
   const validEmails = parseEmails(emailsText);
-  const canSend = validEmails.length > 0 && wsIds.length > 0;
+  const effectiveWsIds = locked ? [lockWorkspaceId!] : wsIds;
+  const canSend = validEmails.length > 0 && effectiveWsIds.length > 0;
   const canInviteAdmins = user.role === "admin";
 
   const handleSend = () => {
@@ -42,7 +56,7 @@ export function InviteUserModal({
       addInvite({
         email,
         role,
-        workspaceIds: wsIds,
+        workspaceIds: effectiveWsIds,
         invitedByUserId: user.id,
         message: message.trim() || undefined,
       });
@@ -101,7 +115,9 @@ export function InviteUserModal({
                 Invite teammates
               </div>
               <div className="text-[11.5px] text-text-tertiary">
-                {user.role === "admin"
+                {locked
+                  ? `Invite to ${lockedWs?.name || "this workspace"} by email.`
+                  : user.role === "admin"
                   ? "You can invite to any workspace and as admin or member."
                   : `You can invite to ${accessible[0]?.name || "your workspace"} as a member.`}
               </div>
@@ -150,7 +166,14 @@ export function InviteUserModal({
             </Field>
 
             {/* Role */}
-            <Field label="Role" hint="Members see only the workspaces you select. Admins see everything.">
+            <Field
+              label="Role"
+              hint={
+                locked
+                  ? `Their role in ${lockedWs?.name || "this workspace"}.`
+                  : "Members see only the workspaces you select. Admins see everything."
+              }
+            >
               <div className="grid gap-2" style={{ gridTemplateColumns: "1fr 1fr" }}>
                 <RoleTile
                   active={role === "member"}
@@ -162,13 +185,21 @@ export function InviteUserModal({
                   active={role === "admin"}
                   onClick={() => canInviteAdmins && setRole("admin")}
                   label="Admin"
-                  sub={canInviteAdmins ? "Cross-workspace + settings" : "Admins only"}
+                  sub={
+                    canInviteAdmins
+                      ? locked
+                        ? "Manages this workspace"
+                        : "Cross-workspace + settings"
+                      : "Admins only"
+                  }
                   disabled={!canInviteAdmins}
                 />
               </div>
             </Field>
 
-            {/* Workspaces */}
+            {/* Workspaces — hidden when the target workspace is fixed (the
+                picker would be a single locked row that earns nothing). */}
+            {!locked && (
             <Field
               label="Workspaces"
               hint={
@@ -232,6 +263,7 @@ export function InviteUserModal({
                 </div>
               )}
             </Field>
+            )}
 
             {/* Optional personal message */}
             <Field label="Note (optional)">

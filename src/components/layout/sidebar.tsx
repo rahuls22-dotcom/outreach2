@@ -49,7 +49,9 @@ import {
   Brain,
   ChevronDown,
   MessageCircle,
+  LogOut,
 } from "lucide-react";
+import { useLogout } from "@/lib/auth-actions";
 import { useDemoMode } from "@/lib/demo-mode";
 import { useProducts, PRODUCT_PRESETS, currentPreset, type ProductKey, type ProductPreset } from "@/lib/products";
 import { useSpotStore } from "@/lib/spot/store";
@@ -197,6 +199,7 @@ export function Sidebar() {
   };
   const spotOpen = useSpotStore((s) => s.open);
   const user = useCurrentUser();
+  const logout = useLogout();
 
   // Manual expand/collapse overrides per parent href. `undefined` = follow the
   // route default (expanded when current path is under the parent). Toggling
@@ -690,10 +693,10 @@ export function Sidebar() {
         })()}
       </div>
 
-      {/* User row · name + role + email + Settings cog. Sign out used
-          to live here too, but it's now a first-class entry inside
-          Settings → Profile, and keeping it in the sidebar duplicated
-          the action in two places a click apart. */}
+      {/* User row · name + role + email + trailing action. The action is
+          role-gated: admins get the Settings gear (settings is admin-only);
+          members get Log out directly, since they have no settings surface
+          to reach it from. Exactly one action, sized to the role. */}
       <div className="border-t border-border px-3 py-2">
         <div className="flex items-center gap-2">
           <div className="w-[26px] h-[26px] rounded-full bg-surface-secondary flex items-center justify-center flex-shrink-0">
@@ -712,17 +715,29 @@ export function Sidebar() {
             </div>
             <div className="text-[10px] text-text-tertiary truncate">{user.email}</div>
           </div>
-          <Link
-            href="/settings"
-            aria-label="Settings"
-            className={`p-1 transition-colors ${
-              isUnder("/settings")
-                ? "text-text-primary"
-                : "text-text-tertiary hover:text-text-secondary"
-            }`}
-          >
-            <Settings size={14} strokeWidth={1.5} />
-          </Link>
+          {user.role === "admin" ? (
+            <Link
+              href="/settings"
+              aria-label="Settings"
+              className={`p-1 transition-colors ${
+                isUnder("/settings")
+                  ? "text-text-primary"
+                  : "text-text-tertiary hover:text-text-secondary"
+              }`}
+            >
+              <Settings size={14} strokeWidth={1.5} />
+            </Link>
+          ) : (
+            <button
+              type="button"
+              onClick={logout}
+              aria-label="Log out"
+              title="Log out"
+              className="p-1 text-text-tertiary hover:text-[#DC2626] transition-colors"
+            >
+              <LogOut size={14} strokeWidth={1.5} />
+            </button>
+          )}
         </div>
       </div>
     </aside>

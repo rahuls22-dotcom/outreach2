@@ -13,6 +13,7 @@ import {
   useWorkspaceStore,
 } from "@/lib/workspace-store";
 import { getWorkspace } from "@/lib/workspace-data";
+import { useWorkspaceMembersStore } from "@/lib/workspace-members-store";
 import { projectsForWorkspace } from "@/lib/project-data";
 
 function AllMark({ size = 26 }: { size?: number }) {
@@ -41,6 +42,7 @@ export function WorkspaceSwitcher() {
   const accessible = useAccessibleWorkspaces();
   const scope = useCurrentScope();
   const setScope = useWorkspaceStore((s) => s.setScope);
+  const membersByWs = useWorkspaceMembersStore((s) => s.members);
 
   const [open, setOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -159,7 +161,8 @@ export function WorkspaceSwitcher() {
                 <div className="flex-1 min-w-0">
                   <div className="text-[12.5px] font-semibold truncate">{w.name}</div>
                   <div className="text-[10.5px] text-text-tertiary truncate">
-                    {projects.length} project{projects.length === 1 ? "" : "s"} · {w.memberCount} members
+                    {projects.length} project{projects.length === 1 ? "" : "s"} ·{" "}
+                    {membersByWs[w.id]?.length ?? w.memberCount} members
                   </div>
                 </div>
                 {active && <Check size={13} className="text-text-secondary" />}
