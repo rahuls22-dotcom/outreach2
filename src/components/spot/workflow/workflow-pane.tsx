@@ -1,15 +1,17 @@
 "use client";
 
-// Right-pane canvas for the launch workflow. **Read-only** — every
-// approval action lives in the left chat (via the step-cta part). This
-// pane just shows what Spot is working on.
+// Spot artifact canvas — SpotCanvasPanel (single light floating panel),
+// ChatHeaderFilePicker (files dropdown), FileBody (per-tab router), and
+// all workflow step views. Panel opens only on user click; gate/approve
+// actions remain in the left chat.
 
-import { PanelRightClose, X, Users, Package, ChartPie, Sparkles, Megaphone, Layout as LayoutIcon, PartyPopper, CheckCircle2, Check, Wifi, WifiOff, Cog, ChevronRight, ChevronDown, Pencil, Search, ShieldAlert, TrendingUp, ExternalLink, Image as ImageIcon, Mic, MessageSquare, Phone, ArrowRight, Upload, Download, FileText, Film as FilmIcon, Layers, Paperclip, Brain, Home, Maximize2 } from "lucide-react";
+import { X, Users, Package, ChartPie, Megaphone, Layout as LayoutIcon, PartyPopper, CheckCircle2, Check, Wifi, WifiOff, Cog, ChevronRight, ChevronDown, Pencil, Search, ShieldAlert, TrendingUp, ExternalLink, Image as ImageIcon, Mic, MessageSquare, Phone, ArrowRight, Upload, Download, FileText, Film as FilmIcon, Layers, Brain, Maximize2 } from "lucide-react";
 import { motion } from "framer-motion";
 import type { Variants } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSpotStore } from "@/lib/spot/store";
+import { useMemoryPanel } from "@/components/memory/memory-panel";
 import {
   STEP_LABELS,
   STEP_TOOL_CALL,
@@ -32,7 +34,6 @@ import {
   type CampaignBucket,
 } from "@/lib/spot/workflow";
 import {
-  AnalyzeStep,
   DiagnosticStep,
 } from "@/components/spot/workflow/diagnostic-steps";
 import {
@@ -40,6 +41,7 @@ import {
   LaunchBuildingStep,
 } from "@/components/spot/workflow/launch-build-steps";
 import { CreativesFormsReview } from "@/components/spot/workflow/creatives-forms-review";
+import { LiveExecution } from "@/components/spot/workflow/live-execution";
 import { LaunchStrategyStep } from "@/components/spot/workflow/launch-strategy-step";
 import { ExecutionChecklist, LAUNCH_DEPLOY_CHECKLIST } from "@/components/spot/workflow/execution-checklist";
 import { CampaignDiveStep } from "@/components/spot/workflow/campaign-dive-step";
@@ -48,15 +50,16 @@ import { SpotMark } from "@/components/spot/spot-mark";
 import { SpotLoader, SpotFullscreen } from "@/components/spot/spot-loader";
 import { PRODUCTS } from "@/lib/products-data";
 import { analystReportFor } from "@/lib/spot/analyst-data";
+import { planMarkdownFor } from "@/lib/spot/extended-flows";
 
 const STEP_ICONS: Record<WorkflowStep, typeof Users> = {
   // Launch flow (new consolidated structure)
   "deep-research": Search,
   "product-setup": Package,
-  kickoff: Sparkles,
+  kickoff: Brain,
   "import-campaigns": Download,
-  "launch-strategy": Sparkles,
-  "launch-plan": Sparkles,
+  "launch-strategy": Brain,
+  "launch-plan": Brain,
   "launch-building": Cog,
   "launch-review": CheckCircle2,
   "launch-deploy": Upload,
@@ -64,7 +67,7 @@ const STEP_ICONS: Record<WorkflowStep, typeof Users> = {
   // kept for type-completeness on the Record<WorkflowStep, ...> map.
   personas: Users,
   "media-plan": ChartPie,
-  angles: Sparkles,
+  angles: Brain,
   "resize-qa": CheckCircle2,
   forms: LayoutIcon,
   campaigns: Megaphone,
@@ -72,16 +75,16 @@ const STEP_ICONS: Record<WorkflowStep, typeof Users> = {
   // Diagnostic flows — 4 steps each: analyze → clarify → plan → live
   "scale-analyze": Search,
   "scale-clarify": ChartPie,
-  "scale-plan": Sparkles,
+  "scale-plan": Brain,
   "scale-live": TrendingUp,
   "opt-analyze": Search,
   "opt-clarify": ChartPie,
-  "opt-plan": Sparkles,
+  "opt-plan": Brain,
   "opt-live": ShieldAlert,
   "ang-analyze": Search,
   "ang-clarify": ChartPie,
   "ang-creatives": Layers,
-  "ang-plan": Sparkles,
+  "ang-plan": Brain,
   "ang-live": ImageIcon,
   "campaign-dive": Megaphone,
   // Shared
@@ -96,7 +99,7 @@ function inr(n: number) {
 
 // Stagger animation used to reveal canvas content card-by-card once
 // an agent finishes its work. Slightly slower than the chat fadeUp so
-// the right pane feels like it's *filling in*.
+// the panel feels like it's *filling in*.
 const canvasStagger: Variants = {
   hidden: {},
   show: { transition: { staggerChildren: 0.18, delayChildren: 0.05 } },
@@ -106,31 +109,70 @@ const canvasReveal: Variants = {
   show: { opacity: 1, y: 0, transition: { duration: 0.32, ease: "easeOut" } },
 };
 
-// File tabs the right pane exposes · this is the Claude-Code-style
+// File tabs the panel exposes · this is the Claude-Code-style
 // file browser of the product's memory: memory.md / plan.md /
 // dashboard.html / assets/. The step rail is gone — workflows are
 // agentic, not procedural, so we surface them as files instead of
 // chips. CanvasFile lives in workflow.ts so the chat header (which
 // owns the picker) can import the same type.
+export type Taxonomy = "memory" | "work" | "reference" | "folder";
+
 export const FILE_TABS: {
   key: CanvasFile;
   label: string;
   file: string;
   icon: typeof FileText;
+  taxonomy: Taxonomy;
 }[] = [
-  { key: "memory", label: "Project details", file: "project-details.md", icon: FileText },
-  { key: "strategy", label: "Strategy", file: "strategy.md", icon: Sparkles },
-  { key: "plan", label: "Plan", file: "plan.md", icon: TrendingUp },
-  { key: "analysis", label: "Analysis", file: "analysis.md", icon: Search },
-  { key: "dashboard", label: "Dashboard", file: "dashboard.html", icon: ChartPie },
-  { key: "assets", label: "Assets", file: "assets/", icon: ImageIcon },
+  { key: "memory", label: "Project details", file: "project-details.md", icon: FileText, taxonomy: "memory" },
+  { key: "strategy", label: "Strategy", file: "strategy.md", icon: Brain, taxonomy: "work" },
+  { key: "plan", label: "Plan", file: "plan.md", icon: TrendingUp, taxonomy: "work" },
+  { key: "execution", label: "Execution", file: "execution.live", icon: CheckCircle2, taxonomy: "work" },
+  { key: "analysis", label: "Analysis", file: "analysis.md", icon: Search, taxonomy: "reference" },
+  { key: "dashboard", label: "Dashboard", file: "dashboard.html", icon: ChartPie, taxonomy: "reference" },
+  { key: "assets", label: "Assets", file: "assets/", icon: ImageIcon, taxonomy: "folder" },
 ];
+
+/** Single source of truth for a CanvasFile's display metadata. Falls back
+ *  to the memory descriptor so callers never get undefined. */
+export function fileMeta(key: CanvasFile) {
+  return FILE_TABS.find((t) => t.key === key) ?? FILE_TABS[0];
+}
+
+const TAXONOMY_LABEL: Record<Taxonomy, string> = {
+  memory: "Memory",
+  work: "Work",
+  reference: "Reference",
+  folder: "Folder",
+};
+
+/** Taxonomy chip for the files dropdown. Work = gold, everything else
+ *  neutral (mirrors the Reference / Work artefact taxonomy). The folder
+ *  item-count is deferred in v1 — the chip reads "Folder" with no count. */
+export function TaxonomyChip({ taxonomy }: { taxonomy: Taxonomy }) {
+  const isWork = taxonomy === "work";
+  return (
+    <span
+      className="inline-flex items-center h-4 px-1.5 rounded-full text-[9.5px] font-medium tracking-wide flex-shrink-0"
+      style={
+        isWork
+          ? { background: "var(--spot-tint)", color: "#8A6D1F", border: "1px solid #E8C97A" }
+          : { background: "var(--spot-tint)", border: "1px solid var(--spot-stroke)" }
+      }
+    >
+      <span className={isWork ? "" : "text-text-tertiary"}>{TAXONOMY_LABEL[taxonomy]}</span>
+    </span>
+  );
+}
 
 /** Filter file tabs for a given workflow · the Analysis tab only
  *  exists for diagnostic workflows (scale / optimize / test-angles)
  *  where Spot's findings are persisted as part of product memory. */
 export function fileTabsForWorkflow(workflow: SpotWorkflow | null) {
-  if (!workflow) return FILE_TABS.filter((t) => t.key !== "analysis" && t.key !== "strategy");
+  if (!workflow)
+    return FILE_TABS.filter(
+      (t) => t.key !== "analysis" && t.key !== "strategy" && t.key !== "execution",
+    );
   // Analyst review is a single dark markdown file — the Analysis tab only.
   if (workflow.kind === "analyst-review") {
     return FILE_TABS.filter((t) => t.key === "analysis");
@@ -140,313 +182,82 @@ export function fileTabsForWorkflow(workflow: SpotWorkflow | null) {
     workflow.kind === "optimize" ||
     workflow.kind === "test-angles";
   const isLaunch = workflow.kind === "launch-campaign";
+  // Execution.live only exists for diagnostic flows once the plan is live
+  // (the *-live step), so the tab doesn't show before there's anything to
+  // tick off.
+  const atLive = isDiagnostic && workflow.step.endsWith("-live");
   return FILE_TABS.filter(
-    (t) => (t.key !== "analysis" || isDiagnostic) && (t.key !== "strategy" || isLaunch),
+    (t) =>
+      (t.key !== "analysis" || isDiagnostic) &&
+      (t.key !== "strategy" || isLaunch) &&
+      (t.key !== "execution" || atLive),
   );
 }
 
-/** Default file to focus when a workflow step changes. The chat
- *  header's picker auto-opens this file when the user advances.
- *
- *  Dashboard is ONLY the home view for `campaign-dive` (Spot it on
- *  a campaign row). Every other workflow drives the user through
- *  Plan → Assets, never the dashboard.
- */
-export function defaultFileForStep(step: WorkflowStep): CanvasFile {
-  // ── Launch flow ───────────────────────────────────────
-  if (
-    step === "product-setup" ||
-    step === "deep-research" ||
-    step === "kickoff"
-  )
-    return "memory";
-  if (step === "launch-strategy") return "strategy";
-  if (step === "import-campaigns") return "plan";
-  if (step === "launch-plan" || step === "launch-building") return "plan";
-  if (
-    step === "launch-review" ||
-    step === "launch-deploy" ||
-    step === "done"
-  )
-    return "assets";
-
-  // ── Scale + Optimize ─────────────────────────────────
-  // Analyze phase lands on the Analysis tab (Spot's findings live
-  // there as part of memory). Clarify / plan / live shift to the
-  // Plan tab so the user sees what's being updated.
-  if (step === "scale-analyze" || step === "opt-analyze") return "analysis";
-  if (step.startsWith("scale-") || step.startsWith("opt-")) return "plan";
-
-  // ── Test Angles ──────────────────────────────────────
-  // Analyze lands on Analysis (the audit of current angles); plan
-  // lands on Plan; live focuses Assets where new creatives appear.
-  if (step === "ang-analyze") return "analysis";
-  // The new-angles drafting surface lives on Assets (the candidate
-  // creatives the user iterates on before the plan is built).
-  if (step === "ang-creatives") return "assets";
-  if (step === "ang-clarify" || step === "ang-plan") return "plan";
-  if (step === "ang-live") return "assets";
-
-  // ── Campaign dive ────────────────────────────────────
-  // The only workflow whose home view is the Dashboard.
-  if (step === "campaign-dive") return "dashboard";
-
-  return "memory";
-}
 
 /**
- * Right-pane canvas. Renders 1 or 2 file panes side-by-side, driven
- * by the store's `canvasFiles` array (managed from the chat header).
- * Each pane has a slim header with the filename and an X to close;
- * closing the last pane collapses the whole canvas.
- *
- * Visual treatment: rounded floating card with shadow so the canvas
- * reads as an overlay on top of the chat rather than a hard split.
+ * SpotCanvasPanel · the single floating artifact viewer. Renders nothing
+ * when no file is open (panel is unmounted by the page). Header is a pure
+ * path-label breadcrumb + a close X; body is the existing FileBody router,
+ * light-themed. Read-only — every gate/approve action lives in the chat.
  */
-export function WorkflowPane() {
+export function SpotCanvasPanel() {
   const workflow = useSpotStore((s) => s.workflow);
-  const canvasFiles = useSpotStore((s) => s.canvasFiles);
-  const closeCanvasFile = useSpotStore((s) => s.closeCanvasFile);
-  const toggleCanvas = useSpotStore((s) => s.toggleCanvas);
-  const exitWorkflow = useSpotStore((s) => s.exitWorkflow);
-  const focusCanvasFile = useSpotStore((s) => s.focusCanvasFile);
+  const panelFile = useSpotStore((s) => s.panelFile);
+  const closeCanvas = useSpotStore((s) => s.closeCanvas);
 
-  // Auto-focus the most relevant file when the workflow step changes.
-  // We REPLACE the canvas (not add a second pane) — advancing from
-  // memory → plan should swap the file in place, the way Claude
-  // Code's preview button does, not stack two panes side-by-side.
-  // The user can still manually open a second pane from the picker.
-  useEffect(() => {
-    if (!workflow) return;
-    const target = defaultFileForStep(workflow.step);
-    if (canvasFiles.length === 1 && canvasFiles[0] === target) return;
-    focusCanvasFile(target);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workflow?.step]);
+  if (!workflow || !panelFile) return null;
 
-  if (!workflow) return null;
-
-  // While the user is mid-card on the left (any sub-step of product
-  // setup), nothing meaningful exists to preview yet on the right.
-  // Show a clean "awaiting input" pane covering the whole canvas.
-  const isAwaitingSetup =
-    workflow.kind === "launch-campaign" &&
-    workflow.step === "product-setup";
-
-  // After the plan is approved we enter `launch-building`. Spot is
-  // assembling everything in the background — there's no file to
-  // preview yet. Take the whole canvas over with a dark Spot loader
-  // that walks the user through the build work.
-  const isBuilding =
-    workflow.kind === "launch-campaign" &&
-    workflow.step === "launch-building";
-
-  // Import campaigns → the canvas becomes the ad-account picker, then
-  // the selectable campaign list, then the imported summary.
-  const isImporting =
-    workflow.kind === "launch-campaign" &&
-    workflow.step === "import-campaigns";
-
-  // Review Assets & Launch → enter launch-review. The whole canvas
-  // becomes the asset pack preview (creatives, landing pages, lead
-  // forms, campaign tree, voice agent) for final approval.
-  const isReviewing =
-    workflow.kind === "launch-campaign" &&
-    workflow.step === "launch-review";
-
-  // Approve all · deploy live → enter the deploy phase. Same dark
-  // Spot pattern but with deployment-specific cycling thoughts.
-  const isDeploying =
-    workflow.kind === "launch-campaign" &&
-    workflow.step === "launch-deploy";
-
-  // After deploy completes, the canvas lands on the celebration
-  // screen. Big Spot mark, "X is live" headline, what shipped.
-  const isDone =
-    workflow.kind === "launch-campaign" && workflow.step === "done";
-
-  // Diagnostic flows (scale / optimize / test-angles) reuse the dark
-  // Spot loader for their analyze + plan phases. The `ready` flag on
-  // the workflow gates the reveal — while it's false, the loader
-  // takes the canvas; once true, the file view renders normally.
-  const diagPhase =
-    workflow.kind !== "launch-campaign" && workflow.kind !== "campaign-dive"
-      ? diagnosticPhaseFor(workflow.step)
-      : null;
-  const isDiagLoading = !!(
-    diagPhase &&
-    workflow.kind !== "launch-campaign" &&
-    workflow.kind !== "campaign-dive" &&
-    workflow.kind !== "analyst-review" &&
-    !workflow.ready
-  );
-
-  // Empty canvas defensively · the chat header's "Close canvas"
-  // button calls closeCanvasFile until the list is empty + sets
-  // canvasOpen=false, but if for some reason we render with 0 panes
-  // we just show the awaiting state.
-  const panes: CanvasFile[] = canvasFiles.length > 0 ? canvasFiles : ["memory"];
+  const meta = fileMeta(panelFile);
+  const FolderIcon = meta.icon;
+  const productId = "productId" in workflow ? (workflow as { productId?: string }).productId ?? null : null;
+  const productName = (workflow as { productName?: string; entityName?: string }).productName
+    ?? (workflow as { entityName?: string }).entityName
+    ?? "";
+  const slug = slugFor(productId ?? null, productName);
 
   return (
-    <div
-      className="h-full flex flex-col"
-      style={{ background: "#161614", color: "#F5F4EF" }}
-    >
-      {/* File panes — 1 or 2 columns side-by-side */}
-      <div className="flex-1 flex min-h-0">
-        {panes.map((tab, idx) => {
-          const meta = FILE_TABS.find((t) => t.key === tab) ?? FILE_TABS[0];
-          const Icon = meta.icon;
-          const canClose = panes.length > 1;
-          const isLast = idx === panes.length - 1;
-          return (
-            <div
-              key={tab}
-              className="flex-1 min-w-0 flex flex-col"
-              style={
-                idx > 0 ? { borderLeft: "1px solid #262623" } : undefined
-              }
-            >
-              {/* Pane header · slim, dark-mode, filename + close */}
-              <div
-                className="px-4 py-2.5 flex items-center gap-2"
-                style={{
-                  background: "#1A1A18",
-                  borderBottom: "1px solid #262623",
-                  color: "#B8B7B0",
-                }}
-              >
-                <Icon size={12} strokeWidth={1.7} />
-                <span className="text-[12px] font-medium" style={{ color: "#F5F4EF" }}>
-                  {meta.label}
-                </span>
-                {/* Only show the mono file path for real files (*.md / *.html).
-                    Rich views like "assets/" shouldn't read as a markdown file. */}
-                {meta.file.includes(".") && (
-                  <span className="text-[10.5px] font-mono" style={{ color: "#8A8980" }}>
-                    {meta.file}
-                  </span>
-                )}
-                <span className="flex-1" />
-                {canClose && (
-                  <button
-                    type="button"
-                    onClick={() => closeCanvasFile(tab)}
-                    title="Close this pane"
-                    className="inline-flex items-center justify-center h-5 w-5 rounded hover:bg-white/5"
-                    style={{ color: "#8A8980" }}
-                  >
-                    <X size={11} strokeWidth={1.8} />
-                  </button>
-                )}
-                {isLast && !canClose && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={toggleCanvas}
-                      title="Minimize canvas — chat stays full-width; workflow state is preserved."
-                      className="inline-flex items-center justify-center h-5 w-5 rounded hover:bg-white/5"
-                      style={{ color: "#8A8980" }}
-                    >
-                      <PanelRightClose size={11} strokeWidth={1.7} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={exitWorkflow}
-                      title="Close workflow — abandons progress and returns to Spot."
-                      className="inline-flex items-center justify-center h-5 w-5 rounded hover:bg-white/5"
-                      style={{ color: "#8A8980" }}
-                    >
-                      <X size={11} strokeWidth={1.8} />
-                    </button>
-                  </>
-                )}
-                {isLast && canClose && (
-                  <>
-                    <span
-                      className="w-px h-3 mx-0.5"
-                      style={{ background: "#262623" }}
-                    />
-                    <button
-                      type="button"
-                      onClick={toggleCanvas}
-                      title="Minimize canvas — chat stays full-width."
-                      className="inline-flex items-center justify-center h-5 w-5 rounded hover:bg-white/5"
-                      style={{ color: "#8A8980" }}
-                    >
-                      <PanelRightClose size={11} strokeWidth={1.7} />
-                    </button>
-                  </>
-                )}
-              </div>
+    <div className="h-full flex flex-col" style={{ background: "var(--spot-card)" }}>
+      {/* Header · path-label breadcrumb (pure label) + close X */}
+      <div
+        className="px-4 py-2.5 flex items-center gap-2 border-b"
+        style={{ borderColor: "var(--spot-card-border)" }}
+      >
+        <FolderIcon size={12} strokeWidth={1.7} className="text-text-tertiary flex-shrink-0" />
+        <div className="font-mono text-[10.5px] text-text-tertiary inline-flex items-center gap-1 min-w-0">
+          <span className="truncate">{slug}</span>
+          <span className="text-text-tertiary/60">/</span>
+          <span className="text-text-secondary truncate">{meta.file}</span>
+        </div>
+        <span className="flex-1" />
+        <button
+          type="button"
+          onClick={closeCanvas}
+          aria-label="Close panel"
+          className="inline-flex items-center justify-center h-6 w-6 rounded-button text-text-tertiary hover:text-text-primary hover:bg-surface-secondary transition-colors flex-shrink-0"
+        >
+          <X size={14} strokeWidth={1.8} />
+        </button>
+      </div>
 
-              {/* Pane body · loader/celebration states take over;
-                  otherwise the file body renders on the dark canvas
-                  surface (right-panel dark-mode principle). */}
-              <div className="flex-1 overflow-y-auto">
-                {isImporting ? (
-                  <ImportCampaignsStep workflow={workflow as LaunchWorkflow} />
-                ) : isAwaitingSetup && tab === "memory" ? (
-                  <AwaitingInputCanvas />
-                ) : isBuilding && tab !== "memory" ? (
-                  <LaunchBuildingLoader
-                    productName={
-                      workflow.kind === "launch-campaign"
-                        ? workflow.productName
-                        : ""
-                    }
-                  />
-                ) : isReviewing && tab !== "memory" ? (
-                  <CreativesFormsReview workflow={workflow} />
-                ) : isDeploying ? (
-                  <ExecutionChecklist
-                    title={
-                      workflow.kind === "launch-campaign"
-                        ? `Deploying ${workflow.productName} live`
-                        : "Deploying the plan live"
-                    }
-                    subtitle="Executing the approved plan · pushing everything to Meta + WhatsApp"
-                    items={LAUNCH_DEPLOY_CHECKLIST}
-                  />
-                ) : isDone ? (
-                  <ThankYouScreen
-                    productName={
-                      workflow.kind === "launch-campaign"
-                        ? workflow.productName
-                        : ""
-                    }
-                  />
-                ) : isDiagLoading && diagPhase ? (
-                  <DiagnosticPhaseLoader
-                    productName={(workflow as DiagnosticWorkflow).productName}
-                    kind={diagPhase.kind}
-                    phase={diagPhase.phase}
-                  />
-                ) : (
-                  <FileBody workflow={workflow} tab={tab} />
-                )}
-              </div>
-            </div>
-          );
-        })}
+      {/* Body · the file router, light-themed */}
+      <div className="flex-1 overflow-y-auto thin-scroll">
+        <FileBody workflow={workflow} tab={panelFile} />
       </div>
     </div>
   );
 }
 
 /**
- * FilePickerDropdown · lives in the chat header (LEFT panel). Lets
- * the user open any of the four canvas files. The checkmark indicates
- * which files are currently open; clicking an already-open file
- * focuses (opens canvas if minimised); clicking a closed file opens
- * it (max 2 panes total — opening a third replaces the latest).
+ * Chat-header files dropdown (LEFT panel). Lists the active workflow's
+ * files with a taxonomy chip each. Selecting a row opens the panel to
+ * that artifact (or switches the open panel to it). Single-select — the
+ * panel shows exactly one file; the X inside the panel closes it.
  */
 export function ChatHeaderFilePicker({ compact = false }: { compact?: boolean }) {
-  const canvasFiles = useSpotStore((s) => s.canvasFiles);
-  const canvasOpen = useSpotStore((s) => s.canvasOpen);
+  const panelFile = useSpotStore((s) => s.panelFile);
   const workflow = useSpotStore((s) => s.workflow);
   const openCanvasFile = useSpotStore((s) => s.openCanvasFile);
-  const setCanvasOpen = useSpotStore((s) => s.setCanvasOpen);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const availableTabs = fileTabsForWorkflow(workflow);
@@ -460,11 +271,8 @@ export function ChatHeaderFilePicker({ compact = false }: { compact?: boolean })
     return () => window.removeEventListener("mousedown", handler);
   }, [open]);
 
-  // Label · show the active (first) pane's filename when canvas is
-  // open; otherwise generic "Files" prompt.
-  const primary = canvasOpen && canvasFiles[0]
-    ? FILE_TABS.find((t) => t.key === canvasFiles[0]) ?? FILE_TABS[0]
-    : null;
+  // Label · show the open file's name; otherwise a generic "Files" prompt.
+  const primary = panelFile ? fileMeta(panelFile) : null;
   const PrimaryIcon = primary?.icon ?? FileText;
 
   return (
@@ -475,7 +283,7 @@ export function ChatHeaderFilePicker({ compact = false }: { compact?: boolean })
         className={`inline-flex items-center gap-1.5 rounded-button border border-border bg-white hover:border-border-hover text-text-primary ${
           compact ? "h-7 px-2 text-[11.5px]" : "h-8 px-2.5 text-[12px]"
         }`}
-        title={canvasOpen ? "Switch / add files" : "Open canvas files"}
+        title={panelFile ? "Switch file" : "Open a file"}
       >
         <PrimaryIcon size={11} strokeWidth={1.7} className="text-text-secondary" />
         {primary ? (
@@ -483,24 +291,19 @@ export function ChatHeaderFilePicker({ compact = false }: { compact?: boolean })
         ) : (
           <span>Files</span>
         )}
-        {canvasFiles.length === 2 && (
-          <span className="inline-flex items-center justify-center h-3.5 px-1 rounded-full bg-surface-secondary text-[9.5px] tabular text-text-tertiary">
-            2
-          </span>
-        )}
         <ChevronDown size={11} strokeWidth={1.8} className="text-text-tertiary" />
       </button>
       {open && (
         <div
-          className="absolute top-[calc(100%+4px)] right-0 z-50 bg-white border border-border rounded-card py-1 min-w-[300px]"
-          style={{ boxShadow: "0 8px 28px -8px rgba(0,0,0,0.14)" }}
+          className="absolute top-[calc(100%+4px)] right-0 z-50 bg-white border border-border rounded-card py-1 min-w-[320px]"
+          style={{ boxShadow: "var(--spot-shadow)" }}
         >
           <div className="px-3 pt-1 pb-1.5 text-[10px] uppercase tracking-wider text-text-tertiary font-medium">
-            Canvas files · up to 2 side-by-side
+            Project files
           </div>
           {availableTabs.map((t) => {
             const Icon = t.icon;
-            const isOpen = canvasFiles.includes(t.key) && canvasOpen;
+            const isActive = panelFile === t.key;
             return (
               <button
                 key={t.key}
@@ -509,85 +312,28 @@ export function ChatHeaderFilePicker({ compact = false }: { compact?: boolean })
                   openCanvasFile(t.key);
                   setOpen(false);
                 }}
-                className={`w-full text-left flex items-center gap-2 px-3 h-8 hover:bg-surface-secondary text-[12.5px] ${
-                  isOpen ? "bg-surface-secondary/60" : ""
+                className={`w-full text-left flex items-center gap-2 px-3 h-9 hover:bg-surface-secondary text-[12.5px] ${
+                  isActive ? "bg-surface-secondary/60" : ""
                 }`}
               >
                 <Icon size={11} strokeWidth={1.7} className="text-text-tertiary flex-shrink-0" />
                 <span className="text-text-primary whitespace-nowrap">{t.label}</span>
-                <span className="text-[10.5px] font-mono text-text-tertiary ml-auto whitespace-nowrap flex-shrink-0">
+                <span className="text-[10.5px] font-mono text-text-tertiary whitespace-nowrap flex-shrink-0">
                   {t.file}
                 </span>
-                {isOpen && (
-                  <Check size={11} strokeWidth={2} className="text-text-primary ml-1" />
-                )}
+                <span className="ml-auto flex items-center gap-1.5 flex-shrink-0">
+                  <TaxonomyChip taxonomy={t.taxonomy} />
+                  {isActive && <Check size={11} strokeWidth={2} className="text-text-primary" />}
+                </span>
               </button>
             );
           })}
-          {canvasOpen && (
-            <>
-              <div className="border-t border-border-subtle my-1" />
-              <button
-                type="button"
-                onClick={() => {
-                  setCanvasOpen(false);
-                  setOpen(false);
-                }}
-                className="w-full text-left flex items-center gap-2 px-3 h-8 hover:bg-surface-secondary text-[12.5px] text-text-secondary"
-              >
-                <PanelRightClose size={11} strokeWidth={1.7} />
-                <span>Close canvas</span>
-              </button>
-            </>
-          )}
         </div>
       )}
     </div>
   );
 }
 
-/**
- * Awaiting-input canvas · shown when the new-product workflow is
- * mid-flight but the user hasn't submitted the drawer yet. No empty
- * file mockup, no skeleton — just a calm loader that says Spot is
- * waiting on the form. Keeps the right pane honest: there's nothing
- * to preview yet.
- */
-function AwaitingInputCanvas() {
-  return (
-    <div
-      className="h-full flex flex-col items-center justify-center px-8 py-16 text-center"
-      style={{ background: "#0A0A09" }}
-    >
-      <div className="relative mb-6">
-        <div
-          aria-hidden
-          className="absolute inset-0 rounded-full"
-          style={{
-            background:
-              "radial-gradient(circle, rgba(201, 168, 106, 0.32) 0%, transparent 65%)",
-            filter: "blur(14px)",
-            transform: "scale(1.6)",
-          }}
-        />
-        <SpotLoader mode="orbit" size={56} className="!gap-0 relative" />
-      </div>
-      <div
-        className="text-[18px] font-semibold tracking-tight"
-        style={{ color: "#F5F4EF" }}
-      >
-        Awaiting your input
-      </div>
-      <div
-        className="text-[13px] mt-2 max-w-[360px] leading-relaxed"
-        style={{ color: "#A8A8A0" }}
-      >
-        Drop the basics in the form on the left. As soon as you submit, I&apos;ll
-        start research and write the product memory into this workspace.
-      </div>
-    </div>
-  );
-}
 
 /** Convert a productId / productName to a slug for the header breadcrumb. */
 function slugFor(productId: string | null, productName: string): string {
@@ -625,14 +371,14 @@ function FileBody({
   }
 
   // Analyst review · the agent's write-up renders as a dark markdown file
-  // in the right panel; the conversation stays in the chat on the left.
+  // in the canvas panel; the conversation stays in the chat on the left.
   if (workflow.kind === "analyst-review") {
     const prod = PRODUCTS.find((p) => p.id === workflow.productId);
     if (!prod) return null;
     const report = analystReportFor(prod);
     return (
       <div className="px-6 py-6 max-w-[760px] mx-auto">
-        <Markdown source={report.reportMd} theme="dark" />
+        <Markdown source={report.reportMd} theme="light" />
       </div>
     );
   }
@@ -672,23 +418,48 @@ function FileBody({
     ) {
       return <CreativesFormsReview workflow={workflow} />;
     }
-    // Analysis tab · ALWAYS shows the analysis findings (Spot's audit
-    // of what's currently happening) even after the workflow has
-    // moved on to clarify/plan/live. Synthesise a "ready" view of
-    // the analyze step regardless of the current step.
+    // Analysis tab · the agent's write-up renders as a markdown file in
+    // the canvas panel, identical to the analyst-review surface, so the
+    // post-accept analysis reads as a real document (analysis.md) rather
+    // than a bespoke structured canvas. Spot's audit stays visible even
+    // after the workflow moves on to clarify/plan/live.
     if (tab === "analysis") {
-      const analyzeView = {
-        ...(workflow as DiagnosticWorkflow),
-        ready: true,
-      } as DiagnosticWorkflow;
+      const prod = PRODUCTS.find((p) => p.id === workflow.productId);
+      if (!prod) return null;
+      const report = analystReportFor(prod);
       return (
-        <div className="px-6 py-5 diagnostic-dark">
-          <AnalyzeStep workflow={analyzeView} />
+        <div className="px-6 py-6 max-w-[760px] mx-auto">
+          <Markdown source={report.reportMd} theme="light" />
         </div>
       );
     }
+    // Plan tab · the plan.md artifact opens as a real markdown document in the
+    // canvas (same surface as analysis.md), mirroring planMarkdownFor — the
+    // exact text the card carries and the Download writes. The structured
+    // "Spot's plan" view still drives the in-flow plan/live steps via the
+    // DiagnosticStep fallback below; this branch only fires when the user
+    // opens the plan.md document from its card.
+    if (tab === "plan") {
+      return (
+        <div className="px-6 py-6 max-w-[760px] mx-auto">
+          <Markdown
+            source={planMarkdownFor(
+              (workflow as DiagnosticWorkflow).kind,
+              workflow.productName,
+            )}
+            theme="light"
+          />
+        </div>
+      );
+    }
+    // Execution.live · the cowork-style live progress checklist that ticks
+    // the plan's moves off when the plan goes live. Driven by the store's
+    // executionMoves state (set by startLiveExecution).
+    if (tab === "execution") {
+      return <LiveExecution workflow={workflow as DiagnosticWorkflow} />;
+    }
     return (
-      <div className="px-6 py-5 diagnostic-dark">
+      <div className="px-6 py-5">
         <DiagnosticStep workflow={workflow as DiagnosticWorkflow} />
       </div>
     );
@@ -920,7 +691,7 @@ function LiveBuildLoader({ config }: { config: LoaderConfig }) {
             "linear-gradient(135deg, #1F1B14 0%, #181612 50%, #131110 100%)",
           border: "1px solid #2E2820",
           boxShadow:
-            "0 16px 40px -16px rgba(0,0,0,0.5), 0 0 0 1px rgba(201,168,106,0.06) inset",
+            "0 16px 40px -16px rgba(0,0,0,0.5), 0 0 0 1px rgba(155, 155, 155, 0.06) inset",
         }}
       >
         <div
@@ -928,7 +699,7 @@ function LiveBuildLoader({ config }: { config: LoaderConfig }) {
           className="absolute inset-0 pointer-events-none"
           style={{
             background:
-              "radial-gradient(ellipse 60% 50% at 50% 25%, rgba(201, 168, 106, 0.18) 0%, transparent 70%)",
+              "radial-gradient(ellipse 60% 50% at 50% 25%, rgba(155, 155, 155, 0.18) 0%, transparent 70%)",
           }}
         />
         <div
@@ -936,7 +707,7 @@ function LiveBuildLoader({ config }: { config: LoaderConfig }) {
           className="absolute inset-0 pointer-events-none opacity-30"
           style={{
             background:
-              "linear-gradient(110deg, transparent 30%, rgba(201,168,106,0.18) 50%, transparent 70%)",
+              "linear-gradient(110deg, transparent 30%, rgba(155, 155, 155, 0.18) 50%, transparent 70%)",
             backgroundSize: "200% 100%",
             animation: "shimmerSweep 3.6s ease-in-out infinite",
           }}
@@ -950,7 +721,7 @@ function LiveBuildLoader({ config }: { config: LoaderConfig }) {
                 className="absolute inset-0 rounded-full"
                 style={{
                   background:
-                    "radial-gradient(circle, rgba(201, 168, 106, 0.40) 0%, transparent 65%)",
+                    "radial-gradient(circle, rgba(155, 155, 155, 0.40) 0%, transparent 65%)",
                   filter: "blur(10px)",
                   transform: "scale(1.5)",
                 }}
@@ -993,7 +764,7 @@ function LiveBuildLoader({ config }: { config: LoaderConfig }) {
                     style={{
                       width: `${progress}%`,
                       background:
-                        "linear-gradient(90deg, #C9A86A 0%, #E0C083 60%, #22C55E 100%)",
+                        "linear-gradient(90deg, #9B9B9B 0%, #C7C4BC 60%, #22C55E 100%)",
                     }}
                   >
                     <span
@@ -1059,8 +830,8 @@ function LiveBuildLoader({ config }: { config: LoaderConfig }) {
             borderBottom: "1px solid #262623",
           }}
         >
-          <span className="relative inline-flex w-1.5 h-1.5 rounded-full bg-[#C9A86A]">
-            <span className="absolute inset-0 rounded-full bg-[#C9A86A] opacity-50 animate-ping" />
+          <span className="relative inline-flex w-1.5 h-1.5 rounded-full bg-[#9B9B9B]">
+            <span className="absolute inset-0 rounded-full bg-[#9B9B9B] opacity-50 animate-ping" />
           </span>
           <span
             className="text-[10.5px] uppercase tracking-wider font-semibold"
@@ -1170,7 +941,7 @@ function LiveBuildLoader({ config }: { config: LoaderConfig }) {
             const bg = done
               ? "rgba(34, 197, 94, 0.06)"
               : running
-                ? "rgba(201, 168, 106, 0.07)"
+                ? "rgba(155, 155, 155, 0.07)"
                 : "transparent";
             return (
               <li
@@ -1226,7 +997,7 @@ function LiveBuildLoader({ config }: { config: LoaderConfig }) {
                 {running && (
                   <span
                     className="text-[10px] uppercase tracking-wider font-semibold flex-shrink-0"
-                    style={{ color: "#E0C083" }}
+                    style={{ color: "#C7C4BC" }}
                   >
                     running…
                   </span>
@@ -1263,46 +1034,6 @@ function CounterCardLive({
   return <CounterCard icon={icon} label={label} value={value} pulse={target > 0} />;
 }
 
-/* ── Memory + Plan loader wrappers (pick a config, render shared body) ── */
-
-/** Deep-research canvas loader · a calm Spot orb with cycling, relevant
- *  thoughts. Spot does the research end-to-end (crawl → read → synthesize
- *  → write to project details); no busy dashboard, just the agent thinking. */
-function MemoryBuildingLoader({ productName }: { productName: string }) {
-  return (
-    <DarkSpotLoader
-      agentLabel="Deep Research Agent · live"
-      title={
-        <>
-          Building project details for{" "}
-          <span
-            style={{
-              background: "linear-gradient(135deg, #C9A86A 0%, #E0C083 100%)",
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-            }}
-          >
-            {productName}
-          </span>
-        </>
-      }
-      thoughts={MEMORY_BUILD_THOUGHTS}
-      intervalMs={1900}
-    />
-  );
-}
-
-/** Cycling thoughts for the deep-research build · relevant to what Spot
- *  is actually doing, in order: crawl → web → docs → synthesize → write. */
-const MEMORY_BUILD_THOUGHTS = [
-  "Crawling the brand site — about, curriculum, pricing…",
-  "Reading the open web for category signals…",
-  "Scanning review sites + parent forums…",
-  "Pulling competitor positioning + pricing tiers…",
-  "Matching against the Revspot audience graph…",
-  "Synthesizing everything into a coherent brief…",
-  "Writing overview, pricing + offers to project details…",
-];
 
 /** Big-number counter card · dark surface, large tabular value,
  *  small label, emoji icon. Soft gold glow when value > 0. */
@@ -1331,7 +1062,7 @@ function CounterCard({
           className="absolute inset-0 pointer-events-none"
           style={{
             background:
-              "radial-gradient(ellipse 80% 60% at 100% 0%, rgba(201, 168, 106, 0.18) 0%, transparent 70%)",
+              "radial-gradient(ellipse 80% 60% at 100% 0%, rgba(155, 155, 155, 0.18) 0%, transparent 70%)",
           }}
         />
       )}
@@ -1425,20 +1156,6 @@ function MemoryFileView({
 }) {
   const files = getProductFiles(workflow);
 
-  // ── New product · research / building phase ────────────────
-  // No files, no researchedMemory yet — render the cycling Spot
-  // loader so the canvas shows concrete agent progress.
-  const isBuildingFromScratch =
-    workflow.kind === "launch-campaign" &&
-    !files &&
-    !workflow.researchedMemory &&
-    (workflow.step === "deep-research" ||
-      (workflow.step === "kickoff" && !workflow.kickoffReady));
-
-  if (isBuildingFromScratch && workflow.kind === "launch-campaign") {
-    return <MemoryBuildingLoader productName={workflow.productName} />;
-  }
-
   // ── New product · research complete ────────────────────────
   // researchedMemory holds the synthesised brief/pricing/etc. Render
   // it via the same Markdown component used for existing memory so
@@ -1455,7 +1172,7 @@ function MemoryFileView({
     return (
       <div className="relative">
         <div className="px-6 py-5 max-w-[720px]">
-          <Markdown source={md} theme="dark" />
+          <Markdown source={md} theme="light" />
         </div>
       </div>
     );
@@ -1463,12 +1180,12 @@ function MemoryFileView({
 
   // ── Existing product · render product-info.md ─────────────
   if (!files) {
-    return <EmptyFile label="No memory yet." />;
+    return <EmptyFile label="Nothing here yet." />;
   }
   return (
     <div className="relative">
       <div className="px-6 py-5 max-w-[720px]">
-        <Markdown source={files.productInfoMd} theme="dark" />
+        <Markdown source={files.productInfoMd} theme="light" />
       </div>
       {buildingOverlay && <BuildingOverlay label="Spot is updating memory…" />}
     </div>
@@ -1476,706 +1193,16 @@ function MemoryFileView({
 }
 
 
-/**
- * Plan-building loader · deliberately minimal. The Spot orb floats
- * on a dark canvas while a single sentence cycles every ~1.9s. The
- * copy frames the "no past data" reality of a brand-new product so
- * the user understands *why* Spot is recommending a conservative
- * experiment plan instead of just spinning a vague progress bar.
- */
-const PLAN_THOUGHTS = [
-  "Analyzing memory…",
-  "We don't have any existing campaigns or goals yet.",
-  "Let me plan experiment campaigns to figure out what works.",
-  "Personas first — three target groups from the brief.",
-  "Composing creative angles for each persona.",
-  "Drafting media mix · Meta · WhatsApp.",
-  "Sequencing the 14-day rollout in phases.",
-  "Locking budget allocations · conservative caps.",
-  "Building your plan…",
-];
 
-/** Cycling thoughts for every phase of the three diagnostic
- *  workflows (scale · optimize · test-angles). Each step gets the
- *  same DarkSpotLoader pattern as the launch flow so the user
- *  never sees the canvas freeze between steps. */
-const DIAGNOSTIC_THOUGHTS = {
-  scale: {
-    analyze: [
-      "Reading the last 30 days of campaign performance…",
-      "Finding the winners — ad sets that beat target CPL.",
-      "Checking audience saturation curves.",
-      "Looking for headroom · underspent winners.",
-      "Modeling cost-elasticity per channel.",
-      "Drafting a scale plan that won't break CPL.",
-    ],
-    clarify: [
-      "Framing the scale goal…",
-      "Narrowing the option space.",
-      "Picking the right questions to ask you.",
-    ],
-    // Filler — scale has no creatives phase, but the table is `as const`
-    // and keyed uniformly, so every kind needs the same phase set.
-    creatives: [
-      "Drafting concepts…",
-      "Grounding each in the winning pattern.",
-      "Screening against memory constraints.",
-    ],
-    plan: [
-      "Folding your picks into the execution plan…",
-      "Mapping winners to scale-ready audiences.",
-      "Drafting budget shifts · winners up, decay down.",
-      "Adding lookalike + interest expansions per winner.",
-      "Recomputing daily caps with safety margin.",
-      "Locking the updated plan.",
-    ],
-    live: [
-      "Pushing winners up · trimming decay…",
-      "Activating new audience expansions.",
-      "Setting Week 1 daily caps.",
-      "Arming the scale watchers.",
-      "Scale plan is live · I'll surface results as they come in.",
-    ],
-  },
-  optimize: {
-    analyze: [
-      "Reading the last 30 days of campaign performance…",
-      "Detecting creative fatigue · CTR decay curves.",
-      "Finding audience saturation hot-spots.",
-      "Cross-referencing landing-page bounce signals.",
-      "Identifying the cleanest wins to act on.",
-      "Drafting an optimization plan you can ship today.",
-    ],
-    clarify: [
-      "Framing the optimization priority…",
-      "Narrowing where to act first.",
-      "Picking the right questions to ask you.",
-    ],
-    // Filler — optimize has no creatives phase (see scale note).
-    creatives: [
-      "Drafting concepts…",
-      "Grounding each in the winning pattern.",
-      "Screening against memory constraints.",
-    ],
-    plan: [
-      "Folding your picks into the execution plan…",
-      "Drafting pause list · clearly broken units.",
-      "Drafting creative refreshes per fatigued unit.",
-      "Adding audience swaps where saturation is high.",
-      "Tightening targeting on chronic underperformers.",
-      "Locking the updated plan.",
-    ],
-    live: [
-      "Pausing fatigued ad sets…",
-      "Briefing the creative refreshes.",
-      "Swapping audiences in saturated cohorts.",
-      "Arming the optimize watchers.",
-      "Optimization plan is live.",
-    ],
-  },
-  "test-angles": {
-    analyze: [
-      "Reading the creative library + recent winners…",
-      "Mapping current angles per persona.",
-      "Identifying angle gaps + untested positioning.",
-      "Brainstorming fresh angles informed by category signals.",
-      "Drafting a test plan with clear success criteria.",
-    ],
-    clarify: [
-      "Framing the angle hypothesis…",
-      "Narrowing the test universe.",
-      "Picking the right questions to ask you.",
-    ],
-    creatives: [
-      "Drafting fresh angles from the brief…",
-      "Grounding each hook in specificity + parent autonomy.",
-      "Screening against memory constraints · no outcome promises.",
-      "Checking each angle reads distinct from the others.",
-      "Laying out the candidate set for your review.",
-    ],
-    plan: [
-      "Drafting the Persona × Angle test matrix…",
-      "Composing 3 new creative concepts per persona.",
-      "Setting budget caps + minimum learn windows.",
-      "Locking the test plan.",
-    ],
-    live: [
-      "Generating new creative concepts per persona…",
-      "Pushing 6 new angles to Meta.",
-      "Setting balanced traffic split.",
-      "Arming the early-stop guardrail.",
-      "6 angles are live · learning starts now.",
-    ],
-  },
-} as const;
 
-/** Maps a diagnostic step to (kind, phase) so we can pull the right
- *  thoughts array out of the table above. Every diagnostic step has
- *  a phase mapping so the loader runs through the whole flow. */
-function diagnosticPhaseFor(step: WorkflowStep): {
-  kind: "scale" | "optimize" | "test-angles";
-  phase: "analyze" | "clarify" | "creatives" | "plan" | "live";
-} | null {
-  if (step === "scale-analyze") return { kind: "scale", phase: "analyze" };
-  if (step === "scale-clarify") return { kind: "scale", phase: "clarify" };
-  if (step === "scale-plan") return { kind: "scale", phase: "plan" };
-  if (step === "scale-live") return { kind: "scale", phase: "live" };
-  if (step === "opt-analyze") return { kind: "optimize", phase: "analyze" };
-  if (step === "opt-clarify") return { kind: "optimize", phase: "clarify" };
-  if (step === "opt-plan") return { kind: "optimize", phase: "plan" };
-  if (step === "opt-live") return { kind: "optimize", phase: "live" };
-  if (step === "ang-analyze") return { kind: "test-angles", phase: "analyze" };
-  if (step === "ang-clarify") return { kind: "test-angles", phase: "clarify" };
-  if (step === "ang-creatives") return { kind: "test-angles", phase: "creatives" };
-  if (step === "ang-plan") return { kind: "test-angles", phase: "plan" };
-  if (step === "ang-live") return { kind: "test-angles", phase: "live" };
-  return null;
-}
 
-type DiagPhase = "analyze" | "clarify" | "creatives" | "plan" | "live";
-type DiagKind = "scale" | "optimize" | "test-angles";
-
-/** Dark Spot loader for diagnostic flows · same pattern as launch.
- *  Used during every phase (analyze / clarify / plan / live) so the
- *  canvas never goes blank between steps. */
-function DiagnosticPhaseLoader({
-  productName,
-  kind,
-  phase,
-}: {
-  productName: string;
-  kind: DiagKind;
-  phase: DiagPhase;
-}) {
-  const showHomeView = useSpotStore((s) => s.showHomeView);
-  const verbs: Record<DiagKind, Record<DiagPhase, string>> = {
-    scale: {
-      analyze: "Analyzing scale opportunities for",
-      clarify: "Framing the scale brief for",
-      creatives: "Drafting concepts for",
-      plan: "Drafting the scale plan for",
-      live: "Pushing the scale plan live for",
-    },
-    optimize: {
-      analyze: "Analyzing what's holding back",
-      clarify: "Framing the optimization brief for",
-      creatives: "Drafting concepts for",
-      plan: "Drafting the optimization plan for",
-      live: "Shipping the optimizations for",
-    },
-    "test-angles": {
-      analyze: "Auditing current angles for",
-      clarify: "Framing the angle-test brief for",
-      creatives: "Drafting fresh angles for",
-      plan: "Drafting the angle-test plan for",
-      live: "Launching new angles for",
-    },
-  };
-  const agentLabels: Record<DiagKind, Record<DiagPhase, string>> = {
-    scale: {
-      analyze: "Scale Analyst · live",
-      clarify: "Scale Brief Agent · live",
-      creatives: "Creative Agent · live",
-      plan: "Scale Planner · live",
-      live: "Scale Deploy Agent · live",
-    },
-    optimize: {
-      analyze: "Optimization Analyst · live",
-      clarify: "Optimization Brief Agent · live",
-      creatives: "Creative Agent · live",
-      plan: "Optimization Planner · live",
-      live: "Optimization Deploy Agent · live",
-    },
-    "test-angles": {
-      analyze: "Creative Strategist · live",
-      clarify: "Angle Brief Agent · live",
-      creatives: "Creative Agent · live",
-      plan: "Angle Test Planner · live",
-      live: "Angle Deploy Agent · live",
-    },
-  };
-  const thoughts = DIAGNOSTIC_THOUGHTS[kind][phase] as readonly string[];
-  return (
-    <DarkSpotLoader
-      agentLabel={agentLabels[kind][phase]}
-      title={
-        <>
-          {verbs[kind][phase]}{" "}
-          <span
-            style={{
-              background:
-                "linear-gradient(135deg, #C9A86A 0%, #E0C083 100%)",
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-            }}
-          >
-            {productName}
-          </span>
-        </>
-      }
-      thoughts={[...thoughts]}
-      intervalMs={2000}
-      actions={
-        <div className="flex items-center gap-2 mt-8">
-          <button
-            type="button"
-            onClick={showHomeView}
-            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-button text-[12px] transition-colors hover:bg-white/5"
-            style={{ color: "#A8A8A0" }}
-          >
-            <Home size={12} strokeWidth={1.7} />
-            Back to Spot homepage
-          </button>
-        </div>
-      }
-    />
-  );
-}
-
-/** The five concrete tasks Spot runs after the user clicks
- *  "Put Spot to work". Each task has its own visible state in the
- *  LaunchBuildingTaskLoader (queued → running → done) and the
- *  durations sum to ~28s to match the launch-building tool-call. */
-const LAUNCH_BUILD_TASKS: {
-  id: string;
-  label: string;
-  sub: string;
-  duration: number;
-}[] = [
-  {
-    id: "creatives",
-    label: "Building creatives, forms, landing pages",
-    sub: "12 statics · 6 reels · 3 landing pages · 2 lead forms",
-    duration: 4500,
-  },
-  {
-    id: "plan",
-    label: "Building the campaign plan",
-    sub: "3 Meta campaigns · 9 ad sets · WhatsApp outreach",
-    duration: 3500,
-  },
-  {
-    id: "crm",
-    label: "Verifying CRM integrations",
-    sub: "lead routing · pixel · CAPI · attribution windows",
-    duration: 3200,
-  },
-  {
-    id: "agent",
-    label: "Building Pre-Sales Agent (Voice + WhatsApp)",
-    sub: "agent persona · script · objection handling · escalation rules",
-    duration: 4500,
-  },
-  {
-    id: "launch",
-    label: "Preparing campaigns to go live",
-    sub: "drafted on Meta · pixel armed · waiting for your approval",
-    duration: 3800,
-  },
-];
-
-/** Shared dark-Spot loader surface used by both PlanBuildingLoader
- *  and LaunchBuildingLoader · the only thing that changes is the
- *  set of cycling thoughts, the agent eyebrow label, and optional
- *  action buttons rendered under the progress dots. */
-function DarkSpotLoader({
-  agentLabel,
-  title,
-  thoughts,
-  intervalMs = 1900,
-  actions,
-}: {
-  agentLabel: string;
-  title: React.ReactNode;
-  thoughts: string[];
-  intervalMs?: number;
-  actions?: React.ReactNode;
-}) {
-  const [idx, setIdx] = useState(0);
-  useEffect(() => {
-    if (thoughts.length < 2) return;
-    const id = setInterval(() => {
-      setIdx((i) => (i + 1) % thoughts.length);
-    }, intervalMs);
-    return () => clearInterval(id);
-  }, [thoughts.length, intervalMs]);
-
-  return (
-    <div
-      className="h-full flex flex-col items-center justify-center px-8 py-12 text-center"
-      style={{ background: "#0A0A09" }}
-    >
-      {/* Soft gold radial glow behind the orb */}
-      <div className="relative mb-7">
-        <div
-          aria-hidden
-          className="absolute inset-0 rounded-full"
-          style={{
-            background:
-              "radial-gradient(circle, rgba(201, 168, 106, 0.32) 0%, transparent 65%)",
-            filter: "blur(14px)",
-            transform: "scale(1.6)",
-          }}
-        />
-        <SpotLoader mode="orbit" size={84} className="!gap-0 relative" />
-      </div>
-
-      <div
-        className="inline-flex items-center gap-1.5 text-[10.5px] uppercase tracking-wider font-semibold mb-2"
-        style={{ color: "#22C55E" }}
-      >
-        <span className="relative inline-flex w-1.5 h-1.5 rounded-full bg-[#22C55E]">
-          <span className="absolute inset-0 rounded-full bg-[#22C55E] opacity-50 animate-ping" />
-        </span>
-        {agentLabel}
-      </div>
-
-      <h1
-        className="text-[24px] font-semibold tracking-tight leading-tight max-w-[560px]"
-        style={{ color: "#F5F4EF" }}
-      >
-        {title}
-      </h1>
-
-      {/* Cycling thought · key={idx} re-fires the slide-in keyframe */}
-      <div
-        key={idx}
-        className="mt-4 text-[14px] leading-relaxed max-w-[520px]"
-        style={{
-          color: "#A8A8A0",
-          animation: "findingSlide 320ms ease-out",
-          minHeight: "44px",
-        }}
-      >
-        {thoughts[idx]}
-      </div>
-
-      {/* Tiny progress dots · vague indicator that something's happening */}
-      <div className="flex items-center gap-1.5 mt-7">
-        {thoughts.map((_, i) => (
-          <span
-            key={i}
-            className="rounded-full transition-all duration-300"
-            style={{
-              width: i === idx ? "16px" : "4px",
-              height: "4px",
-              background: i <= idx ? "#C9A86A" : "#2A2A26",
-            }}
-          />
-        ))}
-      </div>
-
-      {/* Optional action row · used by the launch-building loader to
-          expose View memory / Spot homepage buttons. */}
-      {actions}
-    </div>
-  );
-}
-
-/**
- * Launch-building canvas loader · the dark Spot canvas shown after
- * the user clicks "Put Spot to work". Designed around 5 explicit
- * tasks — each one renders as a row in a task list with state
- * (queued / running / done) and a one-line sub-label so the user
- * sees exactly what Spot is doing at each beat.
- */
-function LaunchBuildingLoader({ productName }: { productName: string }) {
-  const showHomeView = useSpotStore((s) => s.showHomeView);
-  const router = useRouter();
-  const TOTAL_MS = LAUNCH_BUILD_TASKS.reduce((s, t) => s + t.duration, 0);
-  const [doneCount, setDoneCount] = useState(0);
-  const [progress, setProgress] = useState(2);
-
-  // Advance task state on each task's duration boundary.
-  useEffect(() => {
-    setDoneCount(0);
-    let cumulative = 0;
-    const timers: ReturnType<typeof setTimeout>[] = [];
-    LAUNCH_BUILD_TASKS.forEach((t, i) => {
-      cumulative += t.duration;
-      timers.push(setTimeout(() => setDoneCount(i + 1), cumulative));
-    });
-    return () => timers.forEach(clearTimeout);
-  }, []);
-
-  // Smooth progress bar across the whole 28s run.
-  useEffect(() => {
-    const start = Date.now();
-    const id = setInterval(() => {
-      const elapsed = Date.now() - start;
-      const pct = Math.min(99, (elapsed / TOTAL_MS) * 100);
-      setProgress(pct);
-      if (pct >= 99) clearInterval(id);
-    }, 80);
-    return () => clearInterval(id);
-  }, [TOTAL_MS]);
-
-  return (
-    <div
-      className="h-full flex flex-col items-center justify-center px-8 py-12"
-      style={{ background: "#0A0A09" }}
-    >
-      {/* Spot orb + headline */}
-      <div className="relative mb-6">
-        <div
-          aria-hidden
-          className="absolute inset-0 rounded-full"
-          style={{
-            background:
-              "radial-gradient(circle, rgba(201, 168, 106, 0.32) 0%, transparent 65%)",
-            filter: "blur(14px)",
-            transform: "scale(1.5)",
-          }}
-        />
-        <SpotLoader mode="orbit" size={64} className="!gap-0 relative" />
-      </div>
-
-      <div
-        className="inline-flex items-center gap-1.5 text-[10.5px] uppercase tracking-wider font-semibold mb-2"
-        style={{ color: "#22C55E" }}
-      >
-        <span className="relative inline-flex w-1.5 h-1.5 rounded-full bg-[#22C55E]">
-          <span className="absolute inset-0 rounded-full bg-[#22C55E] opacity-50 animate-ping" />
-        </span>
-        Build Agent · live · 5 tasks
-      </div>
-
-      <h1
-        className="text-[22px] font-semibold tracking-tight leading-tight text-center max-w-[560px]"
-        style={{ color: "#F5F4EF" }}
-      >
-        Spot is working on{" "}
-        <span
-          style={{
-            background:
-              "linear-gradient(135deg, #C9A86A 0%, #E0C083 100%)",
-            WebkitBackgroundClip: "text",
-            WebkitTextFillColor: "transparent",
-          }}
-        >
-          {productName}
-        </span>
-      </h1>
-
-      {/* Progress bar */}
-      <div className="w-full max-w-[540px] mt-5">
-        <div
-          className="relative h-1.5 rounded-full overflow-hidden"
-          style={{ background: "rgba(255,255,255,0.06)" }}
-        >
-          <div
-            className="h-full transition-all duration-300 ease-out relative"
-            style={{
-              width: `${progress}%`,
-              background:
-                "linear-gradient(90deg, #C9A86A 0%, #E0C083 60%, #22C55E 100%)",
-            }}
-          >
-            <span
-              aria-hidden
-              className="absolute right-0 top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full"
-              style={{
-                background: "#22C55E",
-                boxShadow:
-                  "0 0 14px 3px rgba(34, 197, 94, 0.55), 0 0 4px rgba(255,255,255,0.4)",
-              }}
-            />
-          </div>
-        </div>
-        <div className="flex items-center justify-between mt-1.5">
-          <span
-            className="text-[10.5px] tabular font-medium"
-            style={{ color: "#D6D6CE" }}
-          >
-            {Math.round(progress)}%
-          </span>
-          <span
-            className="text-[10.5px] tabular"
-            style={{ color: "#8A8980" }}
-          >
-            {doneCount} of {LAUNCH_BUILD_TASKS.length} tasks complete
-          </span>
-        </div>
-      </div>
-
-      {/* Task list */}
-      <div
-        className="w-full max-w-[540px] mt-6 rounded-card overflow-hidden"
-        style={{
-          background: "#1A1A18",
-          border: "1px solid #262623",
-        }}
-      >
-        <ul>
-          {LAUNCH_BUILD_TASKS.map((t, i) => {
-            const done = i < doneCount;
-            const running = i === doneCount;
-            const queued = i > doneCount;
-            const rowBg = done
-              ? "rgba(34, 197, 94, 0.06)"
-              : running
-                ? "rgba(201, 168, 106, 0.07)"
-                : "transparent";
-            return (
-              <li
-                key={t.id}
-                className="px-4 py-3 transition-colors flex items-start gap-3"
-                style={{
-                  background: rowBg,
-                  borderTop: i > 0 ? "1px solid #262623" : undefined,
-                }}
-              >
-                {/* Status glyph */}
-                <span className="w-4 h-4 flex items-center justify-center flex-shrink-0 mt-0.5">
-                  {done && (
-                    <CheckCircle2
-                      size={15}
-                      strokeWidth={2}
-                      style={{ color: "#22C55E" }}
-                    />
-                  )}
-                  {running && (
-                    <Cog
-                      size={14}
-                      strokeWidth={1.8}
-                      className="animate-spin"
-                      style={{ animationDuration: "1.2s", color: "#E0C083" }}
-                    />
-                  )}
-                  {queued && (
-                    <span
-                      className="w-3 h-3 rounded-full"
-                      style={{ border: "1.5px solid #3A3A35" }}
-                    />
-                  )}
-                </span>
-
-                {/* Step number + content */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className="text-[10.5px] tabular font-mono flex-shrink-0"
-                      style={{
-                        color: queued ? "#5A5A52" : done ? "#7A7970" : "#C9A86A",
-                      }}
-                    >
-                      {String(i + 1).padStart(2, "0")}
-                    </span>
-                    <span
-                      className="text-[13px] flex-1 truncate"
-                      style={{
-                        color: queued
-                          ? "#7A7970"
-                          : done
-                            ? "#A8A8A0"
-                            : "#F5F4EF",
-                        fontWeight: running ? 600 : 500,
-                      }}
-                    >
-                      {t.label}
-                    </span>
-                    {running && (
-                      <span
-                        className="text-[10px] uppercase tracking-wider font-semibold flex-shrink-0"
-                        style={{ color: "#E0C083" }}
-                      >
-                        running…
-                      </span>
-                    )}
-                    {done && (
-                      <span
-                        className="text-[10px] uppercase tracking-wider font-semibold flex-shrink-0"
-                        style={{ color: "#22C55E" }}
-                      >
-                        done
-                      </span>
-                    )}
-                  </div>
-                  <div
-                    className="text-[11px] mt-0.5 truncate"
-                    style={{
-                      color: queued ? "#5A5A52" : "#8A8980",
-                    }}
-                  >
-                    {t.sub}
-                  </div>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      </div>
-
-      {/* Actions · while building, two soft secondary buttons let the
-          user step away. Once all 5 tasks are done, those collapse
-          into one primary gold CTA: "Review Assets & Launch" — the
-          single decision Spot needs from the user before pushing live. */}
-      {doneCount < LAUNCH_BUILD_TASKS.length ? (
-        <div className="flex items-center gap-2 mt-7">
-          <button
-            type="button"
-            onClick={() =>
-              router.push("/memory?focus=prod-guyjus-spoken-english")
-            }
-            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-button text-[12px] font-medium transition-colors"
-            style={{ background: "#FAFAF8", color: "#0A0A09" }}
-          >
-            View project memory
-            <ArrowRight size={11} strokeWidth={1.8} />
-          </button>
-          <button
-            type="button"
-            onClick={showHomeView}
-            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-button text-[12px] transition-colors hover:bg-white/5"
-            style={{ color: "#A8A8A0" }}
-          >
-            <Home size={12} strokeWidth={1.7} />
-            Back to Spot homepage
-          </button>
-        </div>
-      ) : (
-        <ReviewAssetsCta />
-      )}
-    </div>
-  );
-}
-
-/** Gold primary CTA shown at the bottom of LaunchBuildingLoader once
- *  all 5 build tasks are done. Advances the workflow into
- *  launch-review, where the user sees creatives, landing pages, lead
- *  forms, the campaign tree, and the voice agent before approving the
- *  actual launch. */
-function ReviewAssetsCta() {
-  const advanceWorkflow = useSpotStore((s) => s.advanceWorkflow);
-  return (
-    <div className="flex flex-col items-center gap-1.5 mt-7">
-      <button
-        type="button"
-        onClick={() => advanceWorkflow()}
-        className="inline-flex items-center gap-2 h-9 px-4 rounded-button text-[13px] font-semibold transition-transform hover:scale-[1.02] active:scale-[0.99]"
-        style={{
-          background:
-            "linear-gradient(135deg, #C9A86A 0%, #E0C083 60%, #D5B273 100%)",
-          color: "#1A1408",
-          boxShadow:
-            "0 8px 24px -6px rgba(201, 168, 106, 0.45), 0 2px 6px -1px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.35)",
-        }}
-      >
-        Review Assets &amp; Launch
-        <ArrowRight size={13} strokeWidth={2} />
-      </button>
-      <span className="text-[10.5px]" style={{ color: "#8A8980" }}>
-        Preview every creative · form · landing page · campaign before going live
-      </span>
-    </div>
-  );
-}
 
 /** Thank-you screen · the canvas state after deploy finishes. Big
  *  celebratory Spot orb on black, gold-gradient headline, a short
  *  list of what just went live, and a CTA to head back to home. */
 function ThankYouScreen({ productName }: { productName: string }) {
   const router = useRouter();
+  const { openMemory } = useMemoryPanel();
   const exitWorkflow = useSpotStore((s) => s.exitWorkflow);
   return (
     <div
@@ -2211,14 +1238,7 @@ function ThankYouScreen({ productName }: { productName: string }) {
         className="text-[28px] font-semibold tracking-tight leading-tight max-w-[600px]"
         style={{ color: "#F5F4EF" }}
       >
-        <span
-          style={{
-            background:
-              "linear-gradient(135deg, #C9A86A 0%, #E0C083 100%)",
-            WebkitBackgroundClip: "text",
-            WebkitTextFillColor: "transparent",
-          }}
-        >
+        <span style={{ color: "#F5F4EF" }}>
           {productName}
         </span>{" "}
         is live.
@@ -2284,102 +1304,12 @@ function ThankYouScreen({ productName }: { productName: string }) {
         </button>
         <button
           type="button"
-          onClick={() =>
-            router.push("/memory?focus=prod-guyjus-spoken-english")
-          }
+          onClick={() => openMemory("prod-guyjus-spoken-english")}
           className="inline-flex items-center gap-1.5 h-8 px-3 rounded-button text-[12px] transition-colors hover:bg-white/5"
           style={{ color: "#A8A8A0" }}
         >
           View project memory
         </button>
-      </div>
-    </div>
-  );
-}
-
-function PlanBuildingLoader({ productName }: { productName: string }) {
-  const [idx, setIdx] = useState(0);
-  useEffect(() => {
-    if (PLAN_THOUGHTS.length < 2) return;
-    const id = setInterval(() => {
-      setIdx((i) => (i + 1) % PLAN_THOUGHTS.length);
-    }, 1900);
-    return () => clearInterval(id);
-  }, []);
-
-  return (
-    <div
-      className="h-full flex flex-col items-center justify-center px-8 py-12 text-center"
-      style={{ background: "#0A0A09" }}
-    >
-      {/* Soft gold radial glow behind the orb */}
-      <div className="relative mb-7">
-        <div
-          aria-hidden
-          className="absolute inset-0 rounded-full"
-          style={{
-            background:
-              "radial-gradient(circle, rgba(201, 168, 106, 0.32) 0%, transparent 65%)",
-            filter: "blur(14px)",
-            transform: "scale(1.6)",
-          }}
-        />
-        <SpotLoader mode="orbit" size={84} className="!gap-0 relative" />
-      </div>
-
-      <div
-        className="inline-flex items-center gap-1.5 text-[10.5px] uppercase tracking-wider font-semibold mb-2"
-        style={{ color: "#22C55E" }}
-      >
-        <span className="relative inline-flex w-1.5 h-1.5 rounded-full bg-[#22C55E]">
-          <span className="absolute inset-0 rounded-full bg-[#22C55E] opacity-50 animate-ping" />
-        </span>
-        Execution Plan Agent · live
-      </div>
-
-      <h1
-        className="text-[24px] font-semibold tracking-tight leading-tight max-w-[520px]"
-        style={{ color: "#F5F4EF" }}
-      >
-        Drafting an execution plan for{" "}
-        <span
-          style={{
-            background:
-              "linear-gradient(135deg, #C9A86A 0%, #E0C083 100%)",
-            WebkitBackgroundClip: "text",
-            WebkitTextFillColor: "transparent",
-          }}
-        >
-          {productName}
-        </span>
-      </h1>
-
-      {/* Cycling thought · key={idx} re-fires the slide-in keyframe */}
-      <div
-        key={idx}
-        className="mt-4 text-[14px] leading-relaxed max-w-[480px]"
-        style={{
-          color: "#A8A8A0",
-          animation: "findingSlide 320ms ease-out",
-          minHeight: "44px",
-        }}
-      >
-        {PLAN_THOUGHTS[idx]}
-      </div>
-
-      {/* Tiny progress dots · vague indicator that something's happening */}
-      <div className="flex items-center gap-1.5 mt-7">
-        {PLAN_THOUGHTS.map((_, i) => (
-          <span
-            key={i}
-            className="rounded-full transition-all duration-300"
-            style={{
-              width: i === idx ? "16px" : "4px",
-              height: "4px",
-              background: i <= idx ? "#C9A86A" : "#2A2A26",
-            }}
-          />
-        ))}
       </div>
     </div>
   );
@@ -2392,38 +1322,9 @@ function buildNewProductPlanMd(productName: string): string {
   return buildLaunchPlanMd(productName);
 }
 
-/** Cycling thoughts for the strategy compose loader. */
-const STRATEGY_THOUGHTS = [
-  "Reading the project details + audience graph…",
-  "Picking the personas worth targeting first…",
-  "Drafting creative angles per persona…",
-  "Setting the target CPQL off the price band…",
-  "Composing the campaign strategy…",
-];
-
-/** Strategy canvas · gated behind a short Spot-orb loader so the strategy
- *  doesn't pop in instantly. Mirrors PlanFileView's build gate. */
 function StrategyFileView({ workflow }: { workflow: LaunchWorkflow }) {
-  const [building, setBuilding] = useState(workflow.step === "launch-strategy");
-  useEffect(() => {
-    if (workflow.step === "launch-strategy") {
-      setBuilding(true);
-      const id = setTimeout(() => setBuilding(false), 5000);
-      return () => clearTimeout(id);
-    }
-    setBuilding(false);
-  }, [workflow.step]);
-
-  if (building) {
-    return (
-      <DarkSpotLoader
-        agentLabel="Strategy Agent · live"
-        title="Composing the campaign strategy"
-        thoughts={STRATEGY_THOUGHTS}
-        intervalMs={1600}
-      />
-    );
-  }
+  // Build progress is narrated in the chat (tool-call parts); the panel
+  // just shows the strategy artefact (light).
   return <LaunchStrategyStep workflow={workflow} />;
 }
 
@@ -2436,32 +1337,6 @@ function PlanFileView({
 }) {
   const files = getProductFiles(workflow);
 
-  // While Spot is "generating" the plan (step transitioned to
-  // launch-plan and tool-call is still running), show the cycling
-  // loader. The local timer matches the launch-plan tool-call
-  // delayMs (5.6s) so the loader stays up for exactly the agent run.
-  const [planBuilding, setPlanBuilding] = useState(
-    workflow.kind === "launch-campaign" && workflow.step === "launch-plan",
-  );
-  useEffect(() => {
-    if (
-      workflow.kind === "launch-campaign" &&
-      workflow.step === "launch-plan"
-    ) {
-      setPlanBuilding(true);
-      const id = setTimeout(() => setPlanBuilding(false), 11800);
-      return () => clearTimeout(id);
-    }
-    setPlanBuilding(false);
-  }, [workflow?.step, workflow?.kind]);
-
-  if (
-    planBuilding &&
-    workflow.kind === "launch-campaign"
-  ) {
-    return <PlanBuildingLoader productName={workflow.productName} />;
-  }
-
   // New product (no saved files) post-build · render the generic
   // template. Even brand-new products get a real plan to read,
   // not a "No plan yet" placeholder.
@@ -2470,7 +1345,7 @@ function PlanFileView({
     return (
       <div className="relative">
         <div className="px-6 py-5 max-w-[760px]">
-          <Markdown source={md} theme="dark" />
+          <Markdown source={md} theme="light" />
         </div>
         {buildingOverlay && <BuildingOverlay label="Spot is drafting the execution plan…" />}
       </div>
@@ -2496,7 +1371,7 @@ function PlanFileView({
   return (
     <div className="relative">
       <div className="px-6 py-5 max-w-[720px]">
-        <Markdown source={files.planMd} theme="dark" />
+        <Markdown source={files.planMd} theme="light" />
       </div>
       {buildingOverlay && (
         <BuildingOverlay label="Spot is proposing plan changes…" />
@@ -2823,7 +1698,7 @@ function SectionHeading({ title, count }: { title: string; count: number }) {
     >
       <span
         className="w-1 h-1 rounded-full"
-        style={{ background: "#C9A86A" }}
+        style={{ background: "#9B9B9B" }}
       />
       <span
         className="text-[14px] font-semibold"
@@ -3045,7 +1920,7 @@ function CreativeSizesModal({
           <div className="flex-1 min-w-0">
             <div
               className="text-[10.5px] uppercase tracking-wider font-semibold"
-              style={{ color: "#C9A86A" }}
+              style={{ color: "#9B9B9B" }}
             >
               {creative.angle}
             </div>
@@ -3090,7 +1965,7 @@ function CreativeSizesModal({
                   style={{
                     background: "#1A1A18",
                     border: isPrimary
-                      ? "1px solid #C9A86A"
+                      ? "1px solid #9B9B9B"
                       : "1px solid #262623",
                   }}
                 >
@@ -3150,7 +2025,7 @@ function CreativeSizesModal({
                     {isPrimary && (
                       <span
                         className="text-[9px] uppercase tracking-wider font-semibold"
-                        style={{ color: "#C9A86A" }}
+                        style={{ color: "#9B9B9B" }}
                       >
                         primary
                       </span>
@@ -3306,7 +2181,7 @@ function LandingPageCard({
         />
         <div
           className="h-6 w-full rounded"
-          style={{ background: "rgba(201, 168, 106, 0.45)" }}
+          style={{ background: "rgba(155, 155, 155, 0.45)" }}
         />
         <div className="grid grid-cols-3 gap-1 flex-1">
           <div
@@ -3420,7 +2295,7 @@ function FormCard({
             />
             <div
               className="h-3 w-full rounded-sm"
-              style={{ background: "rgba(201, 168, 106, 0.6)" }}
+              style={{ background: "rgba(155, 155, 155, 0.6)" }}
             />
           </div>
         </div>
@@ -3552,7 +2427,7 @@ function buildPartialMemoryMd(
 
 /**
  * Generic "agent at work" loader for any step that runs a background
- * tool-call. Shown on the right pane while the agent is still
+ * tool-call. Shown on the canvas panel while the agent is still
  * narrating in chat — the canvas swaps to it immediately on advance.
  */
 function StepLoader({
@@ -3899,8 +2774,8 @@ function BriefRow({
           <CheckCircle2 size={13} strokeWidth={2} className="text-[#15803D]" />
         ) : active ? (
           <span className="relative inline-flex items-center justify-center w-3.5 h-3.5">
-            <span className="absolute inset-0 rounded-full bg-[#C9A86A] opacity-40 animate-ping" />
-            <span className="relative w-1.5 h-1.5 rounded-full bg-[#C9A86A]" />
+            <span className="absolute inset-0 rounded-full bg-[#9B9B9B] opacity-40 animate-ping" />
+            <span className="relative w-1.5 h-1.5 rounded-full bg-[#9B9B9B]" />
           </span>
         ) : (
           <span className="inline-block w-3.5 h-3.5 rounded-full border border-border-subtle" />
@@ -3976,7 +2851,6 @@ function KickoffStep({ workflow }: { workflow: LaunchWorkflow }) {
           <div className="bg-white border border-border rounded-card p-4">
             <div className="flex items-center gap-1.5 mb-1">
               <span className="pill pill-info" style={{ fontSize: 10 }}>
-                <Sparkles size={9} strokeWidth={2} />
                 Spot-researched
               </span>
               <span className="text-[11px] text-text-tertiary">just now</span>
@@ -4567,11 +3441,6 @@ function PersonaCard({
             isNewUnapproved ? "bg-[#E8C97A]/40" : "bg-[#F0FDF4]"
           }`}
         >
-          <Sparkles
-            size={10}
-            strokeWidth={2}
-            className={isNewUnapproved ? "text-[#92400E]" : "text-[#15803D]"}
-          />
           <span
             className={`text-[10px] font-semibold uppercase tracking-wider ${
               isNewUnapproved ? "text-[#92400E]" : "text-[#15803D]"
@@ -4641,7 +3510,6 @@ function PersonaCard({
             }}
             className="w-full inline-flex items-center justify-center gap-1.5 h-7 rounded-button bg-[#111] text-[#FAFAF8] hover:bg-black text-[11.5px] font-medium"
           >
-            <Sparkles size={10} strokeWidth={2} />
             Approve persona
           </button>
         ) : (
@@ -4826,10 +3694,8 @@ function BudgetCard({
       }`}
     >
       <div className="flex items-center gap-1.5 mb-2">
-        {isSet ? (
+        {isSet && (
           <CheckCircle2 size={11} strokeWidth={1.8} className="text-[#15803D]" />
-        ) : (
-          <Sparkles size={11} strokeWidth={1.8} className="text-[#92400E]" />
         )}
         <span className="label-section">
           {isSet ? "Budget" : "Experiment baseline (no budget yet)"}
@@ -4898,7 +3764,7 @@ function CreativesStep() {
     <div className="px-5 py-5">
       <StepHeader
         title="Creative direction"
-        blurb="Visual angles per persona for Meta. The Creative Agent generates concepts one at a time per persona — watch the right pane fill in."
+        blurb="Visual angles per persona for Meta. The Creative Agent generates concepts one at a time per persona — watch the panel fill in."
       />
 
       {/* Tabs */}
@@ -5954,7 +4820,6 @@ function VoiceAgentStep() {
                     </span>
                     {isRecommended && (
                       <span className="pill pill-info" style={{ fontSize: 9.5 }}>
-                        <Sparkles size={9} strokeWidth={2} />
                         Spot recommends
                       </span>
                     )}

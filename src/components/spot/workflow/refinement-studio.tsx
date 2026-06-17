@@ -24,7 +24,6 @@ import {
   Check,
   ChevronRight,
   Cog,
-  Sparkles,
   Trash2,
 } from "lucide-react";
 import {
@@ -330,7 +329,7 @@ function Filmstrip({ session }: { session: RefinementSession }) {
             <span
               className="relative block w-[72px] h-[54px] rounded-[8px] overflow-hidden transition-shadow"
               style={{
-                border: isActive ? "2px solid #C9A86A" : "1px solid #2A2A26",
+                border: isActive ? "2px solid #9B9B9B" : "1px solid #2A2A26",
                 background: "#0A0A09",
               }}
             >
@@ -405,12 +404,6 @@ function AgentRail({ session }: { session: RefinementSession }) {
     >
       {/* Agent header — proves the context travelled with the hand-off */}
       <div className="px-4 py-3 flex items-center gap-2.5" style={{ borderBottom: "1px solid #262623" }}>
-        <span
-          className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0"
-          style={{ background: "rgba(201,168,106,0.14)", border: "1px solid rgba(201,168,106,0.4)" }}
-        >
-          <Sparkles size={13} style={{ color: "#C9A86A" }} />
-        </span>
         <div className="min-w-0">
           <div className="text-[12.5px] font-semibold leading-tight">{STUDIO_AGENT.name}</div>
           <div className="text-[10.5px] truncate" style={{ color: "#8A8980" }}>
@@ -495,9 +488,8 @@ function StudioBubble({ message }: { message: StudioChatMessage }) {
           type="button"
           onClick={() => selectVersion(message.version!)}
           className="mt-1.5 inline-flex items-center gap-1 h-6 px-2 rounded-full text-[10.5px] font-medium tabular-nums transition-colors"
-          style={{ border: "1px solid rgba(201,168,106,0.4)", color: "#F0BE66", background: "rgba(201,168,106,0.08)" }}
+          style={{ border: "1px solid rgba(155,155,155,0.4)", color: "#C7C4BC", background: "rgba(155,155,155,0.08)" }}
         >
-          <Sparkles size={9} />
           v{message.version} on the stage
         </button>
       )}

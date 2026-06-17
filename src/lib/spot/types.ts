@@ -1,3 +1,5 @@
+import type { CanvasFile } from "./workflow";
+
 // Types used across the Spot agent surfaces (panel, palette, guided flows).
 //
 // In this version Spot is answer-only. There is no "actions" part type. Any
@@ -28,6 +30,10 @@ export type SpotPart =
   // Spent rendered the right-pane canvas as a place to *see* the work
   // and the chat as the place to *act on it*, like Claude's flows.
   | { type: "step-cta"; label: string; helper?: string; refineHint?: string }
+  // A saved artefact, surfaced as a floating chat card. Clicking Open
+  // calls openCanvasFile(file) — the ONLY way Spot proactively surfaces
+  // an artefact. Carries no approve action (gates remain separate parts).
+  | { type: "artifact"; file: CanvasFile; title: string; subtitle: string; markdown?: string }
   // Multi-option branch — two or three mutually-exclusive choices in a
   // single Spot message (e.g. "Import campaigns" vs "Launch new"). Each
   // option carries an `action` key the renderer maps to a store call.
@@ -37,11 +43,6 @@ export type SpotPart =
   // writes the workflow's import state in the store; the right canvas
   // stays on memory.md.
   | { type: "import-picker" }
-  // Inline clarify questions — the 2-3 quick-pick questions for a
-  // diagnostic flow (scale / optimize / test-angles), rendered in the
-  // chat (left panel) so the user answers right where Spot is talking.
-  // The right canvas mirrors the captured brief.
-  | { type: "clarify-questions"; kind: "scale" | "optimize" | "test-angles" }
   // The Analyst Agent's report — a collapsed drop-down. Closed by default
   // (Spot's one-liner sits above it); expands to the full detailed write-up +
   // the analyst↔Spot conversation. The renderer looks the report up by id.
@@ -90,7 +91,8 @@ export type SpotChoiceAction =
   | "launch-new" // kickoff → draft a fresh execution plan
   | "import-campaigns" // open the import-campaigns canvas
   | "launch-after-import" // after import → jump into the launch plan
-  | "analyse-performance"; // after import → open Campaigns
+  | "analyse-performance" // after import → open Campaigns
+  | "reconsider-flow"; // after a reject → run a different diagnostic play
 
 export type SpotChoiceIcon = "rocket" | "download" | "chart" | "sparkles";
 
@@ -100,6 +102,10 @@ export type SpotChoiceOption = {
   action: SpotChoiceAction;
   icon?: SpotChoiceIcon;
   variant?: "primary" | "secondary";
+  // For `reconsider-flow`: which diagnostic to run and on which product.
+  diagFlow?: "scale" | "optimize" | "test-angles";
+  productId?: string;
+  productName?: string;
 };
 
 export type SpotFinding = {

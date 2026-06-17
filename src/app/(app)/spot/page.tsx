@@ -17,7 +17,7 @@
 // shouldn't have to scroll to find the place to type, and the page
 // below the fold is for "what's already on Spot's desk".
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Package,
   Paperclip,
@@ -27,16 +27,13 @@ import {
   Plus,
   History,
   Check,
-  MessageCircle,
   Clock,
   CheckCircle2,
-  Loader2,
   ChevronLeft,
   ChevronRight,
   X,
-  PanelRightOpen,
   Home,
-  Sparkles,
+  Square,
 } from "lucide-react";
 import { SpotMark } from "@/components/spot/spot-mark";
 import { SpotLoader } from "@/components/spot/spot-loader";
@@ -48,15 +45,22 @@ import { useDemoMode } from "@/lib/demo-mode";
 import { projectsList } from "@/lib/campaign-data";
 import { SPOT_SESSIONS, type SpotSession } from "@/lib/spot/mock-history";
 import type { SpotMessage, SpotScope } from "@/lib/spot/types";
-import { WorkflowPane, ChatHeaderFilePicker } from "@/components/spot/workflow/workflow-pane";
+import { SpotCanvasPanel, ChatHeaderFilePicker } from "@/components/spot/workflow/workflow-pane";
 import { PRODUCTS, diagnoseProduct } from "@/lib/products-data";
 import { campaignsForProduct } from "@/lib/campaigns-edtech-rollup";
-import { STEP_LABELS, type SpotWorkflow } from "@/lib/spot/workflow";
+import {
+  STEP_LABELS,
+  type SpotWorkflow,
+  type DiagnosticWorkflow,
+} from "@/lib/spot/workflow";
 import {
   planForProduct,
-  PLAN_STATUS_TONE,
   PLAN_STATUS_LABEL,
+  clarifyQuestionsFor,
+  analysisFor,
+  answerLabel,
 } from "@/lib/spot/extended-flows";
+import { useMemoryPanel } from "@/components/memory/memory-panel";
 
 function firstName(n: string) {
   return n.split(" ")[0] || n;
@@ -69,56 +73,18 @@ function timeGreeting() {
   return "Good evening";
 }
 
-/**
- * Resize handle between the chat panel (left) and canvas (right).
- * Pointer-down arms a window-level drag listener; pointer-up releases.
- * The parent owns chat width state; we just emit deltas via onResize.
- */
-function ResizeHandle({
-  chatWidth,
-  onResize,
-}: {
-  chatWidth: number;
-  onResize: (nextWidth: number) => void;
-}) {
-  const startDrag = (e: React.PointerEvent) => {
-    e.preventDefault();
-    const startX = e.clientX;
-    const startWidth = chatWidth;
-    const onMove = (ev: PointerEvent) => {
-      onResize(startWidth + (ev.clientX - startX));
-    };
-    const onUp = () => {
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-    };
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-  };
-  return (
-    <div
-      onPointerDown={startDrag}
-      role="separator"
-      aria-orientation="vertical"
-      aria-label="Resize chat panel"
-      className="group relative w-1 cursor-col-resize bg-border hover:bg-border-hover transition-colors flex-shrink-0"
-    >
-      {/* Wider invisible hit target so the user doesn't have to be pixel-precise. */}
-      <div className="absolute inset-y-0 -left-2 -right-2" />
-      {/* Tiny visual cue on hover · 3 vertical dots in the middle. */}
-      <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 flex items-center opacity-0 group-hover:opacity-60 transition-opacity pointer-events-none">
-        <div className="flex flex-col gap-0.5">
-          <span className="w-[2px] h-[2px] rounded-full bg-text-secondary" />
-          <span className="w-[2px] h-[2px] rounded-full bg-text-secondary" />
-          <span className="w-[2px] h-[2px] rounded-full bg-text-secondary" />
-        </div>
-      </div>
-    </div>
-  );
+/** True below the 900px reflow breakpoint — the panel overlays instead
+ *  of reflowing. SSR-safe: starts false, the effect sets the real value. */
+function useIsNarrow(): boolean {
+  const [narrow, setNarrow] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 900px)");
+    const update = () => setNarrow(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+  return narrow;
 }
 
 /** Context-aware placeholder for the chat composer. Most flows just
@@ -146,21 +112,15 @@ export default function SpotPage() {
   const pendingQuery = useSpotStore((s) => s.pendingQuery);
   const closePanel = useSpotStore((s) => s.closePanel);
   const workflow = useSpotStore((s) => s.workflow);
-  const canvasOpen = useSpotStore((s) => s.canvasOpen);
+  const panelFile = useSpotStore((s) => s.panelFile);
+  const closeCanvas = useSpotStore((s) => s.closeCanvas);
+  const isNarrow = useIsNarrow();
+  const panelOpen = panelFile !== null;
   const viewHomeOverride = useSpotStore((s) => s.viewHomeOverride);
   const showHomeView = useSpotStore((s) => s.showHomeView);
   const resumeWorkflow = useSpotStore((s) => s.resumeWorkflow);
 
   const [draft, setDraft] = useState("");
-  // Chat-panel width (px) — user-resizable via the divider drag handle.
-  // Default to 40% of the viewport so the canvas gets ~60% to render
-  // the file content comfortably. Falls back to a sensible px value
-  // during SSR before window is available.
-  const [chatWidth, setChatWidth] = useState(() =>
-    typeof window !== "undefined"
-      ? Math.max(420, Math.round(window.innerWidth * 0.4))
-      : 720,
-  );
   const [pending, setPending] = useState(false);
   const [scopeOpen, setScopeOpen] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -169,6 +129,7 @@ export default function SpotPage() {
   // Drop the legacy `open` flag — the route is the surface now.
   useEffect(() => {
     closePanel();
+    closeCanvas();
     // Default chat scope back to Workspace whenever the user lands on
     // /spot without an active workflow. Without this, the scope sticks
     // on whatever the last workflow set it to (a product or campaign).
@@ -288,24 +249,85 @@ export default function SpotPage() {
   // Is *any* tool-call still running? Use this to animate the Spot
   // mark in the chat header — a spinning ring shows there's an agent
   // doing work right now (Claude-style live indicator).
+  // Chat-stop: when the user hits Stop in the composer we flag the agent
+  // as stopped so the running indicators clear. Re-armed whenever the
+  // workflow advances to a new step.
+  const [agentStopped, setAgentStopped] = useState(false);
+  useEffect(() => {
+    setAgentStopped(false);
+  }, [workflow?.step]);
+
+  // True once the last chat message has finished its typewriter stream. Gates
+  // the clarify dock so the questions never pop in under a half-typed intro.
+  // Re-arms on every step transition so each clarify step waits afresh; the
+  // last message's MessageBubble fires onStreamComplete (immediately if it has
+  // no streaming text), so this never stays stuck false.
+  const [lastStreamDone, setLastStreamDone] = useState(false);
+  useEffect(() => {
+    setLastStreamDone(false);
+  }, [workflow?.step]);
+
+  // Resizable right artifact panel. Width is dragged via the handle on
+  // the panel's left edge; clamped so the chat always keeps room.
+  const [panelW, setPanelW] = useState(380);
+  const startPanelResize = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const onMove = (ev: MouseEvent) => {
+      const next = window.innerWidth - ev.clientX - 12;
+      const max = Math.min(760, window.innerWidth - 360);
+      setPanelW(Math.max(340, Math.min(max, next)));
+    };
+    const onUp = () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+    };
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "col-resize";
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  };
   const isAgentRunning =
+    !agentStopped &&
     !!workflow &&
     thread.some(
       (m) =>
         m.role === "spot" &&
         m.parts.some((p) => p.type === "tool-call" && p.status === "running"),
     );
+  // A "real" tool-call (a build/document step like spot.plan), as opposed to
+  // a chain-of-thought beat (ids "think-warmup" / "think-N"). The verbose
+  // "Working… · tools" block only belongs to real tool work — during the
+  // thinking beats every flow shows the same quiet pulsing trail, so the
+  // chain of thought reads identically across analyst-review and diagnostics.
+  const isToolWorking =
+    isAgentRunning &&
+    thread.some(
+      (m) =>
+        m.role === "spot" &&
+        m.parts.some(
+          (p) =>
+            p.type === "tool-call" &&
+            p.status === "running" &&
+            !p.id.startsWith("think-"),
+        ),
+    );
 
   if (workflow && !viewHomeOverride) {
+    const PANEL_W = panelW;
     return (
-      <div className="h-screen flex bg-[var(--chat-bg)]">
-        {/* Left — chat. Resizable via the drag handle on the right
-            edge. Goes full-width when the canvas is minimized. */}
+      <div
+        className="h-screen relative overflow-hidden"
+        style={{ background: "var(--spot-desk)" }}
+      >
+        {/* Chat — the base surface. Reflows narrower (right padding) when
+            the panel is docked on a wide viewport; full-width otherwise. */}
         <div
-          className="flex flex-col bg-[var(--chat-bg)]"
-          style={canvasOpen ? { width: `${chatWidth}px`, flex: "0 0 auto" } : { flex: 1 }}
+          className="h-full flex flex-col"
+          style={panelOpen && !isNarrow ? { paddingRight: PANEL_W + 24 } : undefined}
         >
-          <div className="relative z-30 flex items-center gap-2.5 px-4 py-3 border-b border-border-subtle bg-white/70 backdrop-blur-sm">
+          <div className="relative z-30 mx-3 mt-2 flex items-center gap-2.5 px-3 h-14">
             <button
               type="button"
               onClick={showHomeView}
@@ -335,49 +357,45 @@ export default function SpotPage() {
                           : `Launching · ${workflow.productName}`}
               </div>
             </div>
-            {/* File picker · Claude-style preview button. Lives on the
-                LEFT (the input side) so the user opens/closes canvas
-                files from the same place they type. */}
-            {/* Analyst review is chat-only — no canvas files to browse. */}
-            {workflow.kind !== "analyst-review" && <ChatHeaderFilePicker compact />}
-            {!canvasOpen && workflow.kind !== "analyst-review" && (
-              <button
-                type="button"
-                onClick={() => useSpotStore.getState().toggleCanvas()}
-                title="Show canvas"
-                className="inline-flex items-center justify-center h-7 w-7 rounded-button text-text-secondary hover:bg-surface-secondary hover:text-text-primary"
-              >
-                <PanelRightOpen size={12} strokeWidth={1.6} />
-              </button>
-            )}
+            {/* Files dropdown · the only file-inventory surface. Shown for
+                every workflow (incl. analyst-review, which has analysis.md). */}
+            <ChatHeaderFilePicker compact />
           </div>
-          {/* Top-anchored chat · standard top-down message flow with
-              the composer pinned at the bottom. The question card
-              lives inside the thread at the end. */}
+
           <div ref={threadScrollRef} className="flex-1 overflow-y-auto scroll px-4 py-4">
-            {/* When the canvas is closed (e.g. analyst review) the chat goes
-                full-width and reads poorly — constrain it to a centered,
-                readable column. With the canvas open the panel is already
-                narrow, so the cap simply no-ops. */}
-            <div className={canvasOpen ? "w-full" : "max-w-[760px] mx-auto w-full"}>
+            <div className="max-w-[760px] mx-auto w-full">
               {thread.map((m, i) => (
-                <MessageBubble key={i} message={m} animate={i === thread.length - 1} />
+                <MessageBubble
+                  key={i}
+                  message={m}
+                  animate={i === thread.length - 1}
+                  onStreamComplete={
+                    i === thread.length - 1
+                      ? () => setLastStreamDone(true)
+                      : undefined
+                  }
+                />
               ))}
               {pending && <TypingDots />}
-              <AgentWorkingBlock
-                working={isAgentRunning}
-                workflowKind={workflow.kind}
-                workflowStep={workflow.step}
-              />
-              {isAgentRunning &&
-                !["launch-campaign", "scale", "optimize", "test-angles"].includes(
-                  workflow.kind,
-                ) && <AgentTrailIndicator working />}
+              {/* The verbose "Working… · tools" trace belongs ONLY to
+                  launch-campaign, where the deep-research / launch-building
+                  tool work is meant to read as a full agentic trace. Every
+                  other flow (the diagnostics: scale / optimize / test-angles,
+                  plus analyst-review) shows the QUIET pulsing trail while a
+                  tool runs; the running tool-call itself still renders as the
+                  collapsible ChainOfThought header inside the message (e.g.
+                  "spot.plan · folding your picks…"), so the user keeps the
+                  step label without the old gear block. */}
+              {isToolWorking && workflow.kind === "launch-campaign" ? (
+                <AgentWorkingBlock
+                  working
+                  workflowKind={workflow.kind}
+                  workflowStep={workflow.step}
+                />
+              ) : isAgentRunning ? (
+                <AgentTrailIndicator working />
+              ) : null}
 
-              {/* Inline question card · appears once Spot has finished
-                  preparing the intake. Three sequential questions:
-                  name → URL → files. Submitting the last one closes
-                  the card and kicks off deep research. */}
               {workflow.kind === "launch-campaign" &&
                 workflow.step === "product-setup" &&
                 workflow.productSetupModalOpen === true &&
@@ -389,8 +407,34 @@ export default function SpotPage() {
                 )}
             </div>
           </div>
-          <div className="border-t border-border-subtle px-3 py-3 bg-white/50 backdrop-blur-sm">
-            <div className={canvasOpen ? "w-full" : "max-w-[760px] mx-auto w-full"}>
+          {/* Clarify dock — docked one-at-a-time question picker, sits
+              attached above the composer (Claude-style). Only the
+              diagnostic flows' clarify step surfaces it. */}
+          {(workflow.kind === "scale" ||
+            workflow.kind === "optimize" ||
+            workflow.kind === "test-angles") &&
+            ["scale-clarify", "opt-clarify", "ang-clarify"].includes(workflow.step) &&
+            // Hold the dock until the clarify intro has actually landed in
+            // the chat. `ready` resets on the step transition and only flips
+            // back true once the spot.brief tool-call resolves and the intro
+            // message is appended, so this keeps the questions from popping in
+            // before Spot has said "a few quick questions before I plan".
+            workflow.ready &&
+            // ...and not just appended but fully streamed: hold the dock until
+            // the intro message's typewriter has finished landing, so the
+            // questions never appear under a half-typed "a few quick questions
+            // before I plan". `lastStreamDone` re-arms each step transition and
+            // fires immediately if the message has no streaming text, so the
+            // dock always eventually shows.
+            lastStreamDone && (
+              <div className="px-3">
+                <div className="max-w-[760px] mx-auto w-full">
+                  <ClarifyDock workflow={workflow} />
+                </div>
+              </div>
+            )}
+          <div className="px-3 pt-1 pb-3">
+            <div className="max-w-[760px] mx-auto w-full">
               <Composer
                 value={draft}
                 onChange={setDraft}
@@ -401,6 +445,8 @@ export default function SpotPage() {
                 onScopeOpenChange={setScopeOpen}
                 inputRef={inputRef}
                 placeholder={composerPlaceholderFor(workflow)}
+                isWorking={isAgentRunning}
+                onStop={() => setAgentStopped(true)}
                 onAttachFiles={
                   workflow.kind === "launch-campaign" &&
                   workflow.step === "product-setup" &&
@@ -412,35 +458,48 @@ export default function SpotPage() {
               />
             </div>
           </div>
-
         </div>
 
-        {/* Drag handle — user controls chat width. 4px visible band with
-            a wider invisible hit-target. Cursor flips to col-resize on
-            hover. */}
-        {canvasOpen && (
-          <ResizeHandle
-            chatWidth={chatWidth}
-            onResize={(next) =>
-              setChatWidth(Math.max(420, Math.min(next, window.innerWidth - 480)))
-            }
+        {/* Scrim · only on narrow viewports where the panel overlays. */}
+        {panelOpen && isNarrow && (
+          <div
+            className="absolute inset-0 z-40 bg-black/20"
+            onClick={closeCanvas}
+            aria-hidden
           />
         )}
 
-        {/* Right — workflow canvas. Floated as a rounded card on a
-            dark surface so the markdown content reads in Notion-style
-            dark mode. */}
-        {canvasOpen && (
-          <div className="flex-1 min-w-0 p-2 pl-0">
+        {/* Floating artifact panel · docked right, mounted only when open.
+            Reflows the chat on wide viewports; overlays full-bleed (with
+            the scrim above) on narrow ones. */}
+        {panelOpen && (
+          <div
+            className={
+              isNarrow
+                ? "absolute inset-2 z-50"
+                : "absolute top-3 bottom-3 right-3 z-40"
+            }
+            style={isNarrow ? undefined : { width: PANEL_W }}
+          >
+            {/* Drag handle · left edge, wide viewports only. */}
+            {!isNarrow && (
+              <div
+                onMouseDown={startPanelResize}
+                title="Drag to resize"
+                className="group absolute left-0 top-0 bottom-0 -translate-x-1/2 w-3 z-10 cursor-col-resize flex items-center justify-center"
+              >
+                <span className="w-[3px] h-10 rounded-full bg-[var(--spot-stroke)] group-hover:bg-text-tertiary transition-colors" />
+              </div>
+            )}
             <div
-              className="h-full rounded-card border overflow-hidden"
+              className="h-full rounded-[14px] overflow-hidden"
               style={{
-                background: "#161614",
-                borderColor: "#2A2A26",
-                boxShadow: "0 14px 36px -12px rgba(0,0,0,0.45)",
+                background: "var(--spot-card)",
+                border: "1px solid var(--spot-card-border)",
+                boxShadow: "var(--spot-shadow)",
               }}
             >
-              <WorkflowPane />
+              <SpotCanvasPanel />
             </div>
           </div>
         )}
@@ -460,7 +519,7 @@ export default function SpotPage() {
             into memory / plan / dashboard / assets without rejoining
             a workflow. Picker is hidden when no workflow context is
             scoped (workspace) — nothing to preview. */}
-        <div className="relative z-30 flex items-center gap-2 px-6 py-3 border-b border-border-subtle bg-white/70 backdrop-blur-sm">
+        <div className="relative z-30 mx-3 mt-2 flex items-center gap-2 px-3 h-14">
           <SpotMark size={18} />
           <div className="flex-1">
             <div className="text-[13px] font-semibold leading-tight">Spot</div>
@@ -469,7 +528,10 @@ export default function SpotPage() {
           {workflow && <ChatHeaderFilePicker compact />}
           <button
             type="button"
-            onClick={() => setThread([])}
+            onClick={() => {
+              setThread([]);
+              closeCanvas();
+            }}
             title="New chat"
             className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-button text-[12px] text-text-secondary hover:bg-surface-secondary"
           >
@@ -497,8 +559,8 @@ export default function SpotPage() {
 
         {/* Composer pinned at the bottom — standard chat layout once
             we're in conversation mode. */}
-        <div className="border-t border-border-subtle bg-white/50 backdrop-blur-sm">
-          <div className="max-w-[1040px] mx-auto w-full px-6 py-4">
+        <div className="pt-1">
+          <div className="max-w-[1040px] mx-auto w-full px-6 pt-1 pb-4">
             <Composer
               value={draft}
               onChange={setDraft}
@@ -598,70 +660,241 @@ function AgentTrailIndicator({ working }: { working: boolean }) {
   );
 }
 
+
 /**
- * SpotWorkingDrawer · the inline "I'm working in the background"
- * card the chat lands on after the user approves the plan. Minimal,
- * neat. Pulsing green dot + headline + one-line copy + two muted
- * actions (View memory, Spot homepage). Sized like a chat reply.
+ * DockShell — the chrome around a single clarify page: a Spot-marked
+ * "Quick setup" kicker on the left and a compact pagination control on
+ * the right (‹ prev · "N of M" · next › · close ✕). One flat card (no
+ * nested cards), subtle border, sits attached above the composer.
  */
-function SpotWorkingDrawer({
-  productName,
-  onViewMemory,
-  onGoHome,
+function DockShell({
+  step,
+  total,
+  onPrev,
+  onNext,
+  onClose,
+  children,
 }: {
-  productName: string;
-  onViewMemory: () => void;
-  onGoHome: () => void;
+  step?: number;
+  total: number;
+  onPrev?: () => void;
+  onNext?: () => void;
+  onClose: () => void;
+  children: React.ReactNode;
 }) {
+  const navBtn =
+    "flex items-center justify-center w-6 h-6 rounded-button text-text-tertiary transition-colors enabled:hover:text-text-primary enabled:hover:bg-[var(--spot-tint)] disabled:opacity-30 disabled:cursor-default";
   return (
-    <div className="mt-4 mb-1">
-      <div
-        className="bg-white border border-border rounded-card overflow-hidden"
-        style={{ boxShadow: "0 8px 24px -10px rgba(0,0,0,0.10)" }}
-      >
-        {/* Header strip · pulsing dot + working tag */}
-        <div className="px-4 pt-4 pb-2 flex items-center gap-2">
-          <span className="relative inline-flex w-1.5 h-1.5 rounded-full bg-[#15803D]">
-            <span className="absolute inset-0 rounded-full bg-[#15803D] opacity-50 animate-ping" />
-          </span>
-          <span className="text-[10.5px] uppercase tracking-wider font-semibold text-[#15803D]">
-            Spot is working in the background
-          </span>
-        </div>
-
-        {/* Body */}
-        <div className="px-4 pb-3">
-          <div className="text-[14px] font-semibold text-text-primary leading-snug">
-            Building everything for {productName}.
-          </div>
-          <p className="text-[12.5px] text-text-secondary mt-1.5 leading-relaxed">
-            Personas, creatives, landing pages, lead forms, and campaigns
-            are spinning up in parallel. I&apos;ll notify you the moment
-            there&apos;s something to approve — feel free to step away.
-          </p>
-        </div>
-
-        {/* Actions */}
-        <div className="px-4 pb-4 flex items-center gap-2">
-          <button
-            type="button"
-            onClick={onViewMemory}
-            className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-button border border-border bg-white hover:border-border-hover text-[12px] text-text-primary"
-          >
-            View project memory
-            <ArrowRight size={11} strokeWidth={1.8} className="text-text-tertiary" />
+    <div
+      className="mb-2 rounded-[14px] px-4 pt-3 pb-3.5"
+      style={{
+        background: "var(--bg-card)",
+        border: "1px solid var(--border-subtle)",
+        boxShadow: "var(--spot-shadow)",
+      }}
+    >
+      <div className="flex items-center gap-2 mb-2.5">
+        <SpotMark size={13} />
+        <span className="text-[11px] font-medium uppercase tracking-wider text-text-tertiary">
+          Quick setup
+        </span>
+        <span className="flex-1" />
+        <div className="flex items-center gap-0.5">
+          <button type="button" onClick={onPrev} disabled={!onPrev} className={navBtn} aria-label="Previous">
+            <ChevronLeft size={14} strokeWidth={1.8} />
           </button>
-          <button
-            type="button"
-            onClick={onGoHome}
-            className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-button text-[12px] text-text-secondary hover:text-text-primary hover:bg-surface-secondary"
-          >
-            <Home size={11} strokeWidth={1.7} />
-            Back to Spot homepage
+          <span className="text-[11px] text-text-tertiary tabular min-w-[42px] text-center">
+            {step ? `${step} of ${total}` : "Confirm"}
+          </span>
+          <button type="button" onClick={onNext} disabled={!onNext} className={navBtn} aria-label="Next">
+            <ChevronRight size={14} strokeWidth={1.8} />
+          </button>
+          <span className="w-px h-3.5 mx-1" style={{ background: "var(--border-subtle)" }} />
+          <button type="button" onClick={onClose} className={navBtn} aria-label="Close">
+            <X size={14} strokeWidth={1.8} />
           </button>
         </div>
       </div>
+      {children}
     </div>
+  );
+}
+
+/**
+ * ClarifyDock — the diagnostic clarify questions, asked ONE AT A TIME
+ * and docked just above the composer (Claude-style), instead of a stack
+ * of inline cards in the thread. Single-select questions auto-advance on
+ * pick; multi-select questions show checkboxes plus a Next button. After
+ * the last question a Confirm page folds the picks into the plan
+ * (advanceWorkflow) and echoes the choices back into the chat.
+ */
+function ClarifyDock({ workflow }: { workflow: DiagnosticWorkflow }) {
+  const kind = workflow.kind;
+  const setClarifyAnswer = useSpotStore((s) => s.setClarifyAnswer);
+  const advanceWorkflow = useSpotStore((s) => s.advanceWorkflow);
+  const appendMessage = useSpotStore((s) => s.appendMessage);
+  const closePanel = useSpotStore((s) => s.closePanel);
+
+  const questions = useMemo(
+    () => clarifyQuestionsFor(kind, analysisFor(kind)),
+    [kind],
+  );
+  const total = questions.length;
+  const answers = workflow.clarifyAnswers;
+
+  // Local cursor — 0..total-1 walk the questions; `total` is the confirm page.
+  const [idx, setIdx] = useState(0);
+  // Snap back to the first question whenever we (re)enter a clarify step.
+  useEffect(() => {
+    setIdx(0);
+  }, [workflow.step]);
+
+  const confirmLabel = kind === "test-angles" ? "Draft the angles" : "Build the plan";
+  const goBack = () => setIdx((i) => Math.max(0, i - 1));
+  const goNext = () => setIdx((i) => Math.min(total, i + 1));
+
+  const handleConfirm = () => {
+    // Echo the captured picks as a compact user message, Claude-style.
+    const lines = questions
+      .map((q) => `- ${answerLabel(kind, q.id, answers[q.id] ?? q.defaultValue)}`)
+      .join("\n");
+    appendMessage({ role: "user", text: `${confirmLabel}.\n${lines}` });
+    advanceWorkflow();
+  };
+
+  // ── Confirm page ──────────────────────────────────────────────
+  if (idx >= total) {
+    return (
+      <DockShell total={total} onPrev={goBack} onClose={closePanel}>
+        <div className="text-[15px] font-semibold text-text-primary leading-snug">
+          That&apos;s everything I need.
+        </div>
+        <div className="text-[13px] text-text-secondary mt-1 leading-relaxed">
+          {kind === "test-angles"
+            ? "I'll draft a fresh set of angles from these constraints for you to review."
+            : "I'll fold these into one time-phased plan for you to approve."}
+        </div>
+        <div className="mt-3.5 flex items-center justify-end">
+          <button
+            type="button"
+            onClick={handleConfirm}
+            className="inline-flex items-center gap-1.5 h-9 px-4 rounded-full text-[13.5px] font-medium transition-colors"
+            style={{ background: "#1A1A1A", color: "#FAFAF8" }}
+          >
+            {confirmLabel}
+            <ArrowRight size={14} strokeWidth={2} />
+          </button>
+        </div>
+      </DockShell>
+    );
+  }
+
+  // ── Question page ─────────────────────────────────────────────
+  const q = questions[idx];
+  // Nothing pre-selected — the recommended option is tagged, not checked.
+  // Skipping a question (via the next chevron) folds in the recommended
+  // value as the fallback (see handleConfirm / BriefCard).
+  const raw = answers[q.id] ?? (q.multi ? [] : "");
+  const selectedArr = Array.isArray(raw) ? raw : raw ? [raw] : [];
+
+  const pickSingle = (value: string) => {
+    setClarifyAnswer(q.id, value);
+    goNext(); // single-select advances immediately on pick
+  };
+  const toggleMulti = (value: string) => {
+    const set = new Set(selectedArr);
+    if (set.has(value)) set.delete(value);
+    else set.add(value);
+    const next = Array.from(set);
+    // Never leave a multi-select empty — keep at least the just-tapped one.
+    setClarifyAnswer(q.id, next.length ? next : [value]);
+  };
+
+  return (
+    <DockShell
+      step={idx + 1}
+      total={total}
+      onPrev={idx > 0 ? goBack : undefined}
+      onNext={goNext}
+      onClose={closePanel}
+    >
+      <div className="flex items-start gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="text-[15px] font-semibold text-text-primary leading-snug">
+            {q.question}
+          </div>
+          {q.why && (
+            <div className="text-[12.5px] text-text-tertiary mt-1 leading-snug">{q.why}</div>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-3 space-y-1.5">
+        {q.options.map((o) => {
+          const active = selectedArr.includes(o.value);
+          const recommended = o.value === q.defaultValue;
+          return (
+            <button
+              key={o.value}
+              type="button"
+              onClick={() => (q.multi ? toggleMulti(o.value) : pickSingle(o.value))}
+              className="w-full flex items-center gap-3 px-3 py-2.5 text-left rounded-[10px] transition-colors hover:bg-[var(--spot-tint)]"
+              style={{
+                background: active ? "var(--spot-tint)" : "transparent",
+                border: active ? "1px solid var(--spot-stroke)" : "1px solid transparent",
+              }}
+            >
+              <span
+                className="flex-shrink-0 flex items-center justify-center w-[20px] h-[20px] transition-colors"
+                style={{
+                  borderRadius: q.multi ? 6 : 999,
+                  background: active ? "#1A1A1A" : "transparent",
+                  border: active ? "1px solid #1A1A1A" : "1.5px solid var(--spot-stroke)",
+                }}
+              >
+                {active && <Check size={12} strokeWidth={3} className="text-white" />}
+              </span>
+              <span className="flex-1 min-w-0">
+                <span className="flex items-center gap-2">
+                  <span
+                    className={`text-[14px] leading-snug ${active ? "font-semibold text-text-primary" : "font-medium text-text-secondary"}`}
+                  >
+                    {o.label}
+                  </span>
+                  {recommended && (
+                    <span
+                      className="flex-shrink-0 inline-flex items-center h-[17px] px-1.5 rounded-full text-[9.5px] font-medium uppercase tracking-wide text-text-tertiary"
+                      style={{ background: "var(--spot-tint)", border: "1px solid var(--spot-stroke)" }}
+                    >
+                      Recommended
+                    </span>
+                  )}
+                </span>
+                {o.hint && (
+                  <span className="block text-[12px] text-text-tertiary mt-0.5 leading-snug">
+                    {o.hint}
+                  </span>
+                )}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {q.multi && (
+        <div className="mt-3 flex items-center justify-end">
+          <button
+            type="button"
+            onClick={goNext}
+            className="inline-flex items-center gap-1.5 h-9 px-4 rounded-full text-[13.5px] font-medium transition-colors"
+            style={{ background: "#1A1A1A", color: "#FAFAF8" }}
+          >
+            {idx === total - 1 ? "Review" : "Next"}
+            <ArrowRight size={14} strokeWidth={2} />
+          </button>
+        </div>
+      )}
+    </DockShell>
   );
 }
 
@@ -785,20 +1018,22 @@ function ProductSetupQuestionCard({
   return (
     <div className="mt-4 mb-1">
       {/* Context line above the card · mirrors the Claude pattern */}
-      <div className="flex items-center gap-1.5 text-[11px] text-text-tertiary mb-2 ml-0.5">
-        <Sparkles size={10} strokeWidth={1.7} />
+      <div className="flex items-center gap-1.5 text-[12.5px] text-text-tertiary mb-2.5 ml-0.5">
         <span>Setting up a new project · {TOTAL} quick questions</span>
       </div>
 
       {/* The interactive card itself · light surface matching the app theme */}
-      <div className="bg-white border border-border rounded-card overflow-hidden shadow-card">
+      <div
+        className="bg-white rounded-card overflow-hidden"
+        style={{ border: "1px solid var(--spot-card-border)", boxShadow: "var(--spot-shadow)" }}
+      >
         {/* Header · question + pagination + close */}
-        <div className="px-4 pt-4 pb-2.5 flex items-start gap-3">
+        <div className="px-5 pt-[18px] pb-3 flex items-start gap-3">
           <div className="flex-1 min-w-0">
-            <div className="text-[14.5px] font-medium leading-snug text-text-primary">
+            <div className="text-[16px] font-semibold leading-snug text-text-primary">
               {question}
             </div>
-            <div className="text-[11.5px] leading-relaxed mt-1 text-text-tertiary">
+            <div className="text-[13px] leading-relaxed mt-1 text-text-tertiary">
               {subtitle}
             </div>
           </div>
@@ -836,7 +1071,7 @@ function ProductSetupQuestionCard({
         </div>
 
         {/* Body · question-specific input */}
-        <div className="px-4 pt-2 pb-3">
+        <div className="px-5 pt-2 pb-3.5">
           {step === 0 && (
             <input
               autoFocus
@@ -848,7 +1083,7 @@ function ProductSetupQuestionCard({
                 if (e.key === "Enter" && canSubmit) goNext();
               }}
               placeholder="e.g. Guyju's Spoken English"
-              className="w-full rounded-input px-3 py-2.5 text-[13.5px] bg-white border border-border text-text-primary placeholder:text-text-tertiary outline-none focus:border-text-primary"
+              className="w-full rounded-input px-3.5 py-3 text-[14.5px] bg-white border border-border text-text-primary placeholder:text-text-tertiary outline-none focus:border-text-primary"
             />
           )}
           {step === 1 && (
@@ -862,7 +1097,7 @@ function ProductSetupQuestionCard({
                 if (e.key === "Enter") goNext();
               }}
               placeholder="https://…"
-              className="w-full rounded-input px-3 py-2.5 text-[13.5px] bg-white border border-border text-text-primary placeholder:text-text-tertiary outline-none focus:border-text-primary"
+              className="w-full rounded-input px-3.5 py-3 text-[14.5px] bg-white border border-border text-text-primary placeholder:text-text-tertiary outline-none focus:border-text-primary"
             />
           )}
           {step === 2 && (
@@ -879,18 +1114,18 @@ function ProductSetupQuestionCard({
                   setDragOver(false);
                   if (e.dataTransfer.files.length > 0) addFiles(e.dataTransfer.files);
                 }}
-                className={`rounded-input px-3 py-3.5 text-center cursor-pointer transition-colors border border-dashed ${
+                className={`rounded-input px-3 py-5 text-center cursor-pointer transition-colors border border-dashed ${
                   dragOver
                     ? "border-text-primary bg-surface-secondary"
                     : "border-border hover:border-border-hover bg-surface-page"
                 }`}
               >
                 <Paperclip
-                  size={12}
+                  size={13}
                   strokeWidth={1.6}
                   className="inline mr-1.5 -mt-0.5 text-text-tertiary"
                 />
-                <span className="text-[12px] text-text-secondary">
+                <span className="text-[13.5px] text-text-secondary">
                   Drop files or{" "}
                   <span className="font-medium underline-offset-2 hover:underline text-text-primary">
                     click to browse
@@ -941,13 +1176,13 @@ function ProductSetupQuestionCard({
         </div>
 
         {/* Footer · Skip + Continue / Start research */}
-        <div className="px-4 pb-4 pt-1 flex items-center gap-2">
+        <div className="px-5 pb-[18px] pt-1 flex items-center gap-2">
           <div className="flex-1" />
           {canSkipThis && (
             <button
               type="button"
               onClick={handleSkip}
-              className="text-[12px] py-1.5 px-3 rounded-button text-text-secondary hover:text-text-primary hover:bg-surface-secondary transition-colors"
+              className="text-[13px] h-9 px-3.5 rounded-button text-text-secondary hover:text-text-primary hover:bg-surface-secondary transition-colors"
             >
               Skip
             </button>
@@ -956,10 +1191,10 @@ function ProductSetupQuestionCard({
             type="button"
             onClick={goNext}
             disabled={continueDisabled}
-            className="inline-flex items-center gap-1.5 text-[12px] py-1.5 px-3 rounded-button font-medium bg-[#111] text-[#FAFAF8] hover:bg-black disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="inline-flex items-center gap-1.5 text-[13.5px] h-9 px-4 rounded-button font-medium bg-[#111] text-[#FAFAF8] hover:bg-black disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
             {isLast ? "Start research" : "Continue"}
-            <ArrowRight size={11} strokeWidth={2} />
+            <ArrowRight size={13} strokeWidth={2} />
           </button>
         </div>
       </div>
@@ -978,6 +1213,8 @@ function Composer({
   inputRef,
   placeholder,
   onAttachFiles,
+  isWorking = false,
+  onStop,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -991,6 +1228,11 @@ function Composer({
   /** Optional file-attach handler. When provided, the Attach button
    *  opens a file picker; selected files are passed back as names. */
   onAttachFiles?: (fileNames: string[]) => void;
+  /** When the agent is running, the send button becomes a Stop button
+   *  (chat-stop pattern — lives in the composer, not floating in the
+   *  thread). */
+  isWorking?: boolean;
+  onStop?: () => void;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const handleAttachClick = () => {
@@ -1015,7 +1257,7 @@ function Composer({
           }
         }}
       />
-      <div className="flex items-center gap-1.5 px-2 py-2">
+      <div className="flex items-center gap-1.5 px-2.5 pb-2.5 pt-1.5">
         <button
           type="button"
           onClick={handleAttachClick}
@@ -1054,16 +1296,40 @@ function Composer({
           <CampaignScopePicker scope={scope} onChange={onChangeScope} />
         )}
         <div className="flex-1" />
-        <span className="mono text-[10px] text-text-tertiary mr-1">⏎ to send</span>
-        <button
-          type="button"
-          disabled={!value.trim()}
-          onClick={onSend}
-          className="apply-btn"
-          style={{ width: 28, height: 28, padding: 0, justifyContent: "center" }}
-        >
-          <ArrowUp size={14} strokeWidth={2} />
-        </button>
+        {isWorking ? (
+          <button
+            type="button"
+            onClick={onStop}
+            title="Stop"
+            aria-label="Stop"
+            className="inline-flex items-center justify-center transition-colors"
+            style={{
+              width: 32,
+              height: 32,
+              padding: 0,
+              borderRadius: 999,
+              background: "#111",
+              color: "#FAFAF8",
+              border: 0,
+              cursor: "pointer",
+            }}
+          >
+            <Square size={11} strokeWidth={0} fill="currentColor" />
+          </button>
+        ) : (
+          <>
+            <span className="mono text-[10px] text-text-tertiary mr-1">⏎ to send</span>
+            <button
+              type="button"
+              disabled={!value.trim()}
+              onClick={onSend}
+              className="apply-btn"
+              style={{ width: 32, height: 32, padding: 0, justifyContent: "center", borderRadius: 999 }}
+            >
+              <ArrowUp size={15} strokeWidth={2.2} />
+            </button>
+          </>
+        )}
       </div>
     </div>
   );
@@ -1204,7 +1470,7 @@ function CampaignScopePicker({
         className="inline-flex items-center gap-1.5 h-7 px-2 rounded-button border border-border bg-white hover:border-border-hover text-[12px] text-text-secondary hover:text-text-primary"
         title="Scope to a campaign"
       >
-        <span aria-hidden className="inline-block w-1.5 h-1.5 rounded-full" style={{ background: scope.campaignId ? "#C9A86A" : "#9B9B9B" }} />
+        <span aria-hidden className="inline-block w-1.5 h-1.5 rounded-full" style={{ background: scope.campaignId ? "#9B9B9B" : "#9B9B9B" }} />
         <span className="max-w-[160px] truncate">{scope.campaignLabel ?? "All campaigns"}</span>
         <ChevronDown size={11} strokeWidth={1.8} />
       </button>
@@ -1286,6 +1552,7 @@ function ScopeRow({
  */
 function ActiveProductsRail() {
   const { isEmpty } = useDemoMode();
+  const { openMemory } = useMemoryPanel();
   const startNewProductFlow = useSpotStore((s) => s.startNewProductFlow);
   const startAnalystReview = useSpotStore((s) => s.startAnalystReview);
   const top = PRODUCTS.slice(0, 3);
@@ -1392,15 +1659,16 @@ function ActiveProductsRail() {
                 const plan = planForProduct(p.id);
                 if (!plan) return null;
                 return (
-                  <a
-                    href="/memory"
-                    className="flex items-center gap-1.5 px-2 py-1.5 rounded-input bg-surface-page border border-border-subtle hover:border-border-hover transition-colors"
+                  <button
+                    type="button"
+                    onClick={() => openMemory(p.id)}
+                    className="flex items-center gap-1.5 px-2 py-1.5 rounded-input bg-surface-page border border-border-subtle hover:border-border-hover transition-colors w-full text-left"
                   >
                     <span className="inline-flex w-1.5 h-1.5 rounded-full bg-[#22C55E] flex-shrink-0" />
                     <span className="text-[11px] text-text-primary font-medium truncate flex-1">
                       {PLAN_STATUS_LABEL[plan.status]}
                     </span>
-                  </a>
+                  </button>
                 );
               })()}
 
@@ -1665,32 +1933,6 @@ function SessionRow({ session }: { session: SpotSession }) {
   );
 }
 
-function PanelHeader({
-  icon,
-  title,
-  action,
-  actionTone,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  action: string;
-  actionTone?: "warn";
-}) {
-  return (
-    <div className="px-3.5 py-2.5 border-b border-border-subtle flex items-center gap-1.5">
-      <span className="text-text-tertiary">{icon}</span>
-      <span className="text-[11px] font-medium uppercase tracking-wider text-text-tertiary">{title}</span>
-      <span className="flex-1" />
-      <span
-        className={`text-[11px] ${
-          actionTone === "warn" ? "text-[#92400E] font-medium" : "text-text-tertiary hover:text-text-primary cursor-pointer"
-        }`}
-      >
-        {action}
-      </span>
-    </div>
-  );
-}
 
 /**
  * Banner shown on the /spot homepage when a workflow is parked. Three
@@ -1764,12 +2006,12 @@ function WorkflowParkBanner({
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5 mb-0.5">
-                <span className="relative inline-flex w-1.5 h-1.5 rounded-full bg-[#C9A86A]">
-                  <span className="absolute inset-0 rounded-full bg-[#C9A86A] opacity-60 animate-ping" />
+                <span className="relative inline-flex w-1.5 h-1.5 rounded-full bg-[#9B9B9B]">
+                  <span className="absolute inset-0 rounded-full bg-[#9B9B9B] opacity-60 animate-ping" />
                 </span>
                 <span
                   className="text-[10.5px] uppercase tracking-wider font-semibold"
-                  style={{ color: "#E0C083" }}
+                  style={{ color: "#C7C4BC" }}
                 >
                   Spot is deploying
                 </span>
@@ -1800,7 +2042,7 @@ function WorkflowParkBanner({
                 style={{
                   width: `${progress}%`,
                   background:
-                    "linear-gradient(90deg, #C9A86A 0%, #E0C083 60%, #22C55E 100%)",
+                    "linear-gradient(90deg, #9B9B9B 0%, #C7C4BC 60%, #22C55E 100%)",
                 }}
               />
             </div>
@@ -1881,7 +2123,7 @@ function WorkflowParkBanner({
                 style={{
                   width: `${progress}%`,
                   background:
-                    "linear-gradient(90deg, #C9A86A 0%, #E0C083 60%, #22C55E 100%)",
+                    "linear-gradient(90deg, #9B9B9B 0%, #C7C4BC 60%, #22C55E 100%)",
                 }}
               />
             </div>

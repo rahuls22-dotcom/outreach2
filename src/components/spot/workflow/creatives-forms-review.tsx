@@ -22,7 +22,6 @@ import {
   ImageIcon,
   FileText,
   Check,
-  Sparkles,
   ChevronDown,
 } from "lucide-react";
 import { CREATIVES_BY_PERSONA } from "./launch-build-steps";
@@ -157,7 +156,7 @@ export function CreativesFormsReview({ workflow }: { workflow: SpotWorkflow }) {
       {/* ── Creatives ─────────────────────────────────────────── */}
       <section className="mb-7">
         <div className="flex items-center gap-2 mb-4">
-          <ImageIcon size={14} style={{ color: "#C9A86A" }} />
+          <ImageIcon size={14} style={{ color: "#9B9B9B" }} />
           <span className="text-[13.5px] font-semibold">Creatives</span>
           <span className="text-[10.5px]" style={{ color: "#8A8980" }}>
             · {approvedCount}/{TOTAL_ANGLES} angles approved
@@ -226,7 +225,7 @@ export function CreativesFormsReview({ workflow }: { workflow: SpotWorkflow }) {
       {/* ── Lead form · one Meta instant form ─────────────────── */}
       <section>
         <div className="flex items-center gap-2 mb-3.5">
-          <FileText size={14} style={{ color: "#C9A86A" }} />
+          <FileText size={14} style={{ color: "#9B9B9B" }} />
           <span className="text-[13.5px] font-semibold">Lead form</span>
           <span className="text-[10.5px]" style={{ color: "#8A8980" }}>
             · 1 Meta instant form · all angles
@@ -335,10 +334,9 @@ function RefinedBadge({ version, agentName }: { version: number; agentName: stri
   return (
     <span
       className="inline-flex items-center gap-1 h-[19px] px-1.5 rounded-full text-[9.5px] font-medium tabular-nums"
-      style={{ background: "rgba(201,168,106,0.10)", border: "1px solid rgba(201,168,106,0.35)", color: "#F0BE66" }}
+      style={{ background: "rgba(155,155,155,0.10)", border: "1px solid rgba(155,155,155,0.35)", color: "#C7C4BC" }}
       title={`Refined in the studio with ${agentName}`}
     >
-      <Sparkles size={9} />
       v{version} · {agentName}
     </span>
   );
@@ -391,7 +389,6 @@ function RefineButton({ agentName, onClick }: { agentName: string; onClick: () =
       style={{ background: "transparent", border: "1px solid #2F2F2A", color: "#C8C8C2" }}
       title={`Refine with ${agentName} in the studio`}
     >
-      <Sparkles size={11} style={{ color: "#C9A86A" }} />
       Refine
     </button>
   );
@@ -502,7 +499,6 @@ function AngleCard({
           style={{ background: "transparent", border: "1px solid #2F2F2A", color: "#C8C8C2" }}
           title={`Refine this angle with ${agentName} in the studio`}
         >
-          <Sparkles size={11} style={{ color: "#C9A86A" }} />
           Refine
         </button>
         <span className="flex-1" />
@@ -555,7 +551,6 @@ function AngleCard({
                 style={{ background: "transparent", border: "1px solid #2F2F2A", color: "#C8C8C2" }}
                 title={`Refine the ${sz.label} size with ${agentName}`}
               >
-                <Sparkles size={9} style={{ color: "#C9A86A" }} />
                 Refine
               </button>
             </div>

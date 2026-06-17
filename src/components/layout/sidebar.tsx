@@ -9,9 +9,9 @@
 //   2. Dashboard          (mvp)
 //   3. Projects           (mvp)
 //   4. Campaigns          (demo)
-//   5. Memory             (demo)
-//   6. Leads              (demo, route /enquiries)
-//   7. Outreach           (demo)
+//   5. Leads              (demo, route /enquiries)
+//   6. Outreach           (demo)
+//   (Memory is no longer in the nav — reached from Projects → Memory)
 //   8. Tools section      (mvp): Enrichment (children), Contact extraction
 //                                 (children), Creatives, AI calling agents,
 //                                 Audiences (Soon).
@@ -46,7 +46,6 @@ import {
   PhoneCall,
   Wallet,
   Send,
-  Brain,
   ChevronDown,
   MessageCircle,
   LogOut,
@@ -79,8 +78,6 @@ const projectsItem: { name: string; href: string; icon: typeof LayoutGrid } & Na
 const campaignsItem: { name: string; href: string; icon: typeof LayoutGrid } & NavMeta =
   { name: "Campaigns", href: "/campaigns", icon: Monitor,
     product: ["campaigns"], lockedHref: "/locked/ai-calling-agents" };
-const memoryItem: { name: string; href: string; icon: typeof LayoutGrid } & NavMeta =
-  { name: "Memory",    href: "/memory",    icon: Brain };
 const leadsItem: { name: string; href: string; icon: typeof LayoutGrid } & NavMeta =
   { name: "Leads",     href: "/enquiries", icon: FileText,
     product: ["enrichment", "contact_extraction"], lockedHref: "/locked/contact-extraction" };
@@ -244,7 +241,13 @@ export function Sidebar() {
 
 
   return (
-    <aside className="fixed left-0 top-0 h-screen w-sidebar bg-white border-r border-border flex flex-col z-50">
+    <aside
+      className="fixed left-2 top-2 bottom-2 w-[224px] bg-white flex flex-col z-50 overflow-hidden rounded-[14px]"
+      style={{
+        border: "1px solid var(--spot-card-border)",
+        boxShadow: "var(--spot-shadow)",
+      }}
+    >
       {/* Workspace switcher · sits in the brand row */}
       <div className="px-2 pt-3 pb-2 border-b border-border-subtle">
         <WorkspaceSwitcher />
@@ -290,13 +293,13 @@ export function Sidebar() {
         </div>
 
         {/* LAUNCH · always rendered; each row locks individually based
-            on the active product preview preset. Projects and Memory
-            are brand-wide; Campaigns needs campaigns, Outreach needs
-            ai_calling. */}
+            on the active product preview preset. Projects is brand-wide;
+            Campaigns needs campaigns, Outreach needs ai_calling. Memory
+            is reached from a project's Memory button, not the nav. */}
         <div className="mb-3">
           <div className="label-section px-2 mb-1">Launch</div>
           <div className="space-y-0.5">
-            {[projectsItem, campaignsItem, memoryItem, outreachItem].map((item) => {
+            {[projectsItem, campaignsItem, outreachItem].map((item) => {
               const { lockedHref } = lockInfo(item);
               if (lockedHref) {
                 const locked = isUnder(lockedHref);

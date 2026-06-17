@@ -6,6 +6,7 @@ import {
   OPTIMIZE_STEPS,
   SCALE_STEPS,
   extendedIntroMessage,
+  planFor,
 } from "./extended-flows";
 
 // Spot workflows — types + mock content per step.
@@ -88,7 +89,12 @@ export type CanvasFile =
   | "plan"
   | "dashboard"
   | "assets"
-  | "analysis";
+  | "analysis"
+  // Live-execution canvas · diagnostic flows only. When the user puts a
+  // plan live (the *-live step), the right panel swaps from plan.md to
+  // this cowork-style progress checklist that ticks the plan's moves off
+  // one by one. Driven by DiagnosticWorkflow.executionMoves in the store.
+  | "execution";
 
 export const STEP_ORDER: WorkflowStep[] = [
   "deep-research",
@@ -270,6 +276,13 @@ export type LaunchWorkflow = {
  * `clarifyAnswers` is the answers map captured at step 1; `planApproved`
  * gates the transition from plan → live.
  */
+/** One concrete move in the live-execution checklist. Pending until the
+ *  ticker reaches it, running while in flight, done once executed. */
+export type ExecutionMove = {
+  label: string;
+  status: "pending" | "running" | "done";
+};
+
 export type DiagnosticWorkflow = {
   kind: "scale" | "optimize" | "test-angles";
   step: WorkflowStep;
@@ -278,10 +291,17 @@ export type DiagnosticWorkflow = {
   startedAt: number;
   /** Loader → reveal gate. */
   ready: boolean;
-  /** Map of clarify-question id → selected option id. */
-  clarifyAnswers: Record<string, string>;
+  /** Map of clarify-question id → selected option id (string for
+   *  single-select, string[] for multi-select questions). */
+  clarifyAnswers: Record<string, string | string[]>;
   /** True once the user has approved the plan. */
   planApproved: boolean;
+  /** Live-execution checklist · seeded when the *-live step begins and
+   *  ticked off by the store on a timer. Undefined before live. */
+  executionMoves?: ExecutionMove[];
+  /** True once every execution move has finished (settles the UI to
+   *  the "Done" state). */
+  executionDone?: boolean;
 };
 
 /**
@@ -335,6 +355,46 @@ export const EMPTY_APPROVALS: WorkflowApprovals = {
   angleIds: [],
   formIds: [],
 };
+
+/**
+ * The concrete moves Spot executes the moment a diagnostic plan goes
+ * live. Diagnostic plans are one-time "do this now" plans, so the live
+ * checklist IS the plan's first-phase actions (the moves Spot makes now),
+ * capped to keep the ticker readable, plus a closing "Arm the watchers"
+ * step. Pulled from the same WorkflowPlan the canvas + plan.md render, so
+ * the checklist tells the exact same story. Falls back to a sensible
+ * fixed sequence per kind if the plan has no actions.
+ */
+export function executionMovesFor(
+  kind: "scale" | "optimize" | "test-angles",
+): ExecutionMove[] {
+  const fallback: Record<typeof kind, string[]> = {
+    scale: [
+      "Shift budget to the winning ad sets",
+      "Open the BOFU retargeting cap",
+      "Brief the 1% lookalike from the qualified cohort",
+      "Set the frequency guardrail",
+    ],
+    optimize: [
+      "Pause the fatigued NEET reel",
+      "Brief the counter-creative rewrites",
+      "Reset relevance on the flagged hook",
+      "Set the sentiment guardrail",
+    ],
+    "test-angles": [
+      "Push the approved angles to Meta",
+      "Set the even traffic split",
+      "Brief the lead-form variants",
+      "Arm the early-stop guard",
+    ],
+  };
+  const actions = planFor(kind).phases[0]?.actions ?? [];
+  const moves = (actions.length ? actions.slice(0, 5) : fallback[kind]).map(
+    (label): ExecutionMove => ({ label, status: "pending" }),
+  );
+  moves.push({ label: "Arm the watchers · queue dashboard pings", status: "pending" });
+  return moves;
+}
 
 /**
  * Walk to the next step in the given workflow kind's order. Returns

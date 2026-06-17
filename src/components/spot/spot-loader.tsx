@@ -77,7 +77,7 @@ export function SpotLoader({
 // browser-extension overrides). Some setups were rendering the gold
 // rings as the framework's default blue stroke when set via attribute.
 const OUTER_RING: React.CSSProperties = {
-  stroke: "#C9A86A",
+  stroke: "#9B9B9B",
   strokeWidth: 2,
   strokeLinecap: "round",
   strokeDasharray: "28 90",

@@ -27,7 +27,6 @@ import { Fragment } from "react";
 import {
   CheckCircle2,
   ShieldAlert,
-  Sparkles,
   FileText,
   Layers,
   Film,
@@ -326,8 +325,8 @@ function renderBlock(b: EnrichedBlock, key: number) {
       return (
         <div
           key={key}
-          className="mt-3 mb-8 px-5 py-4 rounded-card border-l-[3px] md-tagline"
-          style={{ borderLeftColor: "#C9A86A" }}
+          className="mt-3 mb-8 px-5 py-4 rounded-card md-tagline"
+          style={{ border: "1px solid var(--spot-card-border)" }}
         >
           <p className="text-[14.5px] text-text-primary leading-relaxed">
             <Inline text={b.text} />
@@ -344,7 +343,7 @@ function renderBlock(b: EnrichedBlock, key: number) {
           <span
             aria-hidden
             className="inline-block w-1.5 h-1.5 rounded-full"
-            style={{ background: "#C9A86A" }}
+            style={{ background: "#C0BDB4" }}
           />
           <span className="flex-1">
             <Inline text={b.text} />
@@ -471,18 +470,13 @@ function BriefGrid({ items }: { items: string[] }) {
   return (
     <div className="grid grid-cols-2 gap-2.5 mb-5">
       {items.map((it, i) => {
-        const { emoji, label, body } = parseKeyValueRow(it);
+        const { label, body } = parseKeyValueRow(it);
         return (
           <div
             key={i}
             className="bg-white border border-border-subtle rounded-card px-3.5 py-3 hover:border-border transition-colors"
           >
             <div className="flex items-center gap-1.5 mb-1">
-              {emoji && (
-                <span className="text-[13px] leading-none" aria-hidden>
-                  {emoji}
-                </span>
-              )}
               {label && (
                 <span className="text-[10.5px] uppercase tracking-wider text-text-tertiary font-semibold">
                   {label}
@@ -551,11 +545,6 @@ function OfferPills({ items }: { items: string[] }) {
             key={i}
             className="md-offer-pill inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full text-[11.5px]"
           >
-            <Sparkles
-              size={10}
-              strokeWidth={1.8}
-              className="md-offer-pill-icon"
-            />
             <span className="font-medium md-offer-pill-label">
               <Inline text={label} />
             </span>
@@ -648,7 +637,7 @@ function PersonaChips({ items }: { items: string[] }) {
                 size={15}
                 strokeWidth={1.7}
                 className="md-persona-avatar-icon"
-                style={{ color: "#8C6D33" }}
+                style={{ color: "#6B6B6B" }}
               />
             </div>
             <div className="flex-1 min-w-0">
@@ -1040,10 +1029,10 @@ function CRMWorkflowDiagram() {
   );
 }
 
-/** Revspot Audience callout · the audience block gets a gold-edged
- *  featured card so it stands out from the rest of the plan. The
- *  children are the original heading + paragraph + list, rendered
- *  inside the highlight container. */
+/** Revspot Audience callout · the audience block gets a clean,
+ *  neutral featured card so it stands apart from the rest of the
+ *  plan without luxury/gold styling. The children are the original
+ *  heading + paragraph + list, rendered inside the container. */
 function RevspotAudienceCallout({
   title,
   children,
@@ -1054,71 +1043,35 @@ function RevspotAudienceCallout({
   return (
     <div className="my-7">
       <div
-        className="relative rounded-card overflow-hidden"
+        className="relative rounded-card overflow-hidden bg-white"
         style={{
-          background:
-            "linear-gradient(135deg, #1F1B14 0%, #181612 50%, #131110 100%)",
-          border: "1px solid #C9A86A",
-          boxShadow:
-            "0 12px 32px -12px rgba(201,168,106,0.25), 0 0 0 1px rgba(201,168,106,0.08) inset",
+          border: "1px solid var(--spot-card-border)",
+          boxShadow: "var(--spot-shadow)",
         }}
       >
-        {/* Gold radial glow underlay */}
-        <div
-          aria-hidden
-          className="absolute inset-0 pointer-events-none"
-          style={{
-            background:
-              "radial-gradient(ellipse 60% 50% at 100% 0%, rgba(201, 168, 106, 0.22) 0%, transparent 70%)",
-          }}
-        />
-
         {/* Featured header strip */}
         <div
           className="relative px-5 py-2.5 flex items-center gap-2"
           style={{
-            background: "rgba(201, 168, 106, 0.08)",
-            borderBottom: "1px solid rgba(201, 168, 106, 0.18)",
+            background: "var(--spot-tint)",
+            borderBottom: "1px solid var(--spot-card-border)",
           }}
         >
-          <span className="text-[13px]" aria-hidden>
-            ✨
-          </span>
-          <span
-            className="text-[10.5px] uppercase tracking-wider font-semibold"
-            style={{
-              background:
-                "linear-gradient(135deg, #C9A86A 0%, #E0C083 100%)",
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-            }}
-          >
+          <span className="text-[10.5px] uppercase tracking-wider font-semibold text-text-tertiary">
             Featured · Revspot graph
           </span>
           <span className="flex-1" />
-          <span
-            className="text-[10px] font-mono"
-            style={{ color: "#A8A8A0" }}
-          >
+          <span className="text-[10px] font-mono text-text-tertiary">
             audience.json
           </span>
         </div>
 
         <div className="relative px-5 py-4">
-          <h2
-            className="text-[20px] font-semibold tracking-tight leading-tight mb-3"
-            style={{
-              background:
-                "linear-gradient(135deg, #F5F4EF 0%, #E0C083 100%)",
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-            }}
-          >
+          <h2 className="text-[20px] font-semibold tracking-tight leading-tight mb-3 text-text-primary">
             {title}
           </h2>
-          {/* Override the inner h2 with display:none so we don't render
-              the title twice — the children include a duplicate h2 from
-              the original parser path. */}
+          {/* The children include a duplicate h2 from the original
+              parser path; md-revspot-children hides it via globals.css. */}
           <div className="md-revspot-children">{children}</div>
         </div>
       </div>

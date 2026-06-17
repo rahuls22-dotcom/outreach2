@@ -7,7 +7,7 @@
 //
 // Dark-themed to match the right canvas (#161614).
 
-import { Sparkles, Target, FileText, Crosshair, TrendingUp, Workflow } from "lucide-react";
+import { Target, FileText, Crosshair, TrendingUp, Workflow } from "lucide-react";
 import type { LaunchWorkflow } from "@/lib/spot/workflow";
 import { PRODUCTS } from "@/lib/products-data";
 
@@ -85,7 +85,7 @@ export function LaunchStrategyStep({ workflow }: { workflow: LaunchWorkflow }) {
 
   return (
     <div className="px-6 py-6 max-w-[760px] mx-auto" style={{ color: "#F5F4EF" }}>
-      <div className="text-[10.5px] uppercase tracking-wider font-semibold mb-1.5" style={{ color: "#C9A86A" }}>
+      <div className="text-[10.5px] uppercase tracking-wider font-semibold mb-1.5" style={{ color: "#9B9B9B" }}>
         Campaign strategy
       </div>
       <h1 className="text-[22px] font-semibold tracking-tight leading-[1.15]">{workflow.productName}</h1>
@@ -96,7 +96,7 @@ export function LaunchStrategyStep({ workflow }: { workflow: LaunchWorkflow }) {
       {/* Approach + key levers */}
       <div className="rounded-card p-4 mb-5" style={{ background: "#1A1A18", border: "1px solid #262623" }}>
         <div className="flex items-center gap-2 mb-2">
-          <TrendingUp size={13} strokeWidth={1.8} style={{ color: "#C9A86A" }} />
+          <TrendingUp size={13} strokeWidth={1.8} style={{ color: "#9B9B9B" }} />
           <span className="text-[11px] uppercase tracking-wider font-semibold" style={{ color: "#A8A8A0" }}>Approach</span>
         </div>
         <p className="text-[13px] leading-relaxed" style={{ color: "#E8E6DF" }}>
@@ -111,7 +111,7 @@ export function LaunchStrategyStep({ workflow }: { workflow: LaunchWorkflow }) {
       {/* Targeting overview */}
       <div className="rounded-card p-4 mb-5" style={{ background: "#1A1A18", border: "1px solid #262623" }}>
         <div className="flex items-center gap-2 mb-2.5">
-          <Crosshair size={13} strokeWidth={1.8} style={{ color: "#C9A86A" }} />
+          <Crosshair size={13} strokeWidth={1.8} style={{ color: "#9B9B9B" }} />
           <span className="text-[11px] uppercase tracking-wider font-semibold" style={{ color: "#A8A8A0" }}>Targeting overview</span>
         </div>
         <ul className="space-y-1.5">
@@ -122,7 +122,7 @@ export function LaunchStrategyStep({ workflow }: { workflow: LaunchWorkflow }) {
             "Layered exclusions · existing leads + recent purchasers",
           ].map((t, i) => (
             <li key={i} className="flex gap-2 text-[12.5px]" style={{ color: "#D6D6CE" }}>
-              <span className="mt-[7px] w-1 h-1 rounded-full flex-shrink-0" style={{ background: "#C9A86A" }} />
+              <span className="mt-[7px] w-1 h-1 rounded-full flex-shrink-0" style={{ background: "#9B9B9B" }} />
               {t}
             </li>
           ))}
@@ -131,7 +131,6 @@ export function LaunchStrategyStep({ workflow }: { workflow: LaunchWorkflow }) {
 
       {/* Personas + creative strategy */}
       <div className="flex items-center gap-2 mb-3">
-        <Sparkles size={13} strokeWidth={1.8} style={{ color: "#C9A86A" }} />
         <span className="text-[11px] uppercase tracking-wider font-semibold" style={{ color: "#A8A8A0" }}>
           Key personas · creative strategy
         </span>
@@ -174,7 +173,7 @@ export function LaunchStrategyStep({ workflow }: { workflow: LaunchWorkflow }) {
       {/* CRM workflow · Qualifier Agent — how inbound leads get handled once
           the ads bring them in. Lives in the strategy, not the plan. */}
       <div className="flex items-center gap-2 mb-3 mt-6">
-        <Workflow size={13} strokeWidth={1.8} style={{ color: "#C9A86A" }} />
+        <Workflow size={13} strokeWidth={1.8} style={{ color: "#9B9B9B" }} />
         <span className="text-[11px] uppercase tracking-wider font-semibold" style={{ color: "#A8A8A0" }}>
           CRM workflow · Qualifier Agent
         </span>
@@ -193,7 +192,7 @@ export function LaunchStrategyStep({ workflow }: { workflow: LaunchWorkflow }) {
             <div key={i} className="flex gap-3">
               <span
                 className="flex-shrink-0 inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold"
-                style={{ background: "#222220", border: "1px solid #2E2E2A", color: "#C9A86A" }}
+                style={{ background: "#222220", border: "1px solid #2E2E2A", color: "#9B9B9B" }}
               >
                 {i + 1}
               </span>
@@ -223,7 +222,7 @@ function StratStat({
   return (
     <div className="rounded-[8px] px-3 py-2.5" style={{ background: "#222220", border: "1px solid #2E2E2A" }}>
       <div className="flex items-center gap-1.5 mb-1">
-        <Icon size={12} strokeWidth={1.8} style={{ color: "#C9A86A" }} />
+        <Icon size={12} strokeWidth={1.8} style={{ color: "#9B9B9B" }} />
         <span className="text-[9px] uppercase tracking-wider font-semibold" style={{ color: "#8A8980" }}>{label}</span>
       </div>
       <div className="text-[15px] font-semibold" style={{ color: "#F5F4EF" }}>{value}</div>

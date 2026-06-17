@@ -10,6 +10,7 @@ import { useSpotStore } from "@/lib/spot/store";
 import { useCurrentScope, useCurrentWorkspaceLabel } from "@/lib/workspace-store";
 import { WAProvider } from "@/lib/whatsapp-context";
 import { WorkspaceProvider } from "@/lib/workspace-context";
+import { MemoryProvider } from "@/components/memory/memory-panel";
 
 /**
  * Watches workspace scope and resets Spot whenever it changes — the
@@ -62,18 +63,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <ProductsProvider>
         <WorkspaceProvider>
           <WAProvider>
-            <div className="min-h-screen bg-surface-page">
-              <Sidebar />
-              <main className="ml-sidebar">
-                {isSpotRoute ? (
-                  children
-                ) : (
-                  <div className="max-w-[1400px] mx-auto px-8 py-8">{children}</div>
-                )}
-              </main>
-              <SpotRoot />
-              <SpotWorkspaceSync />
-            </div>
+            <MemoryProvider>
+              <div className="min-h-screen bg-surface-page">
+                <Sidebar />
+                <main className="ml-sidebar">
+                  {isSpotRoute ? (
+                    children
+                  ) : (
+                    <div className="max-w-[1400px] mx-auto px-8 py-8">{children}</div>
+                  )}
+                </main>
+                <SpotRoot />
+                <SpotWorkspaceSync />
+              </div>
+            </MemoryProvider>
           </WAProvider>
         </WorkspaceProvider>
       </ProductsProvider>

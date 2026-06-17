@@ -15,7 +15,6 @@ import {
   Play,
   TrendingUp,
   AlertTriangle,
-  Sparkles,
   Megaphone,
   Eye,
   Activity,
@@ -238,7 +237,7 @@ export function CampaignDiveStep({ workflow }: { workflow: CampaignDiveWorkflow 
             onClick={() => startScaleFlow(productScope)}
           />
           <ActionButton
-            icon={Sparkles}
+            icon={Activity}
             title="Optimize this campaign"
             blurb="Root-cause analysis + fix plan over 3 weeks."
             onClick={() => startOptimizeFlow(productScope)}
@@ -303,7 +302,7 @@ export function CampaignDiveStep({ workflow }: { workflow: CampaignDiveWorkflow 
               when: "3 days ago",
               who: "Ankit",
               text: "Approved creative rotation · 'Mentor-led' replaced 'Rank-focused'.",
-              icon: Sparkles,
+              icon: Activity,
             },
             {
               when: "1 week ago",

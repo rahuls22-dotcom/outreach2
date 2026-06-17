@@ -1,7 +1,7 @@
 "use client";
 
-import { AlertTriangle, Check, Info, ChevronRight, ChevronDown, ArrowRight, Cog, Rocket, Download, BarChart3, FileText, Sparkles, Square } from "lucide-react";
-import { useState, useEffect } from "react";
+import { AlertTriangle, Check, Info, ChevronRight, ChevronDown, ArrowRight, Cog, Rocket, Download, BarChart3, FileText, X } from "lucide-react";
+import { useState, useEffect, useMemo, type ReactNode, type MouseEvent as ReactMouseEvent } from "react";
 import { PRODUCTS } from "@/lib/products-data";
 import { analystReportFor, importedReviewFor } from "@/lib/spot/analyst-data";
 import { Markdown } from "@/components/memory/md-render";
@@ -10,7 +10,8 @@ import { SpotLoader } from "./spot-loader";
 import { RichText } from "./rich-text";
 import type { SpotFinding, SpotKpi, SpotMessage, SpotPart, Verdict, GuidedKind, SpotChoiceOption, SpotChoiceIcon } from "@/lib/spot/types";
 import { useSpotStore } from "@/lib/spot/store";
-import type { LaunchWorkflow } from "@/lib/spot/workflow";
+import type { LaunchWorkflow, CanvasFile } from "@/lib/spot/workflow";
+import { fileMeta } from "@/components/spot/workflow/workflow-pane";
 import {
   IMPORT_AD_ACCOUNTS,
   campaignsForAccount,
@@ -18,7 +19,6 @@ import {
   summariseImport,
   type ImportPlatform,
 } from "@/lib/spot/import-campaigns-data";
-import { clarifyQuestionsFor, analysisFor } from "@/lib/spot/extended-flows";
 
 function VerdictBadge({ verdict }: { verdict: Verdict }) {
   const map: Record<Verdict, { label: string; cls: string; Icon: typeof Check }> = {
@@ -38,15 +38,15 @@ function VerdictBadge({ verdict }: { verdict: Verdict }) {
 function HeadlinePart({ text, verdict }: { text: string; verdict?: Verdict }) {
   return (
     <div
-      className="flex items-start gap-2 mb-2"
+      className="flex items-start gap-2.5 mb-2.5"
       style={{
-        padding: "7px 10px",
+        padding: "10px 13px",
         background: "var(--spot-tint)",
         border: "1px solid var(--spot-stroke)",
-        borderRadius: 8,
+        borderRadius: 10,
       }}
     >
-      <div className="flex-1 text-[12.5px] leading-[1.5] text-text-primary">
+      <div className="flex-1 text-[14px] leading-[1.55] text-text-primary">
         <RichText text={text} />
       </div>
       {verdict && <VerdictBadge verdict={verdict} />}
@@ -54,29 +54,35 @@ function HeadlinePart({ text, verdict }: { text: string; verdict?: Verdict }) {
   );
 }
 
+// Tier-2 informational content — readable but calm. No per-item card box
+// (that turned every finding into a competing surface); bare rows separated
+// by whitespace, with a small tone dot carrying the signal.
 function FindingsPart({ items }: { items: SpotFinding[] }) {
   return (
-    <div className="space-y-2 mb-2.5">
+    <div className="space-y-3 mb-3">
       {items.map((f, i) => {
         const accent =
           f.tone === "concern" ? "#F5A623" : f.tone === "positive" ? "#22C55E" : "#D4D4D4";
         return (
-          <div
-            key={i}
-            className="card-base bg-white p-3"
-            style={{ borderLeftWidth: 3, borderLeftColor: accent }}
-          >
-            <div className="text-[13px] font-semibold leading-tight mb-1">{f.title}</div>
-            <div className="text-[12.5px] text-text-secondary leading-[1.45]">{f.body}</div>
-            {f.evidence && f.evidence.length > 0 && (
-              <div className="flex flex-wrap gap-1 mt-2">
-                {f.evidence.map((e, j) => (
-                  <span key={j} className="pill" style={{ fontSize: 10.5 }}>
-                    {e}
-                  </span>
-                ))}
-              </div>
-            )}
+          <div key={i} className="flex items-start gap-2.5">
+            <span
+              className="w-[7px] h-[7px] rounded-full flex-shrink-0 relative top-[7px]"
+              style={{ background: accent }}
+              aria-hidden
+            />
+            <div className="flex-1 min-w-0">
+              <div className="text-[14px] font-semibold leading-snug text-text-primary">{f.title}</div>
+              <div className="text-[13.5px] text-text-secondary leading-[1.55] mt-0.5">{f.body}</div>
+              {f.evidence && f.evidence.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-2">
+                  {f.evidence.map((e, j) => (
+                    <span key={j} className="pill" style={{ fontSize: 10.5 }}>
+                      {e}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         );
       })}
@@ -87,8 +93,13 @@ function FindingsPart({ items }: { items: SpotFinding[] }) {
 function KpisPart({ items }: { items: SpotKpi[] }) {
   return (
     <div
-      className="card-base bg-white p-3 mb-2.5 grid"
-      style={{ gridTemplateColumns: `repeat(${items.length}, 1fr)`, gap: 12 }}
+      className="p-3 mb-2.5 grid rounded-[8px]"
+      style={{
+        gridTemplateColumns: `repeat(${items.length}, 1fr)`,
+        gap: 12,
+        border: "1px solid var(--border-subtle)",
+        background: "transparent",
+      }}
     >
       {items.map((k, i) => {
         const color =
@@ -171,68 +182,228 @@ function HandoffPart({ kind, label, reason }: { kind: GuidedKind; label: string;
         const next = NEXT_STEP[kind];
         if (next) setThread((prev) => [...prev, next]);
       }}
-      className="card-base hover-row text-left w-full p-3 flex items-center gap-3 mb-2.5"
+      className="group text-left w-full mb-2.5 flex items-center gap-3 p-3.5 rounded-[14px] transition-colors hover:bg-surface-page"
+      style={{
+        background: "var(--bg-card)",
+        border: "1px solid var(--spot-card-border)",
+        boxShadow: "0 1px 2px rgba(60,50,30,0.04)",
+      }}
     >
       <div
-        className="flex items-center justify-center w-9 h-9 rounded-[7px] flex-shrink-0"
-        style={{ background: "linear-gradient(135deg, #FAF8F2 0%, #FFF 100%)", border: "1px solid #E8C97A" }}
+        className="flex items-center justify-center w-9 h-9 rounded-[9px] flex-shrink-0"
+        style={{ background: "var(--surface-secondary)", border: "1px solid var(--border)" }}
       >
         <SpotMark size={18} />
       </div>
       <div className="flex-1 min-w-0">
-        <div className="text-[12px] uppercase tracking-wider text-text-tertiary font-semibold mb-0.5">
+        <div className="text-[10.5px] uppercase tracking-wider text-text-tertiary font-semibold mb-0.5">
           Next step
         </div>
-        <div className="text-[13.5px] font-semibold">{label}</div>
-        <div className="text-[11.5px] text-text-secondary mt-0.5">{reason}</div>
+        <div className="text-[14.5px] font-semibold">{label}</div>
+        <div className="text-[12.5px] text-text-secondary mt-0.5">{reason}</div>
       </div>
       <ChevronRight size={14} className="text-text-tertiary flex-shrink-0" />
     </button>
   );
 }
 
+/** Save a markdown string to disk as a real .md file. Plain-DOM, no deps —
+ *  React 18.3.1 safe. */
+function downloadMarkdown(filename: string, content: string) {
+  const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+/** The one document-artifact card. The whole card opens the file in the right
+ *  panel (closing lives there, so no toggle here). The only button is Download,
+ *  which saves the underlying .md. Used for every artefact Spot produces. */
+function ArtifactCardPart({
+  file,
+  title,
+  subtitle,
+  markdown,
+}: {
+  file: CanvasFile;
+  title: string;
+  subtitle: string;
+  markdown?: string;
+}) {
+  const openCanvasFile = useSpotStore((s) => s.openCanvasFile);
+  const meta = fileMeta(file);
+  const Icon = meta.icon;
+  const onDownload = (e: ReactMouseEvent) => {
+    e.stopPropagation();
+    downloadMarkdown(meta.file, markdown ?? `# ${title}\n\n${subtitle}\n`);
+  };
+  return (
+    // Card wrapper is the click target (open). The Download button is a real
+    // sibling button — not nested — so it can stop propagation cleanly.
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={() => openCanvasFile(file)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          openCanvasFile(file);
+        }
+      }}
+      className="group cursor-pointer w-full mb-2.5 flex items-center gap-3.5 p-3.5 rounded-[14px] transition-colors hover:bg-surface-page"
+      style={{
+        background: "var(--bg-card)",
+        border: "1px solid var(--spot-card-border)",
+        boxShadow: "0 1px 2px rgba(60,50,30,0.04)",
+      }}
+    >
+      {/* Stacked-paper glyph — gives the card a real "document" read with
+          depth, instead of a flat colored tile. Tinted neutral, no accent. */}
+      <span className="relative flex-shrink-0 w-[38px] h-[44px]" aria-hidden>
+        <span
+          className="absolute left-[8px] top-[4px] w-[30px] h-[38px] rounded-[7px]"
+          style={{ background: "#FFFFFF", border: "1px solid var(--spot-card-border)", transform: "rotate(6deg)" }}
+        />
+        <span
+          className="absolute left-0 top-[2px] w-[30px] h-[38px] rounded-[7px] flex items-center justify-center"
+          style={{ background: "#FBFAF7", border: "1px solid var(--border)", boxShadow: "0 1px 2px rgba(60,50,30,0.05)" }}
+        >
+          <Icon size={15} strokeWidth={1.7} className="text-text-secondary" />
+        </span>
+      </span>
+      <span className="flex-1 min-w-0">
+        <span className="block text-[14.5px] font-semibold leading-tight text-text-primary truncate">{title}</span>
+        <span className="block text-[12.5px] text-text-tertiary mt-1 truncate">{subtitle}</span>
+      </span>
+      {/* Download — the only action on the card. Quiet neutral pill (never the
+          dark primary). Opening is handled by clicking the card itself. */}
+      <button
+        type="button"
+        onClick={onDownload}
+        title={`Download ${meta.file}`}
+        className="inline-flex items-center gap-1.5 h-8 px-3 rounded-[9px] text-[12.5px] font-medium flex-shrink-0 transition-colors hover:text-text-primary"
+        style={{ background: "var(--surface-secondary)", color: "var(--text-secondary)" }}
+      >
+        <Download size={14} strokeWidth={2} className="text-text-tertiary group-hover:text-text-primary transition-colors" />
+        Download
+      </button>
+    </div>
+  );
+}
+
+/** The one primary action button used across Spot's HITL gates — step CTAs,
+ *  the Analyst accept, etc. One shape everywhere: a dark pill with a leading
+ *  or trailing icon. `icon` defaults to a trailing arrow; pass `leadingIcon`
+ *  for an accept-style check. Keeps every decision point visually identical. */
+function SpotActionButton({
+  label,
+  onClick,
+  leadingIcon: LeadingIcon,
+  trailingIcon: TrailingIcon = ArrowRight,
+}: {
+  label: string;
+  onClick: () => void;
+  leadingIcon?: typeof Check;
+  trailingIcon?: typeof ArrowRight | null;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex items-center gap-1.5 h-9 px-4 rounded-full text-[13.5px] font-semibold transition-colors"
+      style={{
+        background: "#1A1A1A",
+        color: "#FAFAF8",
+        boxShadow:
+          "0 1px 0 rgba(255,255,255,0.10) inset, 0 1px 2px rgba(0,0,0,0.08)",
+      }}
+    >
+      {LeadingIcon && <LeadingIcon size={14} strokeWidth={2.4} />}
+      {label}
+      {TrailingIcon && <TrailingIcon size={13} strokeWidth={2.4} />}
+    </button>
+  );
+}
+
+/** The quiet companion to SpotActionButton. Every gate where Spot proposes
+ *  something carries a Reject next to the dark primary — same neutral shape
+ *  everywhere so "pass on this" is always one click and never reads as the
+ *  loud option. */
+function RejectButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-full text-[13.5px] font-medium transition-colors hover:text-text-primary"
+      style={{ background: "var(--surface-secondary)", color: "var(--text-secondary)" }}
+    >
+      <X size={14} strokeWidth={2.2} />
+      Reject
+    </button>
+  );
+}
+
+/**
+ * StepCtaPart · a mid-flow gate, framed exactly like the analyst
+ * recommendation card so every decision point in the chat looks identical:
+ * a quiet "Next step" kicker, the bold action `label` as the title, a helper
+ * line, then [Reject][Continue]. The button text is FIXED ("Continue") — the
+ * action itself lives in the title, never on the button, so we never get
+ * freeform text on a primary pill. Continue advances the workflow; Reject
+ * holds the flow in place and asks the user what they'd rather do.
+ */
 function StepCtaPart({ label, helper, refineHint }: { label: string; helper?: string; refineHint?: string }) {
   const advanceWorkflow = useSpotStore((s) => s.advanceWorkflow);
   const appendMessage = useSpotStore((s) => s.appendMessage);
   const clicked = useSpotStore((s) => s.clickedCtas.has(label));
   const markClicked = useSpotStore((s) => s.markCtaClicked);
+  const rejectStep = useSpotStore((s) => s.rejectStep);
 
-  // After the user clicks a CTA, hide the button entirely · their echo
-  // message + the next Spot reply already captured the decision, so
-  // showing the same dark button alongside their own dark bubble reads
-  // redundant.
+  // After the user decides, hide the card entirely · their echo message +
+  // the next Spot reply already carry the decision.
   if (clicked) return null;
 
-  const handleClick = () => {
+  const handleContinue = () => {
     appendMessage({ role: "user", text: label });
     markClicked(label);
     advanceWorkflow();
   };
+  const handleReject = () => {
+    markClicked(label);
+    rejectStep();
+  };
 
   return (
-    <div className="mb-2">
-      <button
-        type="button"
-        onClick={handleClick}
-        className="inline-flex items-center gap-1 h-7 px-2.5 rounded-full text-[11.5px] font-semibold transition-colors"
-        style={{
-          background:
-            "linear-gradient(135deg, #C9A86A 0%, #E0C083 100%)",
-          color: "#0A0A09",
-          boxShadow:
-            "0 1px 0 rgba(255,255,255,0.15) inset, 0 1px 2px rgba(0,0,0,0.08)",
-        }}
-      >
-        {label}
-        <ArrowRight size={10} strokeWidth={2.4} />
-      </button>
-      {(helper || refineHint) && (
-        <div className="text-[10.5px] text-text-tertiary mt-1 leading-snug">
-          {helper}
-          {helper && refineHint && <span> · </span>}
-          {refineHint}
+    <div
+      className="mt-2 mb-1 rounded-[14px] px-4 py-3.5"
+      style={{ background: "var(--bg-card)", border: "1px solid var(--border-subtle)" }}
+    >
+      <div className="flex items-center gap-4">
+        <div className="flex-1 min-w-0">
+          <div className="text-[10.5px] uppercase tracking-wider text-text-tertiary font-medium mb-1">
+            Next step
+          </div>
+          <div className="text-[16px] font-semibold text-text-primary leading-snug">
+            {label}
+          </div>
+          {(helper || refineHint) && (
+            <div className="text-[12px] text-text-tertiary mt-1.5 leading-snug">
+              {helper}
+              {helper && refineHint && <span> · </span>}
+              {refineHint}
+            </div>
+          )}
         </div>
-      )}
+        <div className="flex-shrink-0 flex items-center gap-2">
+          <RejectButton onClick={handleReject} />
+          <SpotActionButton label="Continue" onClick={handleContinue} trailingIcon={ArrowRight} />
+        </div>
+      </div>
     </div>
   );
 }
@@ -241,7 +412,7 @@ const CHOICE_ICON: Record<SpotChoiceIcon, typeof Rocket> = {
   rocket: Rocket,
   download: Download,
   chart: BarChart3,
-  sparkles: Sparkles,
+  sparkles: Cog,
 };
 
 /**
@@ -255,6 +426,9 @@ function ChoicePart({ prompt, options }: { prompt?: string; options: SpotChoiceO
   const advanceWorkflow = useSpotStore((s) => s.advanceWorkflow);
   const startImportCampaigns = useSpotStore((s) => s.startImportCampaigns);
   const startImportReview = useSpotStore((s) => s.startImportReview);
+  const startScaleFlow = useSpotStore((s) => s.startScaleFlow);
+  const startOptimizeFlow = useSpotStore((s) => s.startOptimizeFlow);
+  const startTestAnglesFlow = useSpotStore((s) => s.startTestAnglesFlow);
   const appendMessage = useSpotStore((s) => s.appendMessage);
   const markClicked = useSpotStore((s) => s.markCtaClicked);
   // Hide the whole choice once any option has been chosen.
@@ -280,15 +454,24 @@ function ChoicePart({ prompt, options }: { prompt?: string; options: SpotChoiceO
         // the user on the Campaigns page — opens an analyst review conversation.
         startImportReview();
         break;
+      case "reconsider-flow": {
+        // After a reject — run the alternative play in the same session.
+        if (!o.diagFlow || !o.productId || !o.productName) break;
+        const p = { id: o.productId, name: o.productName };
+        if (o.diagFlow === "scale") startScaleFlow(p);
+        else if (o.diagFlow === "optimize") startOptimizeFlow(p);
+        else startTestAnglesFlow(p);
+        break;
+      }
     }
   };
 
   return (
     <div className="mb-2.5">
       {prompt && (
-        <div className="text-[12px] font-medium text-text-secondary mb-1.5">{prompt}</div>
+        <div className="text-[14px] font-medium text-text-secondary mb-2">{prompt}</div>
       )}
-      <div className="space-y-1.5">
+      <div className="space-y-2">
         {options.map((o) => {
           const Icon = o.icon ? CHOICE_ICON[o.icon] : ArrowRight;
           const primary = o.variant === "primary";
@@ -297,35 +480,35 @@ function ChoicePart({ prompt, options }: { prompt?: string; options: SpotChoiceO
               key={o.label}
               type="button"
               onClick={() => choose(o)}
-              className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-[10px] border text-left transition-colors group"
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-[12px] border text-left transition-colors group"
               style={{
-                background: primary
-                  ? "linear-gradient(135deg, rgba(201,168,106,0.16) 0%, rgba(224,192,131,0.10) 100%)"
-                  : "#FFFFFF",
-                borderColor: primary ? "#E0C083" : "var(--border)",
+                // Primary is carried by the dark border + dark icon tile;
+                // no gold wash (neutral palette).
+                background: "#FFFFFF",
+                borderColor: primary ? "#1A1A1A" : "var(--border)",
               }}
             >
               <span
-                className="inline-flex items-center justify-center w-7 h-7 rounded-[8px] flex-shrink-0"
+                className="inline-flex items-center justify-center w-8 h-8 rounded-[9px] flex-shrink-0"
                 style={{
-                  background: primary ? "linear-gradient(135deg, #C9A86A 0%, #E0C083 100%)" : "var(--surface-secondary)",
-                  color: primary ? "#0A0A09" : "var(--text-secondary)",
+                  background: primary ? "#1A1A1A" : "var(--surface-secondary)",
+                  color: primary ? "#FAFAF8" : "var(--text-secondary)",
                 }}
               >
-                <Icon size={14} strokeWidth={2} />
+                <Icon size={15} strokeWidth={2} />
               </span>
               <span className="flex-1 min-w-0">
-                <span className="block text-[12.5px] font-semibold text-text-primary leading-tight">
+                <span className="block text-[14px] font-semibold text-text-primary leading-tight">
                   {o.label}
                 </span>
                 {o.helper && (
-                  <span className="block text-[10.5px] text-text-tertiary leading-snug mt-0.5">
+                  <span className="block text-[12px] text-text-tertiary leading-snug mt-0.5">
                     {o.helper}
                   </span>
                 )}
               </span>
               <ArrowRight
-                size={13}
+                size={14}
                 strokeWidth={2}
                 className="text-text-tertiary group-hover:text-text-primary flex-shrink-0 transition-colors"
               />
@@ -368,13 +551,13 @@ function ImportCheckBox({ checked, indeterminate }: { checked: boolean; indeterm
     <span
       className="inline-flex items-center justify-center w-[16px] h-[16px] rounded-[5px] flex-shrink-0 transition-colors"
       style={{
-        background: on ? "linear-gradient(135deg, #C9A86A 0%, #E0C083 100%)" : "#FFFFFF",
+        background: on ? "#1A1A1A" : "#FFFFFF",
         border: on ? "none" : "1.5px solid var(--border)",
       }}
     >
-      {checked && <Check size={11} strokeWidth={3} style={{ color: "#0A0A09" }} />}
+      {checked && <Check size={11} strokeWidth={3} style={{ color: "#FAFAF8" }} />}
       {indeterminate && !checked && (
-        <span className="w-[7px] h-[2px] rounded-full" style={{ background: "#0A0A09" }} />
+        <span className="w-[7px] h-[2px] rounded-full" style={{ background: "#FAFAF8" }} />
       )}
     </span>
   );
@@ -490,7 +673,7 @@ function ImportPickerPart() {
               <li key={c.id} className="flex items-center gap-2 text-[11.5px]">
                 <span
                   className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-                  style={{ background: c.status === "active" ? "#C9A86A" : "#D2D2CC" }}
+                  style={{ background: c.status === "active" ? "#6B6B6B" : "#D2D2CC" }}
                   title={c.status === "active" ? "Active" : "Paused"}
                 />
                 <span className="flex-1 truncate text-text-secondary">{c.name}</span>
@@ -582,7 +765,7 @@ function ImportPickerPart() {
           disabled={selected.length === 0}
           onClick={confirmImportCampaigns}
           className="inline-flex items-center gap-1 h-7 px-2.5 rounded-full text-[11.5px] font-semibold transition-opacity disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
-          style={{ background: "linear-gradient(135deg, #C9A86A 0%, #E0C083 100%)", color: "#0A0A09" }}
+          style={{ background: "#1A1A1A", color: "#FAFAF8" }}
         >
           Import {selected.length > 0 ? selected.length : ""} campaign{selected.length === 1 ? "" : "s"}
           <ArrowRight size={10} strokeWidth={2.4} />
@@ -622,6 +805,148 @@ function ToolCallPart({ agent, detail, status }: { agent: string; detail?: strin
   );
 }
 
+/* ─── Chain of thought ───────────────────────────────────────────────
+ * Groups a run of adjacent tool-call parts into ONE collapsible reasoning
+ * trace, the way Claude shows "Thinking". While any step runs the header
+ * reads "Thinking · <live step>" with a soft pulse and the trace stays
+ * open; once settled it collapses to a quiet one-line summary the user can
+ * re-open. Expanded, the steps sit on a continuous timeline rail — a small
+ * node dot per step, a hairline connector between them. No icons, no box,
+ * no checkmarks. Read-only display (principle P11: no write/approve here). */
+type CotStep = { agent: string; detail?: string; status: "running" | "done" };
+
+function ChainOfThought({ steps }: { steps: CotStep[] }) {
+  const anyRunning = steps.some((s) => s.status === "running");
+  const [open, setOpen] = useState(false);
+  const [touched, setTouched] = useState(false);
+  // Follow the work while it runs, then tuck away to a single line — unless
+  // the user has taken manual control of the disclosure.
+  useEffect(() => {
+    if (!touched) setOpen(anyRunning);
+  }, [anyRunning, touched]);
+
+  const live = steps.find((s) => s.status === "running");
+  const last = steps[steps.length - 1];
+  // Self-describing collapsed summary — the live step while running, the last
+  // step once settled. Never a generic "Worked through N steps".
+  const summary = anyRunning
+    ? live
+      ? `${live.agent}${live.detail ? ` · ${live.detail}` : ""}`
+      : "working"
+    : last
+      ? `${last.agent}${last.detail ? ` · ${last.detail}` : ""}`
+      : `Thought through ${steps.length} step${steps.length === 1 ? "" : "s"}`;
+
+  // Recessive process trace — no box, no border, no fill. A muted toggle line
+  // that recedes by contrast; expand reveals the step list on a timeline rail.
+  return (
+    <div className="mb-2.5 text-[12px]">
+      <button
+        type="button"
+        onClick={() => {
+          setTouched(true);
+          setOpen((v) => !v);
+        }}
+        className="inline-flex items-center gap-1.5 max-w-full text-text-tertiary hover:text-text-secondary transition-colors"
+      >
+        {anyRunning ? (
+          <>
+            <span className="font-medium text-text-secondary animate-pulse">Thinking</span>
+            <span className="text-text-tertiary">·</span>
+            <span className="truncate text-text-tertiary">{summary}</span>
+          </>
+        ) : (
+          <span className="truncate font-medium text-text-tertiary">{summary}</span>
+        )}
+        <ChevronRight
+          size={12}
+          strokeWidth={2}
+          className={`flex-shrink-0 transition-transform ${open ? "rotate-90" : ""}`}
+        />
+      </button>
+
+      {open && (
+        <div className="mt-2 ml-0.5">
+          {steps.map((s, i) => {
+            const running = s.status === "running";
+            const isLast = i === steps.length - 1;
+            return (
+              <div key={i} className="flex gap-2.5">
+                <div className="flex flex-col items-center flex-shrink-0 w-3">
+                  <span
+                    className={`mt-[7px] rounded-full ${
+                      running
+                        ? "w-[6px] h-[6px] bg-text-secondary animate-pulse"
+                        : "w-[5px] h-[5px] bg-text-tertiary"
+                    }`}
+                  />
+                  {!isLast && <span className="w-px flex-1 mt-1 mb-0.5 bg-border-subtle" />}
+                </div>
+                <div
+                  className={`${isLast ? "pb-0" : "pb-3"} text-[12.5px] leading-[1.55] ${
+                    running ? "text-text-secondary" : "text-text-tertiary"
+                  }`}
+                >
+                  <span className="font-medium">{s.agent}</span>
+                  {s.detail && <span className="text-text-tertiary"> · {s.detail}</span>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── Streaming text ─────────────────────────────────────────────────
+ * Reveals a Spot answer token-by-token on mount, the way Claude streams its
+ * reply, with a blinking caret while in flight. Splits on whitespace so words
+ * land whole; a half-open `**bold**` marker is held back until its closing
+ * `**` arrives so the markdown never flashes raw asterisks. Once a part has
+ * fully revealed it just renders as static RichText. */
+function StreamingText({ text, onDone }: { text: string; onDone?: () => void }) {
+  const tokens = useMemo(() => text.split(/(\s+)/), [text]);
+  const [n, setN] = useState(0);
+  useEffect(() => {
+    setN(0);
+    if (tokens.length === 0) {
+      onDone?.();
+      return;
+    }
+    let i = 0;
+    const id = setInterval(() => {
+      i += 1;
+      setN(i);
+      if (i >= tokens.length) {
+        clearInterval(id);
+        onDone?.();
+      }
+    }, 42);
+    return () => clearInterval(id);
+    // onDone is a stable callback from the parent; tokens drives the run.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tokens]);
+
+  let shown = tokens.slice(0, n).join("");
+  // Drop a dangling, not-yet-closed bold marker so RichText never shows `**`.
+  if (((shown.match(/\*\*/g) || []).length) % 2 === 1) {
+    shown = shown.slice(0, shown.lastIndexOf("**"));
+  }
+  const streaming = n < tokens.length;
+  return (
+    <>
+      <RichText text={shown} />
+      {streaming && (
+        <span
+          aria-hidden
+          className="inline-block w-[2px] h-[1em] ml-[1px] align-[-0.15em] bg-text-tertiary animate-pulse"
+        />
+      )}
+    </>
+  );
+}
+
 /* ─── Ledger part ────────────────────────────────────────────────────
  * The structured delta a refinement studio hands back on commit. The
  * studio chat never lands here — only this event. Collapsed by default
@@ -648,22 +973,22 @@ function LedgerPart({
   return (
     <div
       className="mb-2 rounded-[8px] overflow-hidden"
-      style={{ border: "1px solid var(--spot-stroke)", background: "var(--spot-tint)" }}
+      style={{ border: "1px solid var(--border-subtle)", background: "transparent" }}
     >
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         className="w-full flex items-center gap-2 px-2.5 py-2 text-left"
       >
-        <Sparkles size={11} className="flex-shrink-0" style={{ color: "#B08D4A" }} />
+        <FileText size={11} strokeWidth={1.8} className="flex-shrink-0 text-text-tertiary" />
         <span className="text-[11.5px] leading-[1.45] flex-1 min-w-0">
           <span className="font-semibold">{agent} updated {artifact}</span>
           <span className="text-text-tertiary tabular-nums"> · v{fromVersion} → v{toVersion}</span>
           <span className="text-text-secondary"> · {summary}</span>
         </span>
         <span
-          className="flex-shrink-0 inline-flex items-center gap-1 text-[10px] font-medium px-1.5 h-[18px] rounded-full"
-          style={{ background: "#F0FDF4", color: "#15803D", border: "1px solid #BBF7D0" }}
+          className="flex-shrink-0 inline-flex items-center gap-1 text-[10px] font-medium px-1.5 h-[18px] rounded-full text-text-tertiary"
+          style={{ background: "var(--surface-secondary)" }}
         >
           <Check size={9} strokeWidth={2.6} /> Approved by you
         </span>
@@ -674,11 +999,11 @@ function LedgerPart({
         />
       </button>
       {open && (
-        <div className="px-2.5 pb-2.5 pt-0.5" style={{ borderTop: "1px solid var(--spot-stroke)" }}>
+        <div className="px-2.5 pb-2.5 pt-0.5" style={{ borderTop: "1px solid var(--border-subtle)" }}>
           <ul className="mt-2 space-y-1">
             {changes.map((c, i) => (
               <li key={i} className="flex items-start gap-1.5 text-[11.5px] text-text-secondary leading-[1.45]">
-                <Check size={10} strokeWidth={2.2} className="flex-shrink-0 relative top-[2.5px] text-[#15803D]" />
+                <Check size={10} strokeWidth={2.2} className="flex-shrink-0 relative top-[2.5px] text-text-tertiary" />
                 {c}
               </li>
             ))}
@@ -746,6 +1071,21 @@ const AGENT_TOOLS: Record<string, string[]> = {
     "Grep do-not-mention list",
   ],
 };
+
+// Render the raw tool identifiers as a clean namespace · action pair (the
+// same shape as ChainOfThought rows) instead of raw monospace command text —
+// "mcp spot research crawl site" reads as `Spot · research crawl site`.
+function prettyTool(raw: string): { primary: string; detail?: string } {
+  const mcp = raw.match(/^mcp\s+(\w+)\s+(.+)$/i);
+  if (mcp) {
+    const ns = mcp[1].charAt(0).toUpperCase() + mcp[1].slice(1);
+    return { primary: ns, detail: mcp[2] };
+  }
+  const grep = raw.match(/^Grep\s+(.+)$/i);
+  if (grep) return { primary: "Grep", detail: grep[1] };
+  // Split camelCase identifiers like "ToolSearch" into "Tool Search".
+  return { primary: raw.replace(/([a-z])([A-Z])/g, "$1 $2") };
+}
 
 function activePhaseIndex(kind: string, step: string): number {
   if (kind === "launch-campaign") {
@@ -839,15 +1179,6 @@ export function AgentWorkingBlock({
             className={`transition-transform ${expanded ? "rotate-90" : ""}`}
           />
         </button>
-        <button
-          type="button"
-          onClick={() => setDismissed(true)}
-          className="ml-1 inline-flex items-center gap-1 text-text-tertiary hover:text-text-primary transition-colors"
-          title="Hide the working trace"
-        >
-          <Square size={8} strokeWidth={2.4} />
-          <span className="text-[10.5px]">Stop</span>
-        </button>
       </div>
 
       {/* Expanded detail — phases + tool rows (opt-in) */}
@@ -863,7 +1194,7 @@ export function AgentWorkingBlock({
                   className="inline-flex items-center gap-1 h-[18px] px-1.5 rounded-full text-[9.5px] font-medium whitespace-nowrap"
                   style={
                     active
-                      ? { background: "linear-gradient(135deg,#C9A86A 0%,#E0C083 100%)", color: "#0A0A09" }
+                      ? { background: "#1A1A1A", color: "#FAFAF8" }
                       : done
                         ? { background: "var(--surface-secondary)", color: "var(--text-secondary)" }
                         : { color: "var(--text-tertiary)", border: "1px solid var(--border-subtle)" }
@@ -877,8 +1208,9 @@ export function AgentWorkingBlock({
           </div>
           {shownTools.map((name, i) => {
             const last = i === shownTools.length - 1;
+            const t = prettyTool(name);
             return (
-              <div key={`${name}-${i}`} className="flex items-center gap-2 h-6 text-[11px]">
+              <div key={`${name}-${i}`} className="flex items-center gap-2 h-6 text-[11.5px]">
                 {last ? (
                   <Cog
                     size={10}
@@ -889,7 +1221,15 @@ export function AgentWorkingBlock({
                 ) : (
                   <Check size={10} strokeWidth={2.4} className="text-[#15803D] flex-shrink-0" />
                 )}
-                <span className="text-text-secondary truncate font-mono text-[10.5px]">{name}</span>
+                <span className={`truncate ${last ? "text-text-secondary" : "text-text-tertiary"}`}>
+                  <span className="font-medium">{t.primary}</span>
+                  {t.detail && (
+                    <>
+                      <span className="text-text-tertiary"> · </span>
+                      <span>{t.detail}</span>
+                    </>
+                  )}
+                </span>
               </div>
             );
           })}
@@ -899,99 +1239,75 @@ export function AgentWorkingBlock({
   );
 }
 
-/**
- * ClarifyQuestionsPart · the diagnostic clarify questions, rendered
- * inline in the chat (left panel) so the user answers right where Spot
- * is asking. Reads/writes the workflow's `clarifyAnswers` in the store;
- * the right canvas mirrors the captured brief. Confirmation lives in
- * the step-cta below this part.
- */
-function ClarifyQuestionsPart({ kind }: { kind: "scale" | "optimize" | "test-angles" }) {
-  const workflow = useSpotStore((s) => s.workflow);
-  const setClarifyAnswer = useSpotStore((s) => s.setClarifyAnswer);
-  const answers =
-    workflow &&
-    (workflow.kind === "scale" ||
-      workflow.kind === "optimize" ||
-      workflow.kind === "test-angles")
-      ? workflow.clarifyAnswers
-      : {};
-  const questions = clarifyQuestionsFor(kind, analysisFor(kind));
-
+/** The Analyst Agent's turn, in its own container. Only named sub-agents (the
+ *  Analyst) get a container — Spot is the default voice and stays unmarked, so
+ *  the container alone signals "someone other than Spot is talking". A titled
+ *  card: agent glyph + name + a quiet note on what it just did in the header,
+ *  the finding in the body. No nested cards inside (P: impeccable). */
+function AnalystContainer({ note, children }: { note: string; children: ReactNode }) {
   return (
-    <div className="mb-2 space-y-2">
-      {questions.map((q) => {
-        const selected = answers[q.id] ?? q.defaultValue;
-        return (
-          <div key={q.id} className="rounded-card border border-border bg-white p-3">
-            <div className="text-[12.5px] font-semibold text-text-primary mb-0.5">
-              {q.question}
-            </div>
-            {q.why && (
-              <div className="text-[11px] text-text-tertiary mb-2 leading-snug">{q.why}</div>
-            )}
-            <div className="flex flex-wrap gap-1.5">
-              {q.options.map((o) => {
-                const active = selected === o.value;
-                return (
-                  <button
-                    key={o.value}
-                    type="button"
-                    onClick={() => setClarifyAnswer(q.id, o.value)}
-                    title={o.hint}
-                    className={`inline-flex items-center gap-1.5 px-2.5 h-7 rounded-button text-[11.5px] font-medium transition-colors ${
-                      active
-                        ? "bg-[#111] text-[#FAFAF8] border border-[#111]"
-                        : "bg-white border border-border text-text-secondary hover:border-border-hover hover:text-text-primary"
-                    }`}
-                  >
-                    {active && <Check size={11} strokeWidth={2.4} />}
-                    {o.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        );
-      })}
+    <div
+      className="mb-3 rounded-[16px] overflow-hidden"
+      style={{ background: "var(--bg-card)", border: "1px solid var(--border-subtle)" }}
+    >
+      <div className="flex items-center gap-3 px-4 pt-3.5 pb-3">
+        {/* Agent identity — a crafted charcoal mark, distinct from Spot's
+            metallic orb. Circular avatar reads as a named sub-agent, not a
+            generic icon button. */}
+        <span
+          className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center"
+          style={{
+            background: "linear-gradient(160deg, #2B2B28 0%, #161614 100%)",
+            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.08), 0 1px 2px rgba(0,0,0,0.18)",
+          }}
+        >
+          <BarChart3 size={14} strokeWidth={2} style={{ color: "#F2F1ED" }} />
+        </span>
+        <span className="flex flex-col leading-tight min-w-0 flex-1">
+          <span className="text-[13px] font-semibold text-text-primary">Analyst Agent</span>
+          <span className="text-[11.5px] text-text-tertiary truncate">{note}</span>
+        </span>
+        {/* Quiet provenance chip — this write-up came from the always-on agent,
+            not from Spot. Restrained: neutral fill, no pulse, no color. */}
+        <span
+          className="flex-shrink-0 inline-flex items-center gap-1.5 h-[22px] pl-2 pr-2.5 rounded-full"
+          style={{ background: "var(--surface-secondary, #F4F4F2)", border: "1px solid var(--border-subtle)" }}
+        >
+          <span className="w-1.5 h-1.5 rounded-full" style={{ background: "#9B9B9B" }} />
+          <span className="text-[10.5px] font-medium text-text-tertiary tracking-wide">Auto</span>
+        </span>
+      </div>
+      <div className="px-4 pb-4" style={{ borderTop: "1px solid var(--border-subtle)", paddingTop: "14px" }}>
+        {children}
+      </div>
     </div>
   );
 }
 
-/** The Analyst Agent's message — it opens the conversation. An attributed
- *  opener, then a collapsible drop-down holding the full report as the markdown
- *  the Analyst Agent actually produced (rendered with the app's Markdown
- *  component). Spot's reasoning + the CTA follow in the next message. */
+/** The Analyst Agent's message — it opens the conversation. The container
+ *  marks it as the Analyst (not Spot); the body carries the finding. The full
+ *  write-up is already open in the Analysis panel on the right, so no inline
+ *  pointer. Spot then reads it, thinks, and lands the recommendation in the
+ *  next message. */
 function AnalystReportPart({ productId }: { productId: string }) {
   const prod = PRODUCTS.find((p) => p.id === productId);
   if (!prod) return null;
   const report = analystReportFor(prod);
 
   return (
-    <div className="mb-1.5">
-      {/* Attribution — this message is from the Analyst Agent, not Spot. */}
-      <div className="flex items-center gap-2 mb-1.5">
-        <span
-          className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center"
-          style={{ background: "#F4F4F2", border: "1px solid #E8E8E6" }}
-        >
-          <BarChart3 size={11} strokeWidth={1.9} className="text-text-tertiary" />
-        </span>
-        <span className="text-[10.5px] uppercase tracking-wider font-medium text-text-tertiary">
-          Analyst Agent
-        </span>
-      </div>
-
-      {/* Opener — the Analyst kicks the conversation off. The full write-up
-          renders as a markdown file in the Analysis panel on the right. */}
-      <div className="text-[12.5px] leading-[1.55] text-text-primary mb-1.5">
+    <AnalystContainer note="Weekly scan · this morning">
+      <div className="text-[15px] leading-[1.7] text-text-primary">
         <RichText text={report.opener} />
       </div>
-      <div className="inline-flex items-center gap-1.5 text-[11px] text-text-tertiary">
-        <FileText size={11} strokeWidth={1.8} />
-        Full report&apos;s open in the Analysis panel →
+      <div className="mt-3">
+        <ArtifactCardPart
+          file="analysis"
+          title={report.headline}
+          subtitle="Full report · Markdown"
+          markdown={report.reportMd}
+        />
       </div>
-    </div>
+    </AnalystContainer>
   );
 }
 
@@ -1011,41 +1327,30 @@ function ImportReportPart({
   const review = importedReviewFor(campaignIds, accountId, productName);
 
   return (
-    <div className="mb-1.5">
-      {/* Attribution — this message is from the Analyst Agent, not Spot. */}
-      <div className="flex items-center gap-2 mb-1.5">
-        <span
-          className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center"
-          style={{ background: "#F4F4F2", border: "1px solid #E8E8E6" }}
-        >
-          <BarChart3 size={11} strokeWidth={1.9} className="text-text-tertiary" />
-        </span>
-        <span className="text-[10.5px] uppercase tracking-wider font-medium text-text-tertiary">
-          Analyst Agent
-        </span>
-      </div>
-
-      {/* Opener — the Analyst kicks the conversation off. */}
-      <div className="text-[12.5px] leading-[1.55] text-text-primary mb-2.5">
+    <AnalystContainer note="Reviewed your imported campaigns">
+      {/* Finding — the Analyst kicks the conversation off. */}
+      <div className="text-[15px] leading-[1.7] text-text-primary">
         <RichText text={review.opener} />
       </div>
 
-      {/* Collapsible report · the markdown file the agent produced. */}
-      <div className="rounded-card border border-border bg-white overflow-hidden">
+      {/* Collapsible report · the markdown file the agent produced. Borderless
+          disclosure (no nested card) — a divider + toggle inside the Analyst
+          container. */}
+      <div className="mt-3 pt-3" style={{ borderTop: "1px solid var(--border-subtle)" }}>
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
-          className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-left hover:bg-surface-page transition-colors"
+          className="w-full flex items-center gap-2.5 text-left group"
         >
           <FileText size={13} strokeWidth={1.8} className="text-text-tertiary flex-shrink-0" />
-          <div className="flex-1 min-w-0">
-            <div className="text-[12px] font-medium text-text-primary">
+          <span className="flex-1 min-w-0">
+            <span className="block text-[12px] font-medium text-text-primary group-hover:text-text-primary">
               {open ? "Hide the full report" : "Read the full report"}
-            </div>
-            <div className="text-[11px] text-text-tertiary truncate">
+            </span>
+            <span className="block text-[11px] text-text-tertiary truncate">
               {review.headline} · markdown
-            </div>
-          </div>
+            </span>
+          </span>
           <ChevronDown
             size={15}
             strokeWidth={1.8}
@@ -1053,12 +1358,12 @@ function ImportReportPart({
           />
         </button>
         {open && (
-          <div className="px-3 py-3 border-t border-border-subtle">
+          <div className="mt-3 pt-3" style={{ borderTop: "1px solid var(--border-subtle)" }}>
             <Markdown source={review.reportMd} />
           </div>
         )}
       </div>
-    </div>
+    </AnalystContainer>
   );
 }
 
@@ -1068,39 +1373,110 @@ function AnalystCtaPart({
   flow,
   productId,
   productName,
-  label,
 }: {
   flow: "scale" | "optimize" | "test-angles" | "launch";
   productId: string;
   productName: string;
-  label: string;
 }) {
   const startScaleFlow = useSpotStore((s) => s.startScaleFlow);
   const startOptimizeFlow = useSpotStore((s) => s.startOptimizeFlow);
   const startTestAnglesFlow = useSpotStore((s) => s.startTestAnglesFlow);
   const startLaunchFlow = useSpotStore((s) => s.startLaunchFlow);
+  const rejectRecommendation = useSpotStore((s) => s.rejectRecommendation);
+  const resolveCta = useSpotStore((s) => s.resolveCta);
+  // Once the user acts, the card morphs into its decided state (no buttons) and
+  // stays there. Tracked in ctaResolutions, which survives the flow-start reset
+  // of clickedCtas — so accepting doesn't bring the buttons back.
+  const sentinel = `analyst-cta:${productId}:${flow}`;
+  const resolution = useSpotStore((s) => s.ctaResolutions[sentinel]);
   const go = () => {
+    resolveCta(sentinel, "accepted");
     const p = { id: productId, name: productName };
     if (flow === "scale") startScaleFlow(p);
     else if (flow === "optimize") startOptimizeFlow(p);
     else if (flow === "test-angles") startTestAnglesFlow(p);
     else startLaunchFlow(p);
   };
-  return (
-    <div className="mt-1.5 mb-1">
-      <button
-        type="button"
-        onClick={go}
-        className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-button bg-[#111] text-[#FAFAF8] hover:bg-black text-[12px] font-medium"
+  const reject = () => {
+    resolveCta(sentinel, "rejected");
+    rejectRecommendation({ flow, productId, productName });
+  };
+  // The recommendation Spot lands on, phrased as the action it would take.
+  const suggestion =
+    flow === "scale"
+      ? "Scale this campaign"
+      : flow === "optimize"
+        ? "Optimize this campaign"
+        : flow === "test-angles"
+          ? "Test new angles"
+          : "Launch this campaign";
+
+  // Decided state — buttons gone, a quiet status chip carries the user's
+  // call. Neutral surface (not a dark primary): the action is already taken,
+  // this is a record of it.
+  if (resolution) {
+    const accepted = resolution === "accepted";
+    return (
+      <div
+        className="mt-2 mb-1 rounded-[14px] px-4 py-3.5"
+        style={{ background: "var(--bg-card)", border: "1px solid var(--border-subtle)" }}
       >
-        {label}
-        <ArrowRight size={12} strokeWidth={2} />
-      </button>
+        <div className="flex items-center gap-4">
+          <div className="flex-1 min-w-0">
+            <div className="text-[10.5px] uppercase tracking-wider text-text-tertiary font-medium mb-1">
+              Spot&rsquo;s recommendation
+            </div>
+            <div className="text-[16px] font-semibold text-text-primary leading-snug">
+              {suggestion}
+            </div>
+          </div>
+          <div
+            className="flex-shrink-0 flex items-center gap-1.5 h-8 px-3 rounded-full"
+            style={{ background: "var(--surface-secondary)", color: "var(--text-secondary)" }}
+          >
+            {accepted ? (
+              <Check size={14} strokeWidth={2} />
+            ) : (
+              <X size={14} strokeWidth={2} />
+            )}
+            <span className="text-[12.5px] font-medium">
+              {accepted ? "Accepted" : "Rejected"}
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  // Accept gate, framed as a recommendation card: a quiet kicker, the bold
+  // call, the accept button, then the reassurance line. One standardized
+  // button; `flow` decides which workflow it kicks off.
+  return (
+    <div
+      className="mt-2 mb-1 rounded-[14px] px-4 py-3.5"
+      style={{ background: "var(--bg-card)", border: "1px solid var(--border-subtle)" }}
+    >
+      <div className="flex items-center gap-4">
+        <div className="flex-1 min-w-0">
+          <div className="text-[10.5px] uppercase tracking-wider text-text-tertiary font-medium mb-1">
+            Spot&rsquo;s recommendation
+          </div>
+          <div className="text-[16px] font-semibold text-text-primary leading-snug">
+            {suggestion}
+          </div>
+          <div className="text-[12px] text-text-tertiary mt-1.5 leading-snug">
+            Spot drafts the plan for your review. Nothing goes live yet.
+          </div>
+        </div>
+        <div className="flex-shrink-0 flex items-center gap-2">
+          <RejectButton onClick={reject} />
+          <SpotActionButton label="Accept" onClick={go} leadingIcon={Check} trailingIcon={null} />
+        </div>
+      </div>
     </div>
   );
 }
 
-function PartRenderer({ part }: { part: SpotPart }) {
+function PartRenderer({ part, onTextDone }: { part: SpotPart; onTextDone?: () => void }) {
   switch (part.type) {
     case "headline":
       return <HeadlinePart text={part.text} verdict={part.verdict} />;
@@ -1112,12 +1488,19 @@ function PartRenderer({ part }: { part: SpotPart }) {
       return <HandoffPart kind={part.kind} label={part.label} reason={part.reason} />;
     case "step-cta":
       return <StepCtaPart label={part.label} helper={part.helper} refineHint={part.refineHint} />;
+    case "artifact":
+      return (
+        <ArtifactCardPart
+          file={part.file}
+          title={part.title}
+          subtitle={part.subtitle}
+          markdown={part.markdown}
+        />
+      );
     case "choice":
       return <ChoicePart prompt={part.prompt} options={part.options} />;
     case "import-picker":
       return <ImportPickerPart />;
-    case "clarify-questions":
-      return <ClarifyQuestionsPart kind={part.kind} />;
     case "analyst-report":
       return <AnalystReportPart productId={part.productId} />;
     case "import-report":
@@ -1134,7 +1517,6 @@ function PartRenderer({ part }: { part: SpotPart }) {
           flow={part.flow}
           productId={part.productId}
           productName={part.productName}
-          label={part.label}
         />
       );
     case "tool-call":
@@ -1153,8 +1535,8 @@ function PartRenderer({ part }: { part: SpotPart }) {
       );
     case "text":
       return (
-        <div className="text-[12.5px] leading-[1.55] mb-1.5">
-          <RichText text={part.text} />
+        <div className="text-[15px] leading-[1.7] text-text-primary mb-2.5">
+          <StreamingText text={part.text} onDone={onTextDone} />
         </div>
       );
   }
@@ -1163,23 +1545,30 @@ function PartRenderer({ part }: { part: SpotPart }) {
 export function MessageBubble({
   message,
   animate,
+  onStreamComplete,
 }: {
   message: SpotMessage;
   animate?: boolean;
+  /** Fires once this message's last streaming text part finishes its
+   *  typewriter reveal — or immediately, on mount, if the message has no
+   *  streaming text to wait on. Used by the chat page to hold the clarify
+   *  questions dock until the intro answer has fully landed. */
+  onStreamComplete?: () => void;
 }) {
   if (message.role === "user") {
     return (
-      <div className="flex justify-end mb-2.5">
+      <div className="flex justify-end mb-5">
         <div
           style={{
             background: "var(--chat-user-bg)",
             color: "var(--chat-user-fg)",
-            padding: "7px 11px",
-            borderRadius: 10,
-            borderBottomRightRadius: 4,
-            fontSize: 12.5,
-            maxWidth: "85%",
-            lineHeight: 1.5,
+            padding: "9px 15px",
+            borderRadius: 18,
+            borderBottomRightRadius: 6,
+            fontSize: 14.5,
+            maxWidth: "78%",
+            lineHeight: 1.55,
+            border: "1px solid var(--spot-card-border)",
           }}
         >
           {message.text}
@@ -1187,16 +1576,78 @@ export function MessageBubble({
       </div>
     );
   }
-  // Spot messages render avatar-less, Claude-style. The Spot mark
-  // lives in the chat header (with a live indicator when an agent is
-  // actually working) so the chat thread isn't a column of repeated icons.
   return (
-    <div className={`${animate ? "fadeUp" : ""} mb-2.5`}>
-      {message.parts.map((p, i) => (
-        <PartRenderer key={i} part={p} />
-      ))}
-    </div>
+    <SpotMessageBody
+      message={message}
+      animate={animate}
+      onStreamComplete={onStreamComplete}
+    />
   );
+}
+
+/** Renders one Spot message. Coalesces adjacent tool-call parts into a single
+ *  chain-of-thought trace (assistant-ui part-grouping), streams text parts
+ *  token-by-token, and holds back anything AFTER the last streaming text part
+ *  until that stream finishes — so an action gate never lands under a
+ *  half-typed answer. Spot messages render avatar-less, Claude-style; the Spot
+ *  mark lives in the chat header, not as a per-message icon. */
+function SpotMessageBody({
+  message,
+  animate,
+  onStreamComplete,
+}: {
+  message: Extract<SpotMessage, { role: "spot" }>;
+  animate?: boolean;
+  onStreamComplete?: () => void;
+}) {
+  const parts = message.parts;
+  // Index of the last text part — the one that streams. Parts after it are
+  // gated until the stream completes.
+  let lastTextIdx = -1;
+  for (let i = 0; i < parts.length; i++) {
+    if (parts[i].type === "text") lastTextIdx = i;
+  }
+  const gates = lastTextIdx >= 0;
+  const [streamDone, setStreamDone] = useState(!gates);
+  // Reset the gate if the message identity changes (new parts streaming in).
+  useEffect(() => {
+    setStreamDone(!gates);
+  }, [gates, lastTextIdx]);
+  // Surface stream completion to the parent. Fires immediately for messages
+  // with no streaming text (streamDone starts true), and once the typewriter
+  // lands for messages that gate. Kept in an effect so the callback never runs
+  // mid-render.
+  useEffect(() => {
+    if (streamDone) onStreamComplete?.();
+    // onStreamComplete is a stable callback from the parent.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [streamDone]);
+
+  const nodes: ReactNode[] = [];
+  for (let i = 0; i < parts.length; ) {
+    if (parts[i].type === "tool-call") {
+      const group: CotStep[] = [];
+      const start = i;
+      while (i < parts.length && parts[i].type === "tool-call") {
+        const tc = parts[i] as Extract<SpotPart, { type: "tool-call" }>;
+        group.push({ agent: tc.agent, detail: tc.detail, status: tc.status });
+        i++;
+      }
+      nodes.push(<ChainOfThought key={`cot-${start}`} steps={group} />);
+    } else {
+      // Hold back parts that follow the streaming answer until it lands.
+      if (gates && i > lastTextIdx && !streamDone) {
+        i++;
+        continue;
+      }
+      const onDone =
+        gates && i === lastTextIdx ? () => setStreamDone(true) : undefined;
+      nodes.push(<PartRenderer key={i} part={parts[i]} onTextDone={onDone} />);
+      i++;
+    }
+  }
+
+  return <div className={`${animate ? "fadeUp" : ""} mb-5`}>{nodes}</div>;
 }
 
 export function TypingDots() {

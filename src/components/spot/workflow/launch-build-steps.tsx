@@ -19,7 +19,6 @@ import {
   Megaphone,
   Mic,
   Users,
-  Sparkles,
   Phone,
   Wifi,
   FileText,

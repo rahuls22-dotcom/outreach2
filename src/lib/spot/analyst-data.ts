@@ -23,6 +23,10 @@ export type AnalystReport = {
   headline: string;
   /** The Analyst Agent's opening line — it starts the conversation. */
   opener: string;
+  /** Spot's chain of thought as it reads the report and reasons toward the
+   *  call. Each string is one reasoning step, streamed in order before the
+   *  answer lands. Thoughts, not tool calls. */
+  thinking: string[];
   /** Spot's reasoning behind the recommendation. */
   reasoning: string;
   /** The full report, as the markdown the Analyst Agent actually produces. */
@@ -43,8 +47,15 @@ export function analystReportFor(p: ProductSummary): AnalystReport {
       flow: "optimize",
       action: dx.action,
       headline,
-      opener: `Morning — weekly scan on **${p.name}** is in, and I'm flagging it for optimization. CPL's run up and the cause is creative fatigue, not targeting. Report's on the right.`,
-      reasoning: `Got it. My read: the top creatives are past frequency 3.5 with CTR sliding, and the landing page is leaking on top of that — but the audience itself is still healthy. So this is a freshness problem, not a targeting one. I'd ship the small reversible fixes first — refresh the creative, tighten the LP, pause the worst ad set — and re-measure CPL before any bigger swings. That's why I'm recommending we **optimize**.`,
+      opener: `I scanned **${p.name}** this morning and I'm flagging it for optimization. CPL has run up, and the cause is creative fatigue, not targeting.`,
+      thinking: [
+        "Reading the Analyst's full report",
+        "Separating creative fatigue from a targeting problem",
+        "Confirming the audience is still healthy",
+        "Picking the smallest reversible fixes first",
+        "Landing the recommendation",
+      ],
+      reasoning: `Here's my read: the top creatives are past frequency 3.5 with CTR sliding, and the landing page is leaking on top of that, but the audience itself is still healthy. So this is a freshness problem, not a targeting one. I'd ship the small reversible fixes first (refresh the creative, tighten the LP, pause the worst ad set) and re-measure CPL before any bigger swings. That's why I'm recommending we **optimize**.`,
       reportMd: `## Weekly scan · ${p.name}
 
 ### Signals
@@ -71,8 +82,15 @@ export function analystReportFor(p: ProductSummary): AnalystReport {
       flow: "test-angles",
       action: dx.action,
       headline,
-      opener: `Morning — scan on **${p.name}** flags thin volume at a high CPL. The angles are tapped, not the audience. Report's on the right.`,
-      reasoning: `Right. Reach is fine, but all three live concepts have flattened — they've stopped saying anything new. So rather than touch the audience, I'd spin up 3-4 fresh angles off the winning pattern (specificity + parent autonomy), small budget each, and scale whatever breaks out. That's why I'm recommending an **angle test**.`,
+      opener: `The scan on **${p.name}** flags thin volume at a high CPL. The angles are tapped, not the audience.`,
+      thinking: [
+        "Reading the Analyst's full report",
+        "Checking whether reach or creative is the limit",
+        "Pulling the winning angle pattern from memory",
+        "Sizing a low-budget angle test",
+        "Landing the recommendation",
+      ],
+      reasoning: `Reach is fine, but all three live concepts have flattened; they've stopped saying anything new. So rather than touch the audience, I'd spin up 3-4 fresh angles off the winning pattern (specificity + parent autonomy), small budget each, and scale whatever breaks out. That's why I'm recommending an **angle test**.`,
       reportMd: `## Weekly scan · ${p.name}
 
 ### Signals
@@ -98,8 +116,15 @@ export function analystReportFor(p: ProductSummary): AnalystReport {
     flow: "scale",
     action: dx.action,
     headline,
-    opener: `Morning — I ran the weekly scan on **${p.name}** and I'm flagging it as a scale opportunity. Headline: the parent-dashboard cohort has real headroom. Full report's on the right.`,
-    reasoning: `Thanks. Here's how I read it: the parent-dashboard angle is doing the heavy lifting — 62% of qualified leads at a low ₹${winnerCpl} CPL, frequency still only 1.4, and the lookalike's barely penetrated, so there's room to push hard. The two interest-stack ad sets, meanwhile, are saturating and dragging CPL up. So the call's straightforward — move budget onto the proven winner and cap the laggards. That's why I'm recommending we **scale**.`,
+    opener: `I scanned **${p.name}** this morning and I'm flagging it as a scale opportunity. The parent-dashboard cohort has real headroom.`,
+    thinking: [
+      "Reading the Analyst's full report",
+      "Confirming the parent-dashboard cohort is the real winner",
+      `Checking headroom: frequency 1.4, lookalike 38% in`,
+      "Sizing the budget shift off the two saturating ad sets",
+      "Landing the recommendation",
+    ],
+    reasoning: `Here's how I read it: the parent-dashboard angle is doing the heavy lifting, 62% of qualified leads at a low ₹${winnerCpl} CPL, with frequency still only 1.4 and the lookalike barely penetrated, so there's room to push. The two interest-stack ad sets are saturating and dragging CPL up. The call is straightforward: move budget onto the proven winner and cap the laggards. That's why I'm recommending we **scale**.`,
     reportMd: `## Weekly scan · ${p.name}
 
 ### Signals
@@ -138,6 +163,8 @@ export type ImportReview = {
   action: string;
   headline: string;
   opener: string;
+  /** Spot's chain of thought as it works through the imported set. */
+  thinking: string[];
   reasoning: string;
   reportMd: string;
 };
@@ -165,6 +192,7 @@ export function importedReviewFor(
       action: "Optimize with Spot",
       headline,
       opener: `I didn't find any campaigns to analyse for **${productName}**.`,
+      thinking: ["Reading the imported set"],
       reasoning: "",
       reportMd: `## ${headline}\n\nNo campaigns were imported.`,
     };
@@ -235,5 +263,22 @@ ${dragging}
 ${recommendation}
 `;
 
-  return { flow, action, headline, opener, reasoning, reportMd };
+  const thinking =
+    flow === "optimize"
+      ? [
+          "Reading the imported campaign set",
+          "Ranking campaigns by CPL efficiency",
+          "Spotting the winners and the laggards",
+          "Checking what's worth reworking before any new spend",
+          "Landing the recommendation",
+        ]
+      : [
+          "Reading the imported campaign set",
+          "Ranking campaigns by CPL efficiency",
+          "Confirming the spread is tight enough to push",
+          "Sizing where added budget should go",
+          "Landing the recommendation",
+        ];
+
+  return { flow, action, headline, opener, thinking, reasoning, reportMd };
 }

@@ -88,7 +88,7 @@ export function WorkspaceSwitcher() {
         ref={triggerRef}
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center gap-2 px-2 py-2 rounded-[8px] hover:bg-surface-secondary transition-colors text-left"
+        className="w-full flex items-center gap-2 px-2 py-2 rounded-[8px] bg-surface-page hover:bg-surface-secondary transition-colors text-left"
       >
         {/* Revspot R is the only mark in the trigger — workspace identity
             is carried by the name + region text. */}

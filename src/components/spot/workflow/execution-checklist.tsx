@@ -40,7 +40,7 @@ export function ExecutionChecklist({
         {allDone ? (
           <CheckCircle2 size={20} strokeWidth={1.9} style={{ color: "#22C55E" }} />
         ) : (
-          <Cog size={18} strokeWidth={1.8} className="animate-spin" style={{ color: "#C9A86A", animationDuration: "2s" }} />
+          <Cog size={18} strokeWidth={1.8} className="animate-spin" style={{ color: "#9B9B9B", animationDuration: "2s" }} />
         )}
         <h1 className="text-[18px] font-semibold tracking-tight">{title}</h1>
       </div>
@@ -55,7 +55,7 @@ export function ExecutionChecklist({
             className="h-full transition-all duration-300 ease-out"
             style={{
               width: `${pct}%`,
-              background: allDone ? "#22C55E" : "linear-gradient(90deg,#C9A86A,#E0C083)",
+              background: allDone ? "#22C55E" : "linear-gradient(90deg,#9B9B9B,#C7C4BC)",
             }}
           />
         </div>
@@ -79,14 +79,14 @@ export function ExecutionChecklist({
                 {isDone ? (
                   <CheckCircle2 size={14} strokeWidth={2} style={{ color: "#22C55E" }} />
                 ) : isRunning ? (
-                  <Cog size={12} strokeWidth={1.8} className="animate-spin" style={{ color: "#E0C083", animationDuration: "1.2s" }} />
+                  <Cog size={12} strokeWidth={1.8} className="animate-spin" style={{ color: "#C7C4BC", animationDuration: "1.2s" }} />
                 ) : (
                   <span className="w-2.5 h-2.5 rounded-full" style={{ border: "1px solid #3A3A35" }} />
                 )}
               </span>
               <span className="flex-1">{it}</span>
               {isRunning && (
-                <span className="text-[9.5px] uppercase tracking-wider font-semibold flex-shrink-0" style={{ color: "#E0C083" }}>
+                <span className="text-[9.5px] uppercase tracking-wider font-semibold flex-shrink-0" style={{ color: "#C7C4BC" }}>
                   running…
                 </span>
               )}

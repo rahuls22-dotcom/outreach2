@@ -28,12 +28,18 @@
     --radius: 0.5rem;
 
     /* Chat-Mode additions: warm-tinted Spot surface */
-    --chat-bg: #F8F7F4;
+    --chat-bg: #F8F8F7;
     --chat-bubble-bg: #FFFFFF;
-    --chat-user-bg: #111111;
-    --chat-user-fg: #FAFAF8;
+    --chat-user-bg: #ECEAE6;
+    --chat-user-fg: #2C2A26;
     --spot-tint: #FAF8F2;
     --spot-stroke: #E8E3D5;
+    /* Spot canvas (chat-base + floating panel/nav/chips). Light only for v1;
+       a future dark theme is a token swap, no dark values authored now. */
+    --spot-desk: #F8F8F7;
+    --spot-card: #FFFFFF;
+    --spot-card-border: #E8E8E5;
+    --spot-shadow: 0 1px 2px rgba(0,0,0,.03), 0 4px 10px rgba(0,0,0,.035), 0 12px 28px rgba(0,0,0,.045);
 
     /* Semantic status pairs */
     --ok-bg: #F0FDF4;   --ok-fg: #15803D;
@@ -81,13 +87,13 @@
   letter-spacing: 0.5px;
 }
 
-/* Section labels (sidebar) */
+/* Section labels (sidebar) — quiet eyebrow so nav items read as primary */
 .label-section {
-  font-size: 11px;
-  font-weight: 500;
-  color: #9B9B9B;
+  font-size: 10px;
+  font-weight: 600;
+  color: #A6A39B;
   text-transform: uppercase;
-  letter-spacing: 0.6px;
+  letter-spacing: 0.9px;
 }
 
 /* Skeleton loading animation */
@@ -167,22 +173,24 @@
   border-radius: 10px;
 }
 
-/* Composer — focus ring matches chat-mode spec */
+/* Composer — floating premium prompt input (AI-Elements style) */
 .composer {
-  border: 1px solid var(--border);
-  border-radius: 12px;
+  border: 1px solid var(--spot-card-border);
+  border-radius: 20px;
   background: #FFF;
-  transition: border-color 150ms ease, box-shadow 150ms ease;
+  box-shadow: var(--spot-shadow);
+  transition: border-color 160ms ease, box-shadow 160ms ease;
 }
 .composer:focus-within {
-  border-color: #1A1A1A;
-  box-shadow: 0 0 0 4px rgba(26,26,26,0.06);
+  border-color: #C7C4BC;
+  box-shadow: 0 1px 3px rgba(60,50,30,.07), 0 10px 26px rgba(60,50,30,.14),
+              0 0 0 4px rgba(150,148,140,0.16);
 }
 .composer textarea {
   width: 100%; border: 0; outline: 0; resize: none;
-  background: transparent; padding: 12px 14px 0 14px;
-  font: inherit; color: var(--text-1);
-  min-height: 44px; max-height: 200px;
+  background: transparent; padding: 15px 18px 0 18px;
+  font: inherit; font-size: 15px; line-height: 1.55; color: var(--text-1);
+  min-height: 48px; max-height: 220px;
 }
 .composer textarea::placeholder { color: var(--text-3); }
 
@@ -217,11 +225,20 @@
   border-radius: 8px;
 }
 
-/* Scrollbar polish */
-.scroll::-webkit-scrollbar { width: 8px; height: 8px; }
-.scroll::-webkit-scrollbar-thumb { background: #D4D4D4; border-radius: 4px; }
-.scroll::-webkit-scrollbar-thumb:hover { background: #A0A0A0; }
+/* Scrollbar polish — thin, unobtrusive (Firefox + WebKit) */
+.scroll { scrollbar-width: thin; scrollbar-color: rgba(60,50,30,0.18) transparent; }
+.scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+.scroll::-webkit-scrollbar-thumb { background: rgba(60,50,30,0.18); border-radius: 999px; }
+.scroll::-webkit-scrollbar-thumb:hover { background: rgba(60,50,30,0.32); }
 .scroll::-webkit-scrollbar-track { background: transparent; }
+
+/* Thin scrollbar — apply to any overflow container that shows the
+   fat default bar (e.g. the right artifact panel). */
+.thin-scroll { scrollbar-width: thin; scrollbar-color: rgba(60,50,30,0.16) transparent; }
+.thin-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+.thin-scroll::-webkit-scrollbar-thumb { background: rgba(60,50,30,0.16); border-radius: 999px; }
+.thin-scroll::-webkit-scrollbar-thumb:hover { background: rgba(60,50,30,0.30); }
+.thin-scroll::-webkit-scrollbar-track { background: transparent; }
 
 /* Chat-mode animation primitives */
 @keyframes fadeUp { from { transform: translateY(6px); opacity: 0; } to { transform: none; opacity: 1; } }
@@ -491,10 +508,10 @@
   color: #F59E0B !important;
 }
 
-/* Persona avatar (gold gradient) */
+/* Persona avatar (neutral) */
 .md-persona-avatar {
-  background: linear-gradient(135deg, #FBF8F0 0%, #EBE2C9 100%);
-  border: 1px solid #E8E3D5;
+  background: linear-gradient(135deg, #F5F4F1 0%, #E7E5E0 100%);
+  border: 1px solid #E5E3DD;
 }
 .md-dark .md-persona-avatar {
   background: linear-gradient(135deg, #2A2520 0%, #1F1B16 100%) !important;
@@ -514,11 +531,11 @@
   border-color: #4D3D1A !important;
 }
 
-/* Pricing badge */
+/* Pricing badge (neutral) */
 .md-price-badge {
-  background: #FAF8F2;
-  border: 1px solid #E8E3D5;
-  color: #8C6D33;
+  background: #F5F4F1;
+  border: 1px solid #E5E3DD;
+  color: #6B6B6B;
 }
 .md-dark .md-price-badge {
   background: #26261F !important;
@@ -526,15 +543,15 @@
   color: #D4B566 !important;
 }
 
-/* Offer pills · amber → dark amber */
+/* Offer pills · neutral */
 .md-offer-pill {
-  background: #FEF3C7;
-  border: 1px solid #FCE7A1;
-  color: #854D0E;
+  background: #F5F4F1;
+  border: 1px solid #E5E3DD;
+  color: #4A4843;
 }
-.md-offer-pill-icon { color: #A16207; }
-.md-offer-pill-label { color: #854D0E; }
-.md-offer-pill-meta  { color: rgba(161, 98, 7, 0.8); }
+.md-offer-pill-icon { color: #8A8980; }
+.md-offer-pill-label { color: #4A4843; }
+.md-offer-pill-meta  { color: rgba(74, 72, 67, 0.7); }
 
 .md-dark .md-offer-pill {
   background: #2A2210 !important;
@@ -544,6 +561,12 @@
 .md-dark .md-offer-pill-icon  { color: #FCD34D !important; }
 .md-dark .md-offer-pill-label { color: #FCD34D !important; }
 .md-dark .md-offer-pill-meta  { color: rgba(252, 211, 77, 0.75) !important; }
+
+/* First block never carries a top margin — keeps the doc tight to the top of
+ * its container (an h2/h3 lead would otherwise push down by its mt-10/mt-6). */
+.md-render > :first-child {
+  margin-top: 0 !important;
+}
 
 /* List dots inside default bullets need to be visible on dark */
 .md-dark .md-render ul li > span:first-child[class*="bg-text-tertiary"],

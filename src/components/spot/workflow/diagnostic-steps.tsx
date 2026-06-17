@@ -28,7 +28,6 @@ import {
   ChevronRight,
   Clock,
   PartyPopper,
-  Sparkles,
   Target,
   TrendingDown,
   TrendingUp,
@@ -441,16 +440,10 @@ function BeautifulSignalCard({
         : signal.tag === "chronic"
           ? "text-[#92400E]"
           : "text-text-secondary";
-  const borderAccent =
-    signal.tag === "winner"
-      ? "border-l-[3px] border-l-[#15803D]"
-      : signal.tag === "decay"
-        ? "border-l-[3px] border-l-[#B91C1C]"
-        : signal.tag === "chronic"
-          ? "border-l-[3px] border-l-[#F5A623]"
-          : "border-l-[3px] border-l-text-tertiary/30";
+  // Tone is carried by the leading icon tile + the status pill; a colored
+  // side-stripe on top of that is redundant slop (impeccable bans side-stripes).
   return (
-    <div className={`bg-white border border-border rounded-card overflow-hidden ${borderAccent}`}>
+    <div className="bg-white border border-border rounded-card overflow-hidden">
       <div className="px-4 py-3.5">
         <div className="flex items-start gap-3 mb-2.5">
           <div className={`flex items-center justify-center w-8 h-8 rounded-card flex-shrink-0 ${tone.ring}`}>
@@ -556,22 +549,8 @@ function AnalyzeLoader() {
  * ═══════════════════════════════════════════════════════════════ */
 
 function ClarifyStep({ workflow }: { workflow: DiagnosticWorkflow }) {
-  const kind = workflow.kind;
-  const primeClarifyDefaults = useSpotStore((s) => s.primeClarifyDefaults);
-
-  // Prime defaults on first render only. We key the effect by `kind`
-  // (stable per workflow) — the questions array itself is a fresh ref
-  // every render, so it can't be in the dep list without causing a
-  // re-render loop. The store action is also a no-op once defaults are
-  // primed, so even a re-run here wouldn't trigger another render.
-  useEffect(() => {
-    const defaults: Record<string, string> = {};
-    for (const q of clarifyQuestionsFor(kind, analysisFor(kind))) {
-      defaults[q.id] = q.defaultValue;
-    }
-    primeClarifyDefaults(defaults);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [kind]);
+  // Nothing is pre-selected: the user picks every answer themselves.
+  // The recommended option is tagged in the dock, not pre-checked.
 
   // The quick-pick questions now live in the chat (left panel). The
   // canvas mirrors the captured brief — it fills in live as the user
@@ -1069,7 +1048,6 @@ function CreativeAnglesStep({ workflow }: { workflow: DiagnosticWorkflow }) {
       <motion.div variants={canvasReveal} className="mb-4">
         <div className="flex items-center gap-2 mb-2">
           <span className="inline-flex items-center gap-1.5 h-6 px-2.5 rounded-full bg-[#FAF8F2] border border-[#E8E3D5]">
-            <Sparkles size={11} strokeWidth={2} className="text-text-secondary" />
             <span className="text-[10.5px] uppercase tracking-wider text-text-secondary font-semibold">
               Candidate creatives · {ANGLE_CANDIDATES.length}
             </span>
@@ -1349,7 +1327,6 @@ function CreativeAnglesStep({ workflow }: { workflow: DiagnosticWorkflow }) {
                             onClick={() => onPickRevision(base, r)}
                             className="inline-flex items-center gap-1 h-6 px-2.5 rounded-full text-[11px] font-medium bg-[#FAF8F2] border border-[#E8E3D5] text-text-secondary hover:border-text-tertiary hover:text-text-primary transition-colors"
                           >
-                            <Sparkles size={10} strokeWidth={2} />
                             {r.changeLabel}
                           </button>
                         ))}
@@ -1501,7 +1478,7 @@ function PlanStep({ workflow }: { workflow: DiagnosticWorkflow }) {
 
 function InsightCard({ insight }: { insight: WorkflowPlan["insights"][number] }) {
   const Icon =
-    insight.tone === "good" ? TrendingUp : insight.tone === "warn" ? AlertTriangle : Sparkles;
+    insight.tone === "good" ? TrendingUp : insight.tone === "warn" ? AlertTriangle : Activity;
   const iconColor =
     insight.tone === "good"
       ? "text-[#15803D]"
@@ -1625,12 +1602,12 @@ const PLAN_DELTA: Record<
 > = {
   scale: {
     summary:
-      "I've folded your scale picks into the existing plan. The winning ad sets get more budget and lookalike expansions; the decay units get trimmed.",
+      "I've folded your scale picks into the plan. Budget moves onto the proven parent-dashboard cohort, the lookalike expands, and the two saturating interest-stack ad sets get capped so spend follows performance.",
     changes: [
-      { kind: "new", text: "Scale up Class 11 LAL ad set by 2× over Week 1" },
-      { kind: "new", text: "Add 1% lookalike expansion on the top mentor-led hook" },
-      { kind: "updated", text: "Daily cap raised · ₹8K → ₹16K on the winners" },
-      { kind: "removed", text: "Dropped the chronic-decay 'parents see weekly progress' line" },
+      { kind: "new", text: "Lift budget +25% on the parent-dashboard winner (staggered over 3 days)" },
+      { kind: "new", text: "Expand the lookalike 1% → 2% on the winning cohort" },
+      { kind: "updated", text: "Open the BOFU demo-abandoner cap 2.4× · ₹38K → ₹92K" },
+      { kind: "updated", text: "Cap the two saturating interest-stack ad sets (frequency over 3.2)" },
     ],
   },
   optimize: {
@@ -1729,9 +1706,7 @@ function LiveStep({ workflow }: { workflow: DiagnosticWorkflow }) {
         className="bg-white border border-border rounded-card p-4 mb-3"
       >
         <div className="flex items-center gap-1.5 mb-3">
-          <span className="text-[12px]" aria-hidden>
-            ✏️
-          </span>
+          <Pencil size={12} strokeWidth={1.8} className="text-text-secondary" aria-hidden />
           <div className="label-section">What changed</div>
           <span className="text-[10.5px] text-text-tertiary ml-auto">
             {delta.changes.length} updates · in this execution plan
@@ -1800,7 +1775,7 @@ function LiveStep({ workflow }: { workflow: DiagnosticWorkflow }) {
               style={{
                 width: `${progress}%`,
                 background:
-                  "linear-gradient(90deg, #C9A86A 0%, #E0C083 60%, #22C55E 100%)",
+                  "linear-gradient(90deg, #9B9B9B 0%, #C7C4BC 60%, #22C55E 100%)",
               }}
             >
               {!allDone && (
@@ -1839,7 +1814,7 @@ function LiveStep({ workflow }: { workflow: DiagnosticWorkflow }) {
                   <Activity
                     size={13}
                     strokeWidth={1.8}
-                    className="text-[#C9A86A] flex-shrink-0 mt-0.5 animate-pulse"
+                    className="text-[#9B9B9B] flex-shrink-0 mt-0.5 animate-pulse"
                   />
                 )}
                 {queued && (
@@ -1868,7 +1843,7 @@ function LiveStep({ workflow }: { workflow: DiagnosticWorkflow }) {
                     className="pill flex-shrink-0"
                     style={{
                       background: "#2A2210",
-                      color: "#E0C083",
+                      color: "#C7C4BC",
                       border: "1px solid #4D3D1A",
                     }}
                   >
@@ -1886,11 +1861,9 @@ function LiveStep({ workflow }: { workflow: DiagnosticWorkflow }) {
             className="mt-3 pt-3 border-t border-border-subtle text-[11.5px] leading-relaxed flex items-start gap-2"
             style={{ color: "#8A8980" }}
           >
-            <span className="text-[12px]" aria-hidden>
-              ☕
-            </span>
+            <Clock size={12} strokeWidth={1.7} className="flex-shrink-0 mt-0.5" aria-hidden />
             <span>
-              Spot will keep running these in the background — feel free to
+              Spot will keep running these in the background, so feel free to
               step away. I&apos;ll surface the next decision here when one
               of the watchers fires.
             </span>
@@ -1999,7 +1972,7 @@ export function RecommendationCard({ rec }: { rec: PendingRecommendation }) {
               className="inline-flex items-center gap-1 h-7 px-3 rounded-button text-[11.5px] font-semibold transition-colors"
               style={{
                 background:
-                  "linear-gradient(135deg, #C9A86A 0%, #E0C083 100%)",
+                  "linear-gradient(135deg, #9B9B9B 0%, #C7C4BC 100%)",
                 color: "#0A0A09",
                 boxShadow: "0 1px 0 rgba(0,0,0,0.05) inset",
               }}

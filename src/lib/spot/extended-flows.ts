@@ -48,8 +48,12 @@ export type ClarifyQuestion = {
   why?: string;
   /** Quick-pick options. */
   options: ClarifyOption[];
-  /** Pre-selected option id. */
+  /** Pre-selected option id (the seed; for multi this is the single
+   *  pre-checked option). */
   defaultValue: string;
+  /** When true the question accepts multiple answers (checkbox select);
+   *  otherwise it's single-select (radio, auto-advances on pick). */
+  multi?: boolean;
   /** Allow a free-text override after a chip is selected. */
   allowFreeText?: boolean;
 };
@@ -348,12 +352,13 @@ export const SCALE_QUESTIONS: ClarifyQuestion[] = [
   {
     id: "guardrails",
     question: "Any constraints I should respect?",
-    why: "Things I won't touch even if the data suggests I should.",
+    why: "Things I won't touch even if the data suggests I should. Pick as many as apply.",
+    multi: true,
     options: [
-      { value: "none", label: "No constraints" },
       { value: "preserve", label: "Don't touch current best performers" },
       { value: "conservative", label: "Move slowly · max 25% lift per week" },
       { value: "weekends", label: "No deploys on weekends" },
+      { value: "none", label: "No constraints" },
     ],
     defaultValue: "preserve",
   },
@@ -527,10 +532,14 @@ function contextualizeAngles(
 export function answerLabel(
   kind: "scale" | "optimize" | "test-angles",
   questionId: string,
-  value: string,
+  value: string | string[],
 ): string {
   const q = clarifyQuestionsFor(kind).find((q) => q.id === questionId);
-  return q?.options.find((o) => o.value === value)?.label ?? value;
+  const labelFor = (v: string) => q?.options.find((o) => o.value === v)?.label ?? v;
+  if (Array.isArray(value)) {
+    return value.length ? value.map(labelFor).join(" · ") : "None set";
+  }
+  return labelFor(value);
 }
 
 /* ────────────────────────────────────────────────────────────────
@@ -552,7 +561,7 @@ export const SCALE_PLAN: WorkflowPlan = {
     {
       title: "Two winning ad sets have real headroom",
       detail:
-        "Engineer Parent × Mentor-led hook and Self-Studier × Doubt-clearing reel are sitting at 28% and 52% saturation respectively — significant room before reach plateaus.",
+        "Engineer Parent × Mentor-led hook and Self-Studier × Doubt-clearing reel are sitting at 28% and 52% saturation respectively, with significant room before reach plateaus.",
       tone: "good",
     },
     {
@@ -564,7 +573,7 @@ export const SCALE_PLAN: WorkflowPlan = {
     {
       title: "BOFU retargeting is severely underspent",
       detail:
-        "₹38K against ₹98K total spend — warm demo-abandoners convert at ~2× cold, but the BOFU cap is throttling reach to ~31% of the eligible pool.",
+        "₹38K against ₹98K total spend. Warm demo-abandoners convert at ~2× cold, but the BOFU cap is throttling reach to ~31% of the eligible pool.",
       tone: "warn",
     },
     {
@@ -640,7 +649,7 @@ export const SCALE_PLAN: WorkflowPlan = {
     "Never push more than one major change on a weekend",
   ],
   reportingCadence:
-    "Once this is live, my analyst watches it continuously — I'll flag the moment any guardrail fires and surface the next decision here. As results land I write the learnings into product memory, and plan the next move then.",
+    "Once this is live, my analyst watches it continuously. I'll flag the moment any guardrail fires and surface the next decision here. As results land I write the learnings into product memory, and plan the next move then.",
 };
 
 export const OPTIMIZE_PLAN: WorkflowPlan = {
@@ -843,6 +852,59 @@ export function planFor(kind: "scale" | "optimize" | "test-angles"): WorkflowPla
   if (kind === "scale") return SCALE_PLAN;
   if (kind === "optimize") return OPTIMIZE_PLAN;
   return ANGLES_PLAN;
+}
+
+/**
+ * Render a diagnostic plan as real markdown for the plan.md document
+ * card the user opens in the canvas. This mirrors what the PlanStep
+ * canvas renders (goal · what I found · the now-plan moves + what I'll
+ * watch · guardrails · reporting cadence) so the card and the canvas
+ * tell the exact same story. The diagnostic plans are one-time ("do
+ * this now"), so only the first phase's moves are the plan — the rest
+ * are decided when the analyst reports back.
+ */
+export function planMarkdownFor(
+  kind: "scale" | "optimize" | "test-angles",
+  productName: string,
+): string {
+  const plan = planFor(kind);
+  const verb = kind === "scale" ? "Scale" : kind === "optimize" ? "Optimize" : "Angle-test";
+  const now = plan.phases[0];
+  const insightLines = plan.insights
+    .map((ins) => `- **${ins.title}** · ${ins.detail}`)
+    .join("\n");
+  const moveLines = now.actions.map((a) => `- ${a}`).join("\n");
+  const watchLines = now.observes.map((o) => `- ${o}`).join("\n");
+  const guardrailLines = plan.guardrails.map((g) => `- ${g}`).join("\n");
+
+  return `# ${productName} · ${verb} plan
+
+_Drafted just now · one-time plan · approve once and I execute the checklist._
+
+## Goal
+
+${plan.goal}
+
+## What I found
+
+${insightLines}
+
+## The plan · what I'll do now
+
+${moveLines}
+
+### What I'll watch
+
+${watchLines}
+
+## Guardrails · I enforce these without asking
+
+${guardrailLines}
+
+---
+
+**How I'll keep you in the loop:** ${plan.reportingCadence}
+`;
 }
 
 /* ────────────────────────────────────────────────────────────────
@@ -1426,8 +1488,8 @@ export function extendedIntroMessage(
           },
           {
             type: "step-cta",
-            label: "Got it — let's set the goal",
-            helper: "I'll fold your goal + constraints into the execution plan next.",
+            label: "Set the goal",
+            helper: "I'll fold your goal and constraints into the execution plan next.",
           },
         ],
       };
@@ -1437,30 +1499,18 @@ export function extendedIntroMessage(
     case "scale-clarify":
     case "opt-clarify":
     case "ang-clarify": {
+      // The questions themselves are answered in the docked picker above
+      // the composer (one at a time, Claude-style), so this message is
+      // just Spot's lead-in. The dock owns confirmation.
       const text =
         kind === "scale"
-          ? `A few quick questions before I plan — I've pre-picked defaults from what I found in the analysis. Confirm or tweak them right here.`
+          ? `A few quick questions before I plan. I've flagged what I'd recommend from the analysis. Pick what fits, one at a time.`
           : kind === "optimize"
-            ? `A few quick questions before I plan — defaults are biased toward what I think the priority should be. Confirm or tweak them right here.`
-            : `A few quick questions before I draft the angles — these constrain what I generate. Defaults are picked from the audit.`;
-      // For test-angles the next step isn't the plan — it's the angle
-      // drafting surface. So the CTA points there instead.
-      const clarifyCta =
-        kind === "test-angles"
-          ? {
-              type: "step-cta" as const,
-              label: "Confirm · draft the angles",
-              helper:
-                "I'll generate a fresh set of angles from these constraints for you to review.",
-            }
-          : {
-              type: "step-cta" as const,
-              label: "Confirm · build the plan",
-              helper: "I'll fold these into the plan for you to approve.",
-            };
+            ? `A few quick questions before I plan. I've flagged what I'd recommend on each. Pick what fits, one at a time.`
+            : `A few quick questions before I draft the angles. These constrain what I generate. I've flagged what I'd recommend from the audit. Pick what fits, one at a time.`;
       return {
         role: "spot",
-        parts: [{ type: "text", text }, { type: "clarify-questions", kind }, clarifyCta],
+        parts: [{ type: "text", text }],
       };
     }
 
@@ -1475,7 +1525,7 @@ export function extendedIntroMessage(
           },
           {
             type: "step-cta",
-            label: "Approve these angles · build the test plan",
+            label: "Approve the angles",
             helper: "I'll fold the locked angles into the time-phased A/B test plan.",
             refineHint:
               'or tell me which angle to revise — e.g. "make angle 2 less anxious"',
@@ -1489,7 +1539,7 @@ export function extendedIntroMessage(
     case "ang-plan": {
       const intro =
         kind === "scale"
-          ? "Plan's ready — the exact moves I'll make right now, on the right. Guardrails are listed at the bottom; I enforce them without asking. This is a one-time plan: I execute it now, then my analyst keeps watching and I'll plan the next move when the data calls for it."
+          ? "Plan's ready. The exact moves I'll make right now are on the right. Guardrails are listed at the bottom; I enforce them without asking. This is a one-time plan: I execute it now, then my analyst keeps watching and I'll plan the next move when the data calls for it."
           : kind === "optimize"
             ? "Plan's ready — the exact fixes I'll ship right now, on the right. Small reversible changes first, with guardrails I enforce automatically. One-time plan: I act now, then re-plan when the analyst flags the next opportunity."
             : "Plan's ready — built around the angles you just approved. The exact test I'll launch right now is on the right. One-time plan: I ship it now, then re-plan once the test has data.";
@@ -1499,7 +1549,7 @@ export function extendedIntroMessage(
           { type: "text", text: intro },
           {
             type: "step-cta",
-            label: "Deploy agent · execute this plan",
+            label: "Put the plan live",
             helper:
               "Once deployed, I execute the checklist now — you'll watch each item tick off, then I ping your dashboard whenever a watcher fires.",
             refineHint: "or tell me what to change before I start",

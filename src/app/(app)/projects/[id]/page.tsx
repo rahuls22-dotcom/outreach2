@@ -32,6 +32,7 @@ import { MetricCard } from "@/components/dashboard/metric-card";
 import { SpotMark } from "@/components/spot/spot-mark";
 import { IllustrationCampaigns, IllustrationEnrichment } from "@/components/illustrations/empty-states";
 import { useDemoMode } from "@/lib/demo-mode";
+import { useMemoryPanel } from "@/components/memory/memory-panel";
 
 type Tab = "personas" | "campaigns" | "enrichment";
 
@@ -51,6 +52,7 @@ function toTrend(pctValue: number, invert = false) {
 
 export default function ProjectDetailPage() {
   const router = useRouter();
+  const { openMemory } = useMemoryPanel();
   const params = useParams<{ id: string }>();
   const id = (params?.id || "").toString();
   const product = PRODUCTS.find((p) => p.id === id);
@@ -108,7 +110,7 @@ export default function ProjectDetailPage() {
 
         {/* Link-outs */}
         <div className="flex items-center gap-2 flex-shrink-0">
-          <LinkOut icon={Brain} label="Memory" onClick={() => router.push(`/memory?focus=${id}`)} />
+          <LinkOut icon={Brain} label="Memory" onClick={() => openMemory(id)} />
           <LinkOut icon={Monitor} label="Campaigns" onClick={() => router.push(`/campaigns?product=${id}`)} />
           <LinkOut icon={FileText} label="Leads" onClick={() => router.push(`/enquiries?product=${id}`)} />
           <button

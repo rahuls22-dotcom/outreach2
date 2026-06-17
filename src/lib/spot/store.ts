@@ -1,9 +1,10 @@
 "use client";
 
 import { create } from "zustand";
-import type { GuidedKind, GuidedPayload, SpotMessage, SpotScope } from "./types";
+import type { GuidedKind, GuidedPayload, SpotMessage, SpotPart, SpotScope } from "./types";
 import {
   EMPTY_APPROVALS,
+  executionMovesFor,
   nextStepFor,
   stepIntroMessage,
   STEP_TOOL_CALL,
@@ -20,6 +21,7 @@ import {
 import { PRODUCTS } from "../products-data";
 import { analystReportFor, importedReviewFor } from "./analyst-data";
 import { campaignsForAccount } from "./import-campaigns-data";
+import { planMarkdownFor } from "./extended-flows";
 
 type PanelState = {
   open: boolean;
@@ -43,16 +45,10 @@ type PanelState = {
   // Active workflow — launch-campaign, scale, optimize, or test-angles.
   // null = no workflow active, single-column chat.
   workflow: SpotWorkflow | null;
-  // Whether the right-pane canvas is visible. Workflow state is
-  // preserved when this is false — the user just gets the chat wider
-  // so they can read uninterrupted, like collapsing Claude's preview.
-  canvasOpen: boolean;
-  // Files currently open in the canvas. Length 0..2 — closing the
-  // last one hides the canvas. Order = left-to-right pane order.
-  // Drives the multi-pane canvas (Claude-style "open two files side
-  // by side"). The picker dropdown lives in the chat header so the
-  // user opens / focuses files from the same side they type on.
-  canvasFiles: CanvasFile[];
+  // The single artifact the floating panel is showing, or null when the
+  // panel is closed. This one field IS the panel state — open iff
+  // panelFile !== null. Chat-driven: only user clicks set it.
+  panelFile: CanvasFile | null;
   // When a workflow is active but the user has navigated back to the
   // Spot homepage (via the "Spot home" button), this is true. The
   // workflow is preserved; we just render the home view. Setting back
@@ -90,6 +86,17 @@ type PanelState = {
   startTestAnglesFlow: (product: { id: string; name: string }) => void;
   /** Open the Analyst Agent ↔ Spot conversation for a project (chat-only). */
   startAnalystReview: (product: { id: string; name: string }) => void;
+  /** User passed on Spot's recommendation. Keeps the session, reasons through
+   *  the reject, then asks what to do next (with alternative plays). */
+  rejectRecommendation: (args: {
+    flow: "scale" | "optimize" | "test-angles" | "launch";
+    productId: string;
+    productName: string;
+  }) => void;
+  /** User passed on a mid-flow step gate (e.g. didn't want to set the goal).
+   *  Same shape as rejectRecommendation: keeps the session, reasons through the
+   *  pass, then asks what they'd like to do. Holds the workflow where it is. */
+  rejectStep: () => void;
   /** Start the campaign-dive surface · chat-left + campaign-detail right.
    *  Called by the "Spot it" button on campaign / ad-set / ad rows. */
   startCampaignDive: (entity: {
@@ -105,6 +112,11 @@ type PanelState = {
    *  Pass `forcedNext` to jump to a specific step instead of the linear
    *  next one (used by the import branch to enter the launch plan). */
   advanceWorkflow: (narration?: string, forcedNext?: WorkflowStep) => void;
+  /** Seed the live-execution checklist for the active diagnostic workflow
+   *  and tick the moves off one by one on a timer (pending → running →
+   *  done), flipping executionDone when all are complete. Drives the
+   *  LiveExecution canvas. Called when the *-live step begins. */
+  startLiveExecution: () => void;
   /** Begin the import-campaigns sub-flow (after memory setup). Opens the
    *  ad-account picker on the canvas. */
   startImportCampaigns: () => void;
@@ -125,28 +137,18 @@ type PanelState = {
   gotoStep: (step: WorkflowStep) => void;
   setWorkflowBudget: (b: WorkflowBudget) => void;
   toggleWorkflowApproval: (group: "personaIds" | "angleIds" | "formIds", id: string) => void;
-  /** Set an answer at the clarify step (questionId → optionId). */
-  setClarifyAnswer: (questionId: string, value: string) => void;
+  /** Set an answer at the clarify step (questionId → optionId, or a
+   *  list of optionIds for multi-select questions). */
+  setClarifyAnswer: (questionId: string, value: string | string[]) => void;
   /** Pre-populate all clarify defaults at once (called on entering clarify). */
-  primeClarifyDefaults: (defaults: Record<string, string>) => void;
+  primeClarifyDefaults: (defaults: Record<string, string | string[]>) => void;
   /** Pick / change the voice agent attached to outbound campaigns. */
   attachVoiceAgent: (agentId: string | null) => void;
   exitWorkflow: () => void;
-  /** Collapse the right-pane canvas without losing workflow state. */
-  setCanvasOpen: (open: boolean) => void;
-  /** Convenience toggler used by the canvas open/close buttons. */
-  toggleCanvas: () => void;
-  /** Open (or focus) a file in the canvas. If already open → no-op.
-   *  If 2 files are already open → replaces the second one. Opens
-   *  the canvas if it was collapsed. */
+  /** Open the panel to a file, or switch the open panel to it. */
   openCanvasFile: (file: CanvasFile) => void;
-  /** Replace the entire canvas with a single pane showing this file.
-   *  Used for workflow step transitions (kickoff → plan etc.) so
-   *  advancing the workflow swaps the active file rather than
-   *  stacking it as a second pane. */
-  focusCanvasFile: (file: CanvasFile) => void;
-  /** Close a single pane. If it was the last pane → canvas collapses. */
-  closeCanvasFile: (file: CanvasFile) => void;
+  /** Close the panel entirely (X / thread switch / Spot home). */
+  closeCanvas: () => void;
   /** Park the workflow and render the homepage (workflow stays alive). */
   showHomeView: () => void;
   /** Resume the active workflow (homepage banner / past-chats click). */
@@ -156,6 +158,12 @@ type PanelState = {
    *  doesn't render the same dark CTA next to the user's echo. */
   clickedCtas: Set<string>;
   markCtaClicked: (label: string) => void;
+  /** Recommendation cards (Analyst CTA) the user has resolved, keyed by a
+   *  stable sentinel. Persists across flow starts (unlike clickedCtas, which
+   *  resets per workflow) so the card can morph into its decided state and
+   *  stay that way. */
+  ctaResolutions: Record<string, "accepted" | "rejected">;
+  resolveCta: (key: string, decision: "accepted" | "rejected") => void;
   /** Workspace-level WhatsApp Business connection state (for media-plan). */
   whatsAppConnected: boolean;
   connectWhatsApp: () => void;
@@ -185,6 +193,31 @@ const WORKSPACE_SCOPE: SpotScope = { kind: "workspace", label: "Workspace" };
  * After the fake delay, the loader resolves: `ready` flips to true and
  * the first step's intro message appears with its CTA.
  */
+/** Spot's chain-of-thought as it opens each diagnostic — one string per
+ *  reasoning step, streamed in order before the analyze result lands. Mirrors
+ *  the analyst-review CoT so every phase reads the same: thinking → chain of
+ *  thought → next thing. */
+const DIAGNOSTIC_THINKING: Record<DiagnosticWorkflow["kind"], string[]> = {
+  scale: [
+    "Pulling up what I know about this project",
+    "Confirming the winners and where budget's underspent",
+    "Checking audience headroom before pushing",
+    "Sizing the moves I'd make",
+  ],
+  optimize: [
+    "Reading the latest performance",
+    "Separating recent problems from chronic ones",
+    "Tracing each issue back to a root cause",
+    "Picking the smallest reversible fixes first",
+  ],
+  "test-angles": [
+    "Auditing the last 30 days of creative",
+    "Finding the pattern under the winners",
+    "Spotting which angles have gone stale",
+    "Framing the angles worth testing",
+  ],
+};
+
 function startDiagnostic(
   set: (
     fn: (s: PanelState) => Partial<PanelState> | PanelState,
@@ -192,69 +225,226 @@ function startDiagnostic(
   kind: DiagnosticWorkflow["kind"],
   product: { id: string; name: string },
   firstStep: WorkflowStep,
-  copy: { headline: string; intro: string },
+  // copy is retained for callers but the analyze narration now comes from
+  // stepIntroMessage so the CoT result reads consistently across entry points.
+  _copy: { headline: string; intro: string },
 ) {
-  const callId = `tc-${Date.now()}`;
-  const tc = STEP_TOOL_CALL[firstStep];
+  const thinking = DIAGNOSTIC_THINKING[kind];
 
-  set(() => ({
-    open: true,
-    maximized: false,
-    canvasOpen: true,
-    viewHomeOverride: false,
-    clickedCtas: new Set<string>(),
-    scope: { kind: "project", label: product.name, target: product.id },
-    pendingQuery: null,
-    workflow: {
-      kind,
-      step: firstStep,
-      productId: product.id,
-      productName: product.name,
-      startedAt: Date.now(),
-      ready: false,
-      clarifyAnswers: {},
-      planApproved: false,
-    },
-    thread: [
-      {
-        role: "spot",
-        parts: [
-          { type: "headline", text: copy.headline, verdict: "info" },
-          { type: "text", text: copy.intro },
-          {
-            type: "tool-call",
-            id: callId,
-            agent: tc?.agent ?? "spot.analyze",
-            detail: tc?.detail ?? "running analysis…",
-            status: "running",
-          },
-        ],
+  set((s) => {
+    // Continue the SAME chat session when the user is accepting an Analyst
+    // recommendation — the analyst review (finding + report + Spot's reasoning)
+    // stays above, and Spot picks the thread back up. Other entry points
+    // (dashboard cards, campaign table) start a fresh thread.
+    const continuing =
+      s.workflow?.kind === "analyst-review" && s.workflow.productId === product.id;
+    const base = continuing ? s.thread : [];
+    // No user echo on accept — the recommendation card morphs into its own
+    // "Accepted" state, which carries the decision. A separate user bubble
+    // would be redundant.
+    // Spot picks the thread back up with a fresh chain of thought — opens on
+    // the generic warmup beat, runDiagnosticThinking streams the rest.
+    const pickup: SpotMessage = {
+      role: "spot",
+      parts: [warmupThought()],
+    };
+    return {
+      open: true,
+      maximized: false,
+      viewHomeOverride: false,
+      clickedCtas: new Set<string>(),
+      scope: { kind: "project", label: product.name, target: product.id },
+      pendingQuery: null,
+      // The analysis lives in the right panel — keep whatever the analyst
+      // review already had open, else open it for fresh entries.
+      panelFile: "analysis",
+      workflow: {
+        kind,
+        step: firstStep,
+        productId: product.id,
+        productName: product.name,
+        startedAt: Date.now(),
+        ready: false,
+        clarifyAnswers: {},
+        planApproved: false,
       },
-    ],
-  }));
+      thread: [...base, pickup],
+    };
+  });
 
-  // After the fake delay, reveal the canvas + drop the first step CTA.
+  runDiagnosticThinking(set, thinking, firstStep);
+}
+
+/** Stream the diagnostic's opening chain of thought, then land the analyze
+ *  result (the step intro + its CTA) as the next message — same shape as the
+ *  analyst-review reveal. Pure timed reveal; flips the workflow `ready` so the
+ *  right-pane analysis blooms when the thinking settles. */
+function runDiagnosticThinking(
+  set: SpotSet,
+  thinking: string[],
+  firstStep: WorkflowStep,
+) {
+  const GAP = 980; // ms between thoughts — matches the analyst-review cadence
+  // Warmup: hold ~2s on the generic "thinking" beat, then reveal the first
+  // real thought. Spot thinks before it knows its reasoning steps.
+  setTimeout(() => {
+    set((s) => ({
+      thread: settleThought(s.thread, "think-warmup", [
+        { type: "tool-call", id: "think-0", agent: thinking[0], status: "running" },
+      ]),
+    }));
+  }, THINKING_WARMUP_MS);
+  for (let i = 1; i < thinking.length; i++) {
+    setTimeout(() => {
+      set((s) => ({
+        thread: settleThought(s.thread, `think-${i - 1}`, [
+          { type: "tool-call", id: `think-${i}`, agent: thinking[i], status: "running" },
+        ]),
+      }));
+    }, THINKING_WARMUP_MS + GAP * i);
+  }
   setTimeout(() => {
     set((s) => {
-      if (!s.workflow || s.workflow.kind === "launch-campaign") return {};
-      const intro = stepIntroMessage(firstStep, s.workflow);
-      const updatedThread = s.thread.map((m) => {
-        if (m.role !== "spot") return m;
-        return {
-          ...m,
-          parts: m.parts.map((p) =>
-            p.type === "tool-call" && p.id === callId
-              ? { ...p, status: "done" as const }
-              : p,
+      if (
+        !s.workflow ||
+        s.workflow.kind === "launch-campaign" ||
+        s.workflow.kind === "analyst-review" ||
+        s.workflow.kind === "campaign-dive"
+      ) {
+        return {};
+      }
+      const wf = s.workflow;
+      // Settle the last thought to done (append nothing), then drop the
+      // analysis document card + the analyze narration as new messages.
+      const settled = settleThought(s.thread, `think-${thinking.length - 1}`, []);
+      const intro = stepIntroMessage(firstStep, wf);
+      // The analysis is a real artefact: surface an analysis.md card in the
+      // chat the same way the Analyst Agent does, so the document is created
+      // (and visible as a card) before the panel opens it as markdown. When
+      // we're continuing from an analyst review, that card already lives above
+      // (the analyst-report part), so don't double it up.
+      const hasAnalysisCard = s.thread.some(
+        (m) =>
+          m.role === "spot" &&
+          m.parts.some(
+            (p) =>
+              (p.type === "artifact" && p.file === "analysis") ||
+              p.type === "analyst-report",
           ),
-        };
-      });
+      );
+      const prod = PRODUCTS.find((p) => p.id === wf.productId);
+      const card =
+        !hasAnalysisCard && prod
+          ? artifactCardMessage(
+              "analysis",
+              analystReportFor(prod).headline,
+              "Full report · Markdown",
+              analystReportFor(prod).reportMd,
+            )
+          : null;
+      const tail = [card, intro].filter(Boolean) as SpotMessage[];
       return {
-        workflow: { ...s.workflow, ready: true },
-        thread: intro ? [...updatedThread, intro] : updatedThread,
+        workflow: { ...wf, ready: true },
+        thread: [...settled, ...tail],
       };
     });
-  }, tc?.delayMs ?? 3400);
+  }, THINKING_WARMUP_MS + GAP * thinking.length);
+}
+
+/** A Spot message carrying a single artifact card — the proactive way
+ *  Spot surfaces a saved artefact. Clicking Open in the renderer calls
+ *  openCanvasFile(file). Carries no gate (P11: gates stay separate). */
+function artifactCardMessage(
+  file: CanvasFile,
+  title: string,
+  subtitle: string,
+  markdown?: string,
+): SpotMessage {
+  return { role: "spot", parts: [{ type: "artifact", file, title, subtitle, markdown }] };
+}
+
+type SpotSet = (
+  fn: (s: PanelState) => Partial<PanelState> | PanelState,
+) => void;
+
+/** Flip the currently-running thought (`doneId`) to done and append the next
+ *  parts to the LAST spot message — the one holding Spot's thinking trace.
+ *  Guarded: if that thought isn't running on the last message (the flow was
+ *  replaced before the timer fired), the thread is returned untouched so a
+ *  stale timer can't graft an answer onto an unrelated thread. */
+function settleThought(
+  thread: SpotMessage[],
+  doneId: string,
+  append: SpotPart[],
+): SpotMessage[] {
+  const lastIdx = thread.length - 1;
+  const last = thread[lastIdx];
+  if (!last || last.role !== "spot") return thread;
+  const running = last.parts.some(
+    (p) => p.type === "tool-call" && p.id === doneId && p.status === "running",
+  );
+  if (!running) return thread;
+  return thread.map((m, i) => {
+    if (i !== lastIdx || m.role !== "spot") return m;
+    const parts = m.parts.map((p) =>
+      p.type === "tool-call" && p.id === doneId
+        ? { ...p, status: "done" as const }
+        : p,
+    );
+    return { ...m, parts: [...parts, ...append] };
+  });
+}
+
+/** How long Spot sits on a generic "thinking" beat before the structured
+ *  chain of thought begins. Spot doesn't know its reasoning steps up front —
+ *  it has to think first — so every CoT opens with this pause, then the real
+ *  thoughts stream in. */
+const THINKING_WARMUP_MS = 1800;
+
+/** The seed part every chain of thought starts from: a single running
+ *  "thinking" beat. The runners (runSpotThinking / runDiagnosticThinking)
+ *  hold on this for THINKING_WARMUP_MS, then settle it into the first real
+ *  thought. Seeded by every entry point so the warmup is uniform. */
+function warmupThought(): SpotPart {
+  return { type: "tool-call", id: "think-warmup", agent: "Working out the approach", status: "running" };
+}
+
+/** Drive Spot's chain-of-thought after the Analyst hands off: the first
+ *  thought is already seeded as "running"; this reveals the rest one at a
+ *  time, then drops Spot's answer in once the last thought settles. The answer
+ *  text streams in token-by-token (StreamingText); the action CTA in the same
+ *  message is held back by the renderer until that stream finishes, so the
+ *  gate never sits under a half-typed sentence. Pure timed reveal — no tool
+ *  calls. */
+function runSpotThinking(
+  set: SpotSet,
+  thinking: string[],
+  answer: SpotPart[],
+) {
+  const GAP = 980; // ms between thoughts — reads as deliberate, not laggy
+  // Warmup: hold ~2s on the generic "thinking" beat, then reveal the first
+  // real thought. Spot thinks before it knows its reasoning steps.
+  setTimeout(() => {
+    set((s) => ({
+      thread: settleThought(s.thread, "think-warmup", [
+        { type: "tool-call", id: "think-0", agent: thinking[0], status: "running" },
+      ]),
+    }));
+  }, THINKING_WARMUP_MS);
+  for (let i = 1; i < thinking.length; i++) {
+    setTimeout(() => {
+      set((s) => ({
+        thread: settleThought(s.thread, `think-${i - 1}`, [
+          { type: "tool-call", id: `think-${i}`, agent: thinking[i], status: "running" },
+        ]),
+      }));
+    }, THINKING_WARMUP_MS + GAP * i);
+  }
+  setTimeout(() => {
+    set((s) => ({
+      thread: settleThought(s.thread, `think-${thinking.length - 1}`, answer),
+    }));
+  }, THINKING_WARMUP_MS + GAP * thinking.length);
 }
 
 export const useSpotStore = create<PanelState>((set) => ({
@@ -267,10 +457,10 @@ export const useSpotStore = create<PanelState>((set) => ({
   guided: null,
   toast: null,
   workflow: null,
-  canvasOpen: true,
-  canvasFiles: ["memory"],
+  panelFile: null,
   viewHomeOverride: false,
   clickedCtas: new Set<string>(),
+  ctaResolutions: {},
   whatsAppConnected: false,
 
   askSpot: (query, scope) =>
@@ -282,11 +472,10 @@ export const useSpotStore = create<PanelState>((set) => ({
     })),
 
   // Kicks off the launch workflow for an *existing* product. Chat opens
-  // with a single conversational line + a "Memory Reader" tool-call. The
-  // right pane shows a shimmer skeleton. After a beat both reveal — chat
-  // gets a 1-line "memory looks solid" summary + the approval CTA; the
-  // canvas blooms into the full memory view. Mirrors the deep-research
-  // pattern but on existing memory.
+  // with a single conversational line + a "Memory Reader" tool-call.
+  // After a beat, Spot resolves the tool-call and drops an artifact card
+  // in chat; the user can open the memory panel from there. Mirrors the
+  // deep-research pattern but on existing memory.
   startLaunchFlow: (project) => {
     const product = PRODUCTS.find((p) => p.id === project.id);
     const callId = `tc-${Date.now()}`;
@@ -294,7 +483,6 @@ export const useSpotStore = create<PanelState>((set) => ({
     set(() => ({
       open: true,
       maximized: false,
-      canvasOpen: true,
       viewHomeOverride: false,
       clickedCtas: new Set<string>(),
       scope: { kind: "project", label: project.name, target: project.id },
@@ -332,7 +520,7 @@ export const useSpotStore = create<PanelState>((set) => ({
     }));
 
     // After the loader, reveal the canvas + drop a short conversational
-    // line in chat. No findings dump — the user can read the right pane.
+    // line in chat. No findings dump — the artifact card in thread lets the user open the memory panel on demand.
     setTimeout(() => {
       set((s) => {
         if (!s.workflow || s.workflow.kind !== "launch-campaign") return {};
@@ -354,8 +542,8 @@ export const useSpotStore = create<PanelState>((set) => ({
             {
               type: "text",
               text: product
-                ? `Got it. Memory's **${Math.round(product.readiness * 100)}% complete** — ${product.personas.length} personas linked, ${product.memory.length} entries on file. Pulled it up on the right.`
-                : `Pulled what I have onto the right.`,
+                ? `Got it. Memory's **${Math.round(product.readiness * 100)}% complete** — ${product.personas.length} personas linked, ${product.memory.length} entries on file.`
+                : `Here's what I have on file.`,
             },
             {
               type: "choice",
@@ -379,7 +567,14 @@ export const useSpotStore = create<PanelState>((set) => ({
             },
           ],
         };
-        return { workflow: nextWorkflow, thread: [...updatedThread, summary] };
+        return {
+          workflow: nextWorkflow,
+          thread: [
+            ...updatedThread,
+            artifactCardMessage("memory", "Project details", "Memory Spot has on file."),
+            summary,
+          ],
+        };
       });
     }, 4500);
   },
@@ -395,8 +590,6 @@ export const useSpotStore = create<PanelState>((set) => ({
     set(() => ({
       open: true,
       maximized: false,
-      canvasOpen: true,
-      canvasFiles: ["memory"],
       viewHomeOverride: false,
       clickedCtas: new Set<string>(),
       scope: { kind: "workspace", label: "New project" },
@@ -651,7 +844,7 @@ export const useSpotStore = create<PanelState>((set) => ({
     // Single phase: the Deep Research Agent crawls, parses, AND writes
     // the memory itself. No separate "Memory Builder" tool-call —
     // it's the same agent doing the work end-to-end. After ~8s the
-    // memory reveals on the right canvas.
+    // memory artifact card appears in the thread.
     const researchCallId = `tc-research-${Date.now()}`;
     const hasFiles = attachedFiles.length > 0;
     // Append (not replace) the thread so any prior turn — the user's
@@ -660,7 +853,6 @@ export const useSpotStore = create<PanelState>((set) => ({
     set((s) => ({
       open: true,
       maximized: false,
-      canvasOpen: true,
       viewHomeOverride: false,
       scope: { kind: "workspace", label: productName },
       pendingQuery: null,
@@ -801,7 +993,7 @@ export const useSpotStore = create<PanelState>((set) => ({
             },
             {
               type: "text",
-              text: `I've drafted what I'd lead with and what to avoid — the right pane shows it. From here you can pull in your existing campaigns to analyse them, or have me draft a fresh execution plan.`,
+              text: `I've drafted what I'd lead with and what to avoid. From here you can pull in your existing campaigns to analyse them, or have me draft a fresh execution plan.`,
             },
             {
               type: "choice",
@@ -825,7 +1017,14 @@ export const useSpotStore = create<PanelState>((set) => ({
             },
           ],
         };
-        return { workflow: nextWorkflow, thread: [...updatedThread, kickoff] };
+        return {
+          workflow: nextWorkflow,
+          thread: [
+            ...updatedThread,
+            artifactCardMessage("memory", "Project details", `Memory built for ${productName}.`),
+            kickoff,
+          ],
+        };
       });
     }, 14000); // Deliberately slower so each loader stage gets to breathe
   },
@@ -833,13 +1032,13 @@ export const useSpotStore = create<PanelState>((set) => ({
   // Diagnostic workflows — Scale, Optimize, Test-Angles. They all share
   // the same shape, so a helper builds the initial state. The chat opens
   // with a "what I'm about to do" line + a running tool-call for the
-  // first step. The right pane shows a loader; once the tool-call
-  // resolves it reveals the analysis canvas + the first step CTA.
+  // first step. Once the tool-call resolves, Spot drops an artifact card
+  // for the analysis and the first step CTA.
   startScaleFlow: (product) => {
     startDiagnostic(set, "scale", product, "scale-analyze", {
       headline: `Scaling ${product.name}.`,
       intro:
-        "Let me pull up what I know about this project first — recent winners, audience headroom, where money's underspent. I'll lay it out on the right, and then we'll talk about goals.",
+        "Let me pull up what I know about this project first — recent winners, audience headroom, where money's underspent. I'll lay it out, and then we'll talk about goals.",
     });
   },
   startOptimizeFlow: (product) => {
@@ -862,38 +1061,41 @@ export const useSpotStore = create<PanelState>((set) => ({
     if (!prod) return;
     const conv = analystReportFor(prod);
     const thread: SpotMessage[] = [
-      // The Analyst Agent kicks off the conversation — opener + collapsible
-      // markdown report.
+      // The Analyst Agent kicks off the conversation — its finding lives in a
+      // container that marks it as the Analyst (not Spot).
       {
         role: "spot",
         parts: [{ type: "analyst-report", productId: product.id }],
       },
-      // Spot reasons through it and lands the recommendation + CTA.
+      // Spot takes over: it reads the report and thinks before answering.
+      // Seed the warmup beat; runSpotThinking holds ~2s then streams the
+      // chain of thought and drops in the reasoning + Accept gate.
       {
         role: "spot",
-        parts: [
-          { type: "text", text: conv.reasoning },
-          {
-            type: "analyst-cta",
-            flow: conv.flow,
-            productId: product.id,
-            productName: product.name,
-            label: conv.action,
-          },
-        ],
+        parts: [warmupThought()],
       },
     ];
+    // The answer Spot lands on once it's done thinking.
+    runSpotThinking(set, conv.thinking, [
+      { type: "text", text: conv.reasoning },
+      {
+        type: "analyst-cta",
+        flow: conv.flow,
+        productId: product.id,
+        productName: product.name,
+        label: conv.action,
+      },
+    ]);
     set(() => ({
       open: true,
       maximized: false,
-      // The analysis renders as a dark markdown file in the right panel;
-      // the conversation (opener → reasoning → CTA) lives in the chat.
-      canvasOpen: true,
-      canvasFiles: ["analysis"],
       viewHomeOverride: false,
       clickedCtas: new Set<string>(),
       scope: { kind: "project", label: product.name, target: product.id },
       pendingQuery: null,
+      // Open the report in the Analysis panel by default — the opener says
+      // "full report's on the right", so the canvas should already be there.
+      panelFile: "analysis",
       workflow: {
         kind: "analyst-review",
         step: "campaign-dive",
@@ -907,6 +1109,64 @@ export const useSpotStore = create<PanelState>((set) => ({
     }));
   },
 
+  rejectRecommendation: ({ productName }) => {
+    // Reject mirrors Accept: same continuous session, same think → chain of
+    // thought → next thing rhythm. Spot acknowledges the pass, reasons through
+    // it, then leaves it open for the user to say what they want next.
+    const thinking = [
+      "Noting you've passed on this plan",
+      "Setting the recommendation aside",
+      "Leaving the campaign exactly where it is",
+    ];
+    const answer: SpotPart[] = [
+      {
+        type: "text",
+        text:
+          `No problem, I'll leave **${productName}** exactly as it is. Nothing's changed.\n\n` +
+          `Tell me what you have in mind and we'll take it from there.`,
+      },
+    ];
+    set((s) => ({
+      open: true,
+      thread: [
+        ...s.thread,
+        {
+          role: "spot",
+          parts: [warmupThought()],
+        },
+      ],
+    }));
+    runSpotThinking(set, thinking, answer);
+  },
+
+  rejectStep: () => {
+    const thinking = [
+      "Noting you'd rather not move ahead just yet",
+      "Holding everything exactly where it is",
+      "Thinking about what you'd want instead",
+    ];
+    const answer: SpotPart[] = [
+      {
+        type: "text",
+        text:
+          "No problem, I'll hold here. Nothing's moved.\n\n" +
+          "Tell me what you'd like to change, or we can pick this back up whenever you're ready.",
+      },
+    ];
+    set((s) => ({
+      open: true,
+      thread: [
+        ...s.thread,
+        { role: "user", text: "Hold on — not yet." },
+        {
+          role: "spot",
+          parts: [warmupThought()],
+        },
+      ],
+    }));
+    runSpotThinking(set, thinking, answer);
+  },
+
   startCampaignDive: (entity) => {
     // Open the chat + canvas split-screen with the campaign in focus.
     // The chat seeds with a short framing message so the user can start
@@ -914,7 +1174,6 @@ export const useSpotStore = create<PanelState>((set) => ({
     set(() => ({
       open: true,
       maximized: false,
-      canvasOpen: true,
       viewHomeOverride: false,
       scope: {
         kind: "campaign",
@@ -940,7 +1199,7 @@ export const useSpotStore = create<PanelState>((set) => ({
           parts: [
             {
               type: "text",
-              text: `Looking at **${entity.name}** on the right. Ask me anything — why a metric moved, whether to pause, what to scale — or use the quick actions on the canvas.`,
+              text: `Pulling up **${entity.name}** now. Ask me anything — why a metric moved, whether to pause, what to scale — or use the quick actions on the canvas.`,
             },
           ],
         },
@@ -952,12 +1211,23 @@ export const useSpotStore = create<PanelState>((set) => ({
     set((s) => {
       if (!s.workflow) return {};
       const upcoming = forcedNext ?? nextStepFor(s.workflow.kind, s.workflow.step);
-      const tc = STEP_TOOL_CALL[upcoming];
+      // The terminal `done` step carries a legacy launch tool-call
+      // ("deploy.push · pushing to Meta + WhatsApp…"). Diagnostic flows
+      // (scale / optimize / test-angles) already deployed at their *-live
+      // step, so re-running a Meta+WhatsApp push on `done` reads as a
+      // second, incoherent deploy. Suppress it for diagnostic kinds — the
+      // done intro lands synchronously instead.
+      const isDiagnostic =
+        s.workflow.kind === "scale" ||
+        s.workflow.kind === "optimize" ||
+        s.workflow.kind === "test-angles";
+      const tc =
+        upcoming === "done" && isDiagnostic ? undefined : STEP_TOOL_CALL[upcoming];
       const callId = `tc-${Date.now()}`;
-      // Flip the workflow step IMMEDIATELY so the right pane swaps to
-      // the *next* step's canvas (which renders a loader while the
-      // tool-call narrates in chat). Then after the fake delay, flip
-      // the tool-call to done + append the step's intro message.
+      // Flip the workflow step IMMEDIATELY so the workflow canvas advances
+      // to the next step (which renders a loader while the tool-call
+      // narrates in chat). Then after the fake delay, flip the
+      // tool-call to done + append the step's intro message.
       const appended: SpotMessage[] = [];
       if (narration) {
         appended.push({ role: "spot", parts: [{ type: "text", text: narration }] });
@@ -1036,7 +1306,58 @@ export const useSpotStore = create<PanelState>((set) => ({
                 ),
               };
             });
-            const finalThread = intro ? [...updatedThread, intro] : updatedThread;
+            // When Spot finishes writing the execution plan, surface it as a
+            // floating artifact card right after the intro — the spinner that
+            // just resolved (spot.plan · "folding your picks into the
+            // execution plan…") was the create-the-document CoT; the card is
+            // the saved result, downloadable as plan.md and click-to-open.
+            const planSteps = ["scale-plan", "opt-plan", "ang-plan"];
+            const isPlanStep = planSteps.includes(upcoming);
+            // The plan.md document must match the plan the canvas renders
+            // for THIS diagnostic flow (scale / optimize / test-angles) —
+            // not the generic launch build. Build it from the same
+            // WorkflowPlan the PlanStep canvas reads.
+            const planMd =
+              isPlanStep &&
+              (s2.workflow.kind === "scale" ||
+                s2.workflow.kind === "optimize" ||
+                s2.workflow.kind === "test-angles")
+                ? planMarkdownFor(s2.workflow.kind, s2.workflow.productName)
+                : undefined;
+            const planCard: SpotMessage | null = isPlanStep
+              ? artifactCardMessage(
+                  "plan",
+                  "Execution plan",
+                  "Full plan · Markdown",
+                  planMd,
+                )
+              : null;
+            // Plan steps: the intro message bundles [text, step-cta]. The
+            // user wants the Execution plan card to sit ABOVE the "Put the
+            // plan live" CTA, so split the intro — text first, then the
+            // plan card, then the step-cta — to land the chat order
+            // [intro text] → [Execution plan card] → [Put the plan live CTA].
+            let finalThread: SpotMessage[];
+            if (isPlanStep && intro && intro.role === "spot" && planCard) {
+              const textParts = intro.parts.filter((p) => p.type !== "step-cta");
+              const ctaParts = intro.parts.filter((p) => p.type === "step-cta");
+              const introText: SpotMessage[] = textParts.length
+                ? [{ role: "spot", parts: textParts }]
+                : [];
+              const introCta: SpotMessage[] = ctaParts.length
+                ? [{ role: "spot", parts: ctaParts }]
+                : [];
+              finalThread = [
+                ...updatedThread,
+                ...introText,
+                planCard,
+                ...introCta,
+              ];
+            } else {
+              finalThread = intro
+                ? [...updatedThread, intro, ...(planCard ? [planCard] : [])]
+                : [...updatedThread, ...(planCard ? [planCard] : [])];
+            }
             // Diagnostic plan/live steps gate canvas reveal on `ready`.
             // When the tool-call resolves we flip ready=true so the
             // canvas blooms into the plan / live state.
@@ -1044,7 +1365,13 @@ export const useSpotStore = create<PanelState>((set) => ({
               s2.workflow.kind !== "launch-campaign"
                 ? { ...s2.workflow, ready: true }
                 : s2.workflow;
-            return { thread: finalThread, workflow };
+            // When the plan card is created, force the right panel to open
+            // the plan REGARDLESS of what file was open — the user wants to
+            // see the plan they're about to approve without an extra click.
+            const panelPatch: Partial<PanelState> = isPlanStep
+              ? { panelFile: "plan" }
+              : {};
+            return { thread: finalThread, workflow, ...panelPatch };
           });
 
           // launch-building auto-advances to launch-review once the
@@ -1062,6 +1389,14 @@ export const useSpotStore = create<PanelState>((set) => ({
               }
             }, 600);
           }
+
+          // Diagnostic *-live step: once the deploy.push tool-call resolves
+          // and the live intro has landed, swap the right panel from plan.md
+          // to the live-execution canvas and kick off the ticking checklist.
+          const liveSteps = ["scale-live", "opt-live", "ang-live"];
+          if (liveSteps.includes(upcoming)) {
+            useSpotStore.getState().startLiveExecution();
+          }
         }, tc.delayMs);
         return {
           workflow: nextWorkflow,
@@ -1075,6 +1410,62 @@ export const useSpotStore = create<PanelState>((set) => ({
       if (intro) appended.push(intro);
       return { workflow: nextWorkflow, thread: [...s.thread, ...appended] };
     }),
+
+  startLiveExecution: () => {
+    const s = useSpotStore.getState();
+    const wf = s.workflow;
+    if (
+      !wf ||
+      (wf.kind !== "scale" && wf.kind !== "optimize" && wf.kind !== "test-angles")
+    ) {
+      return;
+    }
+    // Seed the checklist (all pending) + swap the panel to the live canvas.
+    const moves = executionMovesFor(wf.kind);
+    const isDiag = (w: SpotWorkflow | null): w is DiagnosticWorkflow =>
+      !!w && (w.kind === "scale" || w.kind === "optimize" || w.kind === "test-angles");
+    set((st) => {
+      if (!isDiag(st.workflow)) return {};
+      return {
+        workflow: { ...st.workflow, executionMoves: moves, executionDone: false },
+        panelFile: "execution",
+      };
+    });
+
+    // Tick the moves off one at a time: mark running, then done, on an
+    // interval, so the user watches the plan execute live. ~1.4s per move.
+    const perMoveMs = 1400;
+    const runDelayMs = 450;
+    moves.forEach((_, i) => {
+      // running
+      setTimeout(() => {
+        useSpotStore.setState((st) => {
+          if (!isDiag(st.workflow)) return {};
+          const cur = st.workflow.executionMoves;
+          if (!cur) return {};
+          const next = cur.map((m, j) =>
+            j === i ? { ...m, status: "running" as const } : m,
+          );
+          return { workflow: { ...st.workflow, executionMoves: next } };
+        });
+      }, perMoveMs * i + runDelayMs);
+      // done
+      setTimeout(() => {
+        useSpotStore.setState((st) => {
+          if (!isDiag(st.workflow)) return {};
+          const cur = st.workflow.executionMoves;
+          if (!cur) return {};
+          const next = cur.map((m, j) =>
+            j === i ? { ...m, status: "done" as const } : m,
+          );
+          const allDone = next.every((m) => m.status === "done");
+          return {
+            workflow: { ...st.workflow, executionMoves: next, executionDone: allDone },
+          };
+        });
+      }, perMoveMs * (i + 1));
+    });
+  },
 
   startImportCampaigns: () =>
     set((s) => {
@@ -1090,7 +1481,6 @@ export const useSpotStore = create<PanelState>((set) => ({
         ],
       };
       return {
-        canvasOpen: true,
         workflow: {
           ...s.workflow,
           // Keep the step on kickoff — the picker lives inline in the chat
@@ -1207,22 +1597,23 @@ export const useSpotStore = create<PanelState>((set) => ({
             { type: "import-report", campaignIds, accountId, productName: w.productName },
           ],
         },
+        // Spot takes over and thinks through the imported set before answering.
         {
           role: "spot",
-          parts: [
-            { type: "text", text: review.reasoning },
-            {
-              type: "analyst-cta",
-              flow: review.flow,
-              productId,
-              productName: w.productName,
-              label: review.action,
-            },
-          ],
+          parts: [warmupThought()],
         },
       ];
+      runSpotThinking(set, review.thinking, [
+        { type: "text", text: review.reasoning },
+        {
+          type: "analyst-cta",
+          flow: review.flow,
+          productId,
+          productName: w.productName,
+          label: review.action,
+        },
+      ]);
       return {
-        canvasOpen: false,
         clickedCtas: new Set<string>(),
         workflow: {
           kind: "analyst-review",
@@ -1315,7 +1706,7 @@ export const useSpotStore = create<PanelState>((set) => ({
   exitWorkflow: () =>
     set({
       workflow: null,
-      canvasOpen: true,
+      panelFile: null,
       viewHomeOverride: false,
       clickedCtas: new Set<string>(),
     }),
@@ -1328,41 +1719,14 @@ export const useSpotStore = create<PanelState>((set) => ({
       return { clickedCtas: next };
     }),
 
-  setCanvasOpen: (open) => set({ canvasOpen: open }),
-  toggleCanvas: () => set((s) => ({ canvasOpen: !s.canvasOpen })),
+  resolveCta: (key, decision) =>
+    set((s) => ({ ctaResolutions: { ...s.ctaResolutions, [key]: decision } })),
 
-  openCanvasFile: (file) =>
-    set((s) => {
-      // Already open → focus by opening the canvas if needed.
-      if (s.canvasFiles.includes(file)) {
-        return { canvasOpen: true };
-      }
-      // 0 panes → open as first.
-      if (s.canvasFiles.length === 0) {
-        return { canvasOpen: true, canvasFiles: [file] };
-      }
-      // 1 pane → add as second (split view).
-      if (s.canvasFiles.length === 1) {
-        return { canvasOpen: true, canvasFiles: [...s.canvasFiles, file] };
-      }
-      // 2 panes → replace the second one (max 2 panes).
-      return { canvasOpen: true, canvasFiles: [s.canvasFiles[0], file] };
-    }),
+  openCanvasFile: (file) => set({ panelFile: file }),
+  closeCanvas: () => set({ panelFile: null }),
 
-  focusCanvasFile: (file) =>
-    set(() => ({ canvasOpen: true, canvasFiles: [file] })),
-
-  closeCanvasFile: (file) =>
-    set((s) => {
-      const next = s.canvasFiles.filter((f) => f !== file);
-      if (next.length === 0) {
-        return { canvasFiles: [], canvasOpen: false };
-      }
-      return { canvasFiles: next };
-    }),
-
-  showHomeView: () => set({ viewHomeOverride: true }),
-  resumeWorkflow: () => set({ viewHomeOverride: false, canvasOpen: true }),
+  showHomeView: () => set({ viewHomeOverride: true, panelFile: null }),
+  resumeWorkflow: () => set({ viewHomeOverride: false }),
 
   connectWhatsApp: () =>
     set((s) => ({
@@ -1377,7 +1741,7 @@ export const useSpotStore = create<PanelState>((set) => ({
               parts: [
                 {
                   type: "text",
-                  text: "Connected your WhatsApp Business account. Click-to-WhatsApp + Outreach WA campaigns are now available on the right.",
+                  text: "Connected your WhatsApp Business account. Click-to-WhatsApp + Outreach WA campaigns are now available.",
                 },
               ],
             },

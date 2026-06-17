@@ -108,6 +108,8 @@ export type ProductMemoryFiles = {
   productName: string;
   /** Markdown content of product-info.md */
   productInfoMd: string;
+  /** Markdown content of personas.md · identity only */
+  personasMd: string;
   /** Markdown content of plan.md */
   planMd: string;
   /** Markdown content of change-history.md · append-only log */
@@ -186,7 +188,50 @@ ${collateral ? `## Attached collateral\n\n${collateral}\n` : ""}
 
 ---
 
-_Memory last updated · ${p.updatedAt} · Readiness ${Math.round(p.readiness * 100)}%_
+_Last updated · ${p.updatedAt}_
+`;
+}
+
+/**
+ * personas.md — identity only. Who each linked persona is, the demographic
+ * anchors, what hurts, and what lands. No performance, no scorecard (that
+ * lives in Active memory). Rendered as a clean markdown file: a per-persona
+ * H2, a one-line description, an attributes table, then pains + what-lands.
+ */
+function buildPersonasMd(p: ProductSummary): string {
+  const linked = PERSONAS.filter((pe) => pe.products.some((x) => x.id === p.id));
+  if (linked.length === 0) {
+    return `# Personas · ${p.name}\n\n_No personas linked to this project yet._\n`;
+  }
+  const statusLabel: Record<string, string> = {
+    active: "Active",
+    researching: "Researching",
+    archived: "Archived",
+  };
+  const sections = linked
+    .map((pe) => {
+      const rows = [
+        "| Field | Detail |",
+        "|-------|--------|",
+        `| Status | ${statusLabel[pe.status] ?? pe.status} |`,
+        ...pe.attributes.map((a) => `| ${a.label} | ${a.value} |`),
+        `| Channels | ${pe.preferredChannels.join(" · ")} |`,
+      ].join("\n");
+      const pains = pe.pain.map((x) => `- ${x}`).join("\n");
+      const lands = pe.desire.map((x) => `- ${x}`).join("\n");
+      return `## ${pe.name}\n\n${pe.description}\n\n${rows}\n\n**Top pains**\n\n${pains}\n\n**What lands**\n\n${lands}`;
+    })
+    .join("\n\n---\n\n");
+
+  return `# Personas · ${p.name}
+
+The people Spot is selling ${p.name} to — identity only. Who they are, what hurts, and what lands. How each persona is performing lives in Active memory.
+
+_${linked.length} persona${linked.length === 1 ? "" : "s"} linked · who Spot targets_
+
+---
+
+${sections}
 `;
 }
 
@@ -560,6 +605,7 @@ export const MEMORY_FILES: ProductMemoryFiles[] = PRODUCTS.map((p) => {
     productId: p.id,
     productName: p.name,
     productInfoMd: buildProductInfoMd(p),
+    personasMd: buildPersonasMd(p),
     planMd: buildPlanMd(p, plan),
     changeHistoryMd: buildChangeHistoryMd(p),
     performance: buildPerformance(p),

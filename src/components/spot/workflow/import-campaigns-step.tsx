@@ -13,7 +13,6 @@ import {
   Check,
   ArrowRight,
   CheckCircle2,
-  Sparkles,
 } from "lucide-react";
 import { useSpotStore } from "@/lib/spot/store";
 import type { LaunchWorkflow } from "@/lib/spot/workflow";
@@ -74,7 +73,7 @@ function AccountPicker() {
   const selectImportAdAccount = useSpotStore((s) => s.selectImportAdAccount);
   return (
     <div className="px-6 py-6 max-w-[860px] mx-auto" style={{ color: "#F5F4EF" }}>
-      <div className="text-[10.5px] uppercase tracking-wider font-semibold mb-1.5" style={{ color: "#C9A86A" }}>
+      <div className="text-[10.5px] uppercase tracking-wider font-semibold mb-1.5" style={{ color: "#9B9B9B" }}>
         Import campaigns
       </div>
       <h1 className="text-[21px] font-semibold tracking-tight leading-[1.15]">
@@ -98,7 +97,7 @@ function AccountCard({ account, onPick }: { account: ImportAdAccount; onPick: ()
     <button
       type="button"
       onClick={onPick}
-      className="group text-left rounded-card p-4 border transition-all bg-[#1A1A18] border-[#262623] hover:border-[#C9A86A]/70 hover:bg-[#1F1F1B]"
+      className="group text-left rounded-card p-4 border transition-all bg-[#1A1A18] border-[#262623] hover:border-[#9B9B9B]/70 hover:bg-[#1F1F1B]"
     >
       <div className="flex items-center justify-between mb-2.5">
         <PlatformBadge platform={account.platform} />
@@ -124,7 +123,7 @@ function AccountCard({ account, onPick }: { account: ImportAdAccount; onPick: ()
           size={14}
           strokeWidth={2}
           className="opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all"
-          style={{ color: "#C9A86A" }}
+          style={{ color: "#9B9B9B" }}
         />
       </div>
     </button>
@@ -229,7 +228,7 @@ function CampaignPicker({
             onClick={confirmImportCampaigns}
             className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-button text-[12px] font-semibold transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
             style={{
-              background: "linear-gradient(135deg, #C9A86A 0%, #E0C083 100%)",
+              background: "linear-gradient(135deg, #9B9B9B 0%, #C7C4BC 100%)",
               color: "#0A0A09",
             }}
           >
@@ -259,7 +258,7 @@ function CampaignRow({
       onClick={onToggle}
       className="w-full flex items-center gap-3 px-3.5 py-2.5 text-left transition-colors"
       style={{
-        background: checked ? "rgba(201,168,106,0.08)" : "transparent",
+        background: checked ? "rgba(155,155,155,0.08)" : "transparent",
         borderTop: first ? undefined : "1px solid #262623",
       }}
     >
@@ -304,7 +303,7 @@ function CheckBox({ checked, indeterminate }: { checked: boolean; indeterminate?
     <span
       className="inline-flex items-center justify-center w-[16px] h-[16px] rounded-[5px] flex-shrink-0 transition-colors"
       style={{
-        background: checked || indeterminate ? "linear-gradient(135deg, #C9A86A 0%, #E0C083 100%)" : "transparent",
+        background: checked || indeterminate ? "linear-gradient(135deg, #9B9B9B 0%, #C7C4BC 100%)" : "transparent",
         border: checked || indeterminate ? "none" : "1.5px solid #4A4A44",
       }}
     >
@@ -354,7 +353,6 @@ function ImportedSummary({ workflow }: { workflow: LaunchWorkflow }) {
       {/* Imported list */}
       <div className="rounded-card overflow-hidden" style={{ border: "1px solid #262623" }}>
         <div className="px-4 py-2.5 flex items-center gap-2" style={{ background: "#15140F", borderBottom: "1px solid #262623" }}>
-          <Sparkles size={11} strokeWidth={1.8} style={{ color: "#C9A86A" }} />
           <span className="text-[10.5px] uppercase tracking-wider font-semibold" style={{ color: "#A8A8A0" }}>
             Imported into memory
           </span>
