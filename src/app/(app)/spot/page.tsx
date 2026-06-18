@@ -116,6 +116,9 @@ export default function SpotPage() {
   const panelOpen = panelFile !== null;
   const viewHomeOverride = useSpotStore((s) => s.viewHomeOverride);
   const showHomeView = useSpotStore((s) => s.showHomeView);
+  // Clears viewHomeOverride — sending a message from the parked home view
+  // must drop the override so the conversation/workflow surface renders.
+  const resumeWorkflow = useSpotStore((s) => s.resumeWorkflow);
 
   const [draft, setDraft] = useState("");
   const [pending, setPending] = useState(false);
@@ -233,6 +236,10 @@ export default function SpotPage() {
       return;
     }
 
+    // Drop the parked-home override so the conversation actually shows.
+    // Without this, sending from the home view appends the message + reply
+    // to the thread but leaves the user staring at the home screen.
+    if (viewHomeOverride) resumeWorkflow();
     setThread((prev) => [...prev, { role: "user", text: t } as SpotMessage]);
     setPending(true);
     setTimeout(() => {
