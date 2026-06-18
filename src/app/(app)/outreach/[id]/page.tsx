@@ -52,7 +52,7 @@ import {
   outreachDailySpendForId,
 } from "@/lib/outreach-data";
 import type { ContactOutcome, AIQualStatus, OutreachContact, OutreachDetail } from "@/lib/outreach-data";
-import { useOutreachDraftStore, hydrateDraftDetail, type OutreachDraftSeed } from "@/lib/outreach-draft-store";
+import { useOutreachDraftStore, hydrateDraftDetail, type OutreachDraftSeed, type OutreachAddedSource } from "@/lib/outreach-draft-store";
 import {
   dailySeriesForOutreach,
   rangeWindowFromPreset,
@@ -878,32 +878,38 @@ const ADD_LEADS_MAX_ROWS_PER_FILE     = 50000;
 // ── AudienceNudgeModal ───────────────────────────────────────────────
 //
 // Greets the user the moment they land on /outreach/[id] after the
-// speedrun create flow. Two CTAs: primary opens the existing
-// AddLeadsModal so the user can upload right away; secondary defers and
-// leaves the outreach in draft. Deliberately small — the page behind it
-// is the real reward, not this dialog.
+// speedrun create flow. One job: get them into Add Leads. The launch
+// timing decision (start now / schedule) belongs to per-source controls
+// later, not here — this dialog is just the bridge from create-success
+// to the upload step.
 function AudienceNudgeModal({
   open,
   outreachName,
-  agentName,
-  onAddNow,
-  onAddLater,
+  onAddLeads,
+  onClose,
 }: {
   open: boolean;
   outreachName: string;
-  agentName: string;
-  onAddNow: () => void;
-  onAddLater: () => void;
+  onAddLeads: () => void;
+  onClose: () => void;
 }) {
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div
         className="absolute inset-0 bg-black/40"
-        onClick={onAddLater}
+        onClick={onClose}
         aria-hidden
       />
       <div className="relative w-full max-w-[440px] bg-white rounded-card shadow-2xl border border-border overflow-hidden">
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close"
+          className="absolute top-3 right-3 inline-flex items-center justify-center w-7 h-7 rounded-button text-text-tertiary hover:text-text-primary hover:bg-surface-page transition-colors"
+        >
+          <X size={14} strokeWidth={1.75} />
+        </button>
         <div className="px-6 pt-6 pb-5">
           <div className="flex items-center gap-2 mb-3">
             <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-[#F0FDF4]">
@@ -913,33 +919,18 @@ function AudienceNudgeModal({
               Outreach created
             </p>
           </div>
-          <h2 className="text-[18px] font-semibold text-text-primary leading-tight mb-1.5">
-            Upload your audience to get dialing
+          <h2 className="text-[18px] font-semibold text-text-primary leading-tight">
+            Outreach <span className="text-text-primary">{outreachName}</span> successfully created
           </h2>
-          <p className="text-[13px] text-text-secondary leading-relaxed">
-            <span className="text-text-primary">{outreachName}</span> is ready
-            with {agentName === "—" ? "an agent" : agentName} on the line.
-            Pick whether calls go out the moment leads are uploaded, or
-            schedule them for a specific time — the upload step is the
-            same either way.
-          </p>
         </div>
-        <div className="px-6 pb-6 flex flex-col gap-2">
+        <div className="px-6 pb-6">
           <button
             type="button"
-            onClick={onAddNow}
-            className="inline-flex items-center justify-center gap-2 h-11 px-5 bg-text-primary text-white text-[13.5px] font-medium rounded-button hover:opacity-90 transition-opacity"
+            onClick={onAddLeads}
+            className="w-full inline-flex items-center justify-center gap-2 h-11 px-5 bg-text-primary text-white text-[13.5px] font-medium rounded-button hover:opacity-90 transition-opacity"
           >
             <Users size={15} strokeWidth={1.75} />
-            Add audience &amp; launch now
-          </button>
-          <button
-            type="button"
-            onClick={onAddLater}
-            className="inline-flex items-center justify-center gap-2 h-10 px-4 text-[12.5px] font-medium text-text-secondary border border-border rounded-button hover:bg-surface-page hover:text-text-primary transition-colors"
-          >
-            <Clock size={13} strokeWidth={1.75} />
-            Add audience &amp; schedule for later
+            Add Leads
           </button>
         </div>
       </div>
@@ -949,236 +940,100 @@ function AudienceNudgeModal({
 
 function AddLeadsModal({
   onClose,
-  existingContacts,
-  defaultStartMode = "immediate",
   onCommit,
 }: {
   onClose: () => void;
-  // Contacts already in *this* outreach — used for duplicate detection so the
-  // modal warns about adding the same lead twice to the same campaign, not
-  // to the workspace as a whole. Different outreaches are allowed to reach
-  // the same person.
-  existingContacts: OutreachContact[];
-  // Pre-selects the scheduling block: "immediate" means start dialing as
-  // soon as the audience is added, "schedule" defers to a chosen date +
-  // time. The audience upload UX is identical either way — only the
-  // scheduling toggle starts in a different position. Driven by the
-  // entry point on the detail page (nudge modal CTAs pass different
-  // defaults so the user lands in the right mode).
-  defaultStartMode?: "immediate" | "schedule";
-  // Fires when the user clicks Launch / Schedule with valid input.
-  // The detail page uses this to patch the draft store so totalContacts,
-  // status, and scheduledFor flow back to the page (funnel + counters
-  // + status badge). Modal closes on the page side after this fires.
+  // Two paths through this modal:
+  //   files       — CSV upload. Detail page tick-simulates the upload.
+  //   manualLeads — instant entry. Detail page writes a queued source
+  //                 straight into addedSources via addInstantSource.
+  // Either way the user lands on the Sources panel with a queued
+  // source they can choose to dial now or schedule for later.
   onCommit?: (result: {
-    totalNew: number;
-    startMode: "immediate" | "schedule";
-    scheduledFor: string | null;
-    sourceNames: string[];
+    files?: { name: string; totalRows: number }[];
+    manualLeads?: { name: string; phone: string }[];
   }) => void;
 }) {
   const [tab, setTab] = useState<"csv" | "manual">("csv");
-  const [csvFiles, setCsvFiles] = useState<CsvFile[]>([]);
-  // Scheduling block — sits above the footer, surfaces a single binary
-  // choice (start now vs schedule). Date defaults to tomorrow at the
-  // configured calling-window start so the user just clicks Schedule
-  // without filling either field if they're fine with that default.
-  const [startMode, setStartMode] = useState<"immediate" | "schedule">(defaultStartMode);
-  const [startDate, setStartDate] = useState<string>(() => {
-    const d = new Date();
-    d.setDate(d.getDate() + 1);
-    return d.toISOString().slice(0, 10);
-  });
-  const [startTime, setStartTime] = useState<string>("09:00");
-  // Inline upload-error feed — populated when the picker rejects files
-  // (too many, oversize, wrong type). Rendered as a red banner the user
-  // dismisses; we don't auto-clear because the user needs to see *why*
-  // their file didn't show up.
-  const [uploadErrors, setUploadErrors] = useState<string[]>([]);
-  const [manualLeads, setManualLeads] = useState<ManualLead[]>([
-    { id: "1", name: "", phone: "" },
-  ]);
-  const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [uploadErrors, setUploadErrors] = useState<string[]>([]);
+  // Manual leads grid — start with three blank rows so the user has
+  // an obvious "fill this in" affordance without an empty pane.
+  const [manualLeads, setManualLeads] = useState<{ id: string; name: string; phone: string }[]>([
+    { id: "m1", name: "", phone: "" },
+    { id: "m2", name: "", phone: "" },
+    { id: "m3", name: "", phone: "" },
+  ]);
 
-  // Download the parsed file as a validated CSV — keeps the user's original
-  // columns and appends a Status column so they can open it in Excel/Numbers
-  // and see exactly which rows we'd skip. Capped at 500 rows because this
-  // is a sanity-check download, not a full export.
-  const downloadValidatedCsv = (file: CsvFile) => {
-    const MAX = 500;
-    const rows = file.allRows.slice(0, MAX);
-    const lines = [
-      [...file.previewHeaders, "Status"].map(csvCell).join(","),
-      ...rows.map(r => [
-        ...r.cells,
-        r.status === "valid" ? "OK" : ROW_STATUS_LABEL[r.status as Exclude<RowStatus, "valid">],
-      ].map(csvCell).join(",")),
-    ];
-    const base = file.name.replace(/\.csv$/i, "");
-    downloadTextFile(`${base}-validated.csv`, lines.join("\n"));
+  const submitFiles = (fileList: FileList | null) => {
+    if (!fileList || fileList.length === 0) return;
+    const files = Array.from(fileList);
+    const errors: string[] = [];
+    const accepted: { name: string; totalRows: number }[] = [];
+    for (const f of files) {
+      const ext = f.name.toLowerCase().split(".").pop() ?? "";
+      if (!["csv", "xlsx", "xls"].includes(ext)) {
+        errors.push(`${f.name} — only CSV / XLSX / XLS files are accepted.`);
+        continue;
+      }
+      if (f.size > 50 * 1024 * 1024) {
+        errors.push(`${f.name} — exceeds the 50 MB limit.`);
+        continue;
+      }
+      const estimatedRows = Math.max(100, Math.min(50_000, Math.floor(f.size / 80)));
+      accepted.push({ name: f.name, totalRows: estimatedRows });
+    }
+    if (errors.length > 0 && accepted.length === 0) {
+      setUploadErrors(errors);
+      return;
+    }
+    onCommit?.({ files: accepted });
+    onClose();
   };
 
-  const handleFiles = async (files: FileList | null) => {
-    if (!files || files.length === 0) return;
-    const errs: string[] = [];
-    const incoming = Array.from(files);
-    const slotsLeft = Math.max(0, ADD_LEADS_MAX_FILES_PER_UPLOAD - csvFiles.length);
-    if (incoming.length > slotsLeft) {
-      errs.push(`Only ${slotsLeft} more file${slotsLeft === 1 ? "" : "s"} can be added in this batch (max ${ADD_LEADS_MAX_FILES_PER_UPLOAD}). Extra files were ignored.`);
+  // Phone validation is intentionally forgiving (10–12 digits, ignoring
+  // separators) — same shape the rest of the product uses. We do NOT
+  // reject country-code prefixes or formatting.
+  const normPhone = (s: string) => s.replace(/\D/g, "");
+  const validManualLeads = manualLeads
+    .map((l) => ({ ...l, name: l.name.trim(), phone: normPhone(l.phone) }))
+    .filter((l) => l.name.length > 0 && l.phone.length >= 10 && l.phone.length <= 12);
+
+  const submitManual = () => {
+    if (validManualLeads.length === 0) {
+      setUploadErrors(["Add at least one row with a name and a 10–12 digit phone number."]);
+      return;
     }
-
-    // Parse synchronously up-front so we can validate row counts and
-    // surface errors immediately, then queue an "uploading" placeholder
-    // per accepted file and animate it to "ready". The parse is instant
-    // in a demo, but instantaneous "Uploaded" reads as fake; the
-    // simulated progress gives the upload visual weight without
-    // misleading the user about what's actually happening.
-    type Job = { id: string; parsed: CsvFile };
-    const jobs: Job[] = [];
-    for (const file of incoming.slice(0, slotsLeft)) {
-      if (!file.name.toLowerCase().endsWith(".csv")) {
-        errs.push(`${file.name} — only .csv files are supported.`);
-        continue;
-      }
-      const text = await file.text();
-      const parsed = parseAndValidateCsv(file.name, text);
-      if (parsed.totalRows > ADD_LEADS_MAX_ROWS_PER_FILE) {
-        errs.push(`${file.name} — ${parsed.totalRows.toLocaleString()} rows exceeds the ${ADD_LEADS_MAX_ROWS_PER_FILE.toLocaleString()}-row limit per file.`);
-        continue;
-      }
-      const id = `f${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-      jobs.push({ id, parsed: { ...parsed, id } });
-    }
-    if (errs.length > 0) setUploadErrors((p) => [...p, ...errs]);
-    if (jobs.length === 0) return;
-
-    // Phase 1 — append "uploading" placeholders so the rows appear
-    // immediately. The placeholder has zeroed counts so the UI knows
-    // to render the "Uploading…" pill + progress bar.
-    const placeholders: CsvFile[] = jobs.map((j) => ({
-      id: j.id,
-      name: j.parsed.name,
-      status: "uploading",
-      progress: 0,
-      totalRows: 0,
-      validRows: 0,
-      invalid: { missingPhone: 0, invalidFormat: 0, duplicatePhone: 0, missingName: 0 },
-      previewHeaders: [],
-      previewRows: [],
-      allRows: [],
-    }));
-    setCsvFiles((p) => [...p, ...placeholders]);
-
-    // Phase 2 — animated progress per file. Staggered per file so a
-    // multi-file drop reads as a queue, then merge in the parsed
-    // counts at the end of each ramp.
-    const TICKS = [15, 40, 70, 95];
-    const TICK_MS = 320;
-    jobs.forEach((job, fileIdx) => {
-      const stagger = fileIdx * 180;
-      TICKS.forEach((pct, t) => {
-        setTimeout(() => {
-          setCsvFiles((p) => p.map((f) => f.id === job.id ? { ...f, progress: pct } : f));
-        }, stagger + (t + 1) * TICK_MS);
-      });
-      setTimeout(() => {
-        setCsvFiles((p) => p.map((f) =>
-          f.id === job.id
-            ? { ...job.parsed, id: job.id, status: "ready", progress: 100 }
-            : f,
-        ));
-      }, stagger + (TICKS.length + 1) * TICK_MS);
+    onCommit?.({
+      manualLeads: validManualLeads.map((l) => ({ name: l.name, phone: l.phone })),
     });
+    onClose();
   };
-
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    setIsDragging(false);
-    handleFiles(e.dataTransfer.files);
-  };
-
-  const removeCsv = (idx: number) => setCsvFiles((p) => p.filter((_, i) => i !== idx));
-
-  const updateManual = (id: string, field: keyof ManualLead, value: string) =>
-    setManualLeads((p) => p.map((l) => (l.id === id ? { ...l, [field]: value } : l)));
 
   const addRow = () =>
-    setManualLeads((p) => [...p, { id: String(Date.now()), name: "", phone: "" }]);
-
+    setManualLeads((p) => [
+      ...p,
+      { id: `m${p.length + 1}-${Date.now()}`, name: "", phone: "" },
+    ]);
+  const updateRow = (id: string, field: "name" | "phone", value: string) =>
+    setManualLeads((p) => p.map((l) => (l.id === id ? { ...l, [field]: value } : l)));
   const removeRow = (id: string) =>
-    setManualLeads((p) => p.filter((l) => l.id !== id));
-
-  // ── Validation against existing contacts + within the form ──────
-  //
-  // For every manual row we determine:
-  //   • phone-dup-existing → the phone number already exists on this
-  //     outreach in the seed data. BLOCKING: same number can't be
-  //     added twice. The user must edit or remove the row.
-  //   • phone-dup-form     → another row in this same form has the
-  //     same phone. BLOCKING too.
-  //   • name-dup-existing  → a contact with this name already exists
-  //     somewhere in the system. WARNING only — different person, same
-  //     name is common; user gets a heads-up but can still proceed.
-  //
-  // Normalisation: strip all non-digits from phones, lowercase + trim
-  // whitespace from names so "98765 43210" and "9876543210" match
-  // and "Rajesh Kumar  " == "rajesh kumar".
-  const normPhone = (s: string) => s.replace(/\D/g, "");
-  const normName  = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
-
-  type RowIssue = {
-    phoneExisting: boolean;
-    phoneInForm:   boolean;
-    nameExisting:  boolean;
-  };
-
-  const existingPhones = new Set(existingContacts.map((c) => normPhone(c.phone)));
-  const existingNames  = new Set(existingContacts.map((c) => normName(c.name)));
-  // Count occurrences of each phone in the form so we flag every
-  // copy of a dup, not just the second one.
-  const formPhoneCount = new Map<string, number>();
-  manualLeads.forEach((l) => {
-    const p = normPhone(l.phone);
-    if (!p) return;
-    formPhoneCount.set(p, (formPhoneCount.get(p) ?? 0) + 1);
-  });
-
-  const validateRow = (lead: ManualLead): RowIssue => {
-    const p = normPhone(lead.phone);
-    const n = normName(lead.name);
-    return {
-      phoneExisting: !!p && existingPhones.has(p),
-      phoneInForm:   !!p && (formPhoneCount.get(p) ?? 0) > 1,
-      nameExisting:  !!n && existingNames.has(n),
-    };
-  };
-  const rowIssues = manualLeads.map(validateRow);
-  const hasBlockingIssue = rowIssues.some((i) => i.phoneExisting || i.phoneInForm);
-
-  const totalValid = csvFiles.reduce((s, f) => s + f.validRows, 0);
-  const totalInvalid = csvFiles.reduce(
-    (s, f) => s + Object.values(f.invalid).reduce((a, b) => a + b, 0),
-    0
-  );
-  const totalNew = totalValid + manualLeads.filter((l) => l.phone.trim()).length;
-
-  // The scheduling block needs to know whether the user has actually
-  // picked both a date and a time before they can submit in "schedule"
-  // mode. Empty fields shouldn't silently fall back to "now".
-  const scheduleReady = startMode === "immediate" || (startDate !== "" && startTime !== "");
+    setManualLeads((p) => (p.length <= 1 ? p : p.filter((l) => l.id !== id)));
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative bg-white rounded-[12px] shadow-xl w-[820px] max-w-[96vw] max-h-[90vh] flex flex-col overflow-hidden">
-
+      <div className="relative bg-white rounded-[12px] shadow-xl w-[600px] max-w-[96vw] max-h-[85vh] flex flex-col overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border flex-shrink-0">
           <div>
             <div className="text-[14px] font-semibold text-text-primary">Add Leads</div>
             <div className="text-[11.5px] text-text-tertiary mt-0.5">
-              Add more leads to this running outreach
+              {tab === "csv"
+                ? "Upload one or more CSVs — processing happens in the background."
+                : "Type leads directly — useful for a handful of contacts."
+              }
             </div>
           </div>
           <button onClick={onClose} className="text-text-tertiary hover:text-text-primary transition-colors">
@@ -1186,583 +1041,188 @@ function AddLeadsModal({
           </button>
         </div>
 
-        {/* Tabs */}
-        <div className="flex items-center border-b border-border px-5 flex-shrink-0">
-          {(["csv", "manual"] as const).map((t) => (
+        {/* Tab strip */}
+        <div className="shrink-0 border-b border-border px-5 flex gap-0">
+          {([
+            { key: "csv", label: "Upload CSV" },
+            { key: "manual", label: "Add manually" },
+          ] as const).map((t) => (
             <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={`px-3 py-2.5 text-[13px] font-medium border-b-2 -mb-px transition-colors duration-150 ${
-                tab === t
-                  ? "border-accent text-accent"
-                  : "border-transparent text-text-secondary hover:text-text-primary"
+              key={t.key}
+              onClick={() => { setTab(t.key); setUploadErrors([]); }}
+              className={`relative px-4 py-2.5 text-[13px] font-medium transition-colors duration-150 ${
+                tab === t.key ? "text-accent" : "text-text-secondary hover:text-text-primary"
               }`}
             >
-              {t === "csv" ? "Upload CSV" : "Add Manually"}
+              {t.label}
+              {tab === t.key && (
+                <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-accent rounded-t" />
+              )}
             </button>
           ))}
         </div>
 
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto px-5 py-5">
-
-          {/* CSV tab — mirrors the Add Audience step from the create
-              wizard so the live-outreach upload flow looks and behaves
-              the same as the first-time setup. Split-design hero card
-              + upload-errors banner + file rows with status pills +
-              aggregate "Will be added / Skipped" readout at the bottom.
-              Per-file scheduling is intentionally omitted here —
-              live-outreach uploads enter the dialing queue immediately,
-              there's no "before launch" to schedule around. */}
-          {tab === "csv" && (
-            <div className="space-y-4">
-              {/* Hidden native file picker */}
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".csv,text/csv"
-                multiple
-                className="hidden"
-                onChange={(e) => {
-                  handleFiles(e.target.files);
-                  e.target.value = "";
-                }}
-              />
-
-              {/* HERO UPLOAD — split design that matches the wizard.
-                  Idle: clean white card with neutral circle icon, big
-                  heading, primary CTA button. Drag-over: dashed accent
-                  border + accent-tinted background. Bottom strip carries
-                  format requirements + sample download as clearly
-                  subordinate metadata. */}
-              <div
-                onClick={() => fileInputRef.current?.click()}
-                onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-                onDragEnter={(e) => { e.preventDefault(); setIsDragging(true); }}
-                onDragLeave={() => setIsDragging(false)}
-                onDrop={handleDrop}
-                className={`relative overflow-hidden cursor-pointer rounded-card transition-all duration-200 ${
-                  isDragging
-                    ? "border-2 border-dashed border-accent bg-accent/5"
-                    : "border border-border bg-white shadow-[0_1px_3px_rgba(15,23,42,0.04)] hover:shadow-[0_8px_24px_-8px_rgba(15,23,42,0.08)] hover:border-text-tertiary"
-                }`}
-              >
-                <div className="relative px-8 pt-9 pb-7 text-center">
-                  <div className="relative inline-flex mb-4">
-                    <div className={`relative inline-flex items-center justify-center w-14 h-14 rounded-full transition-colors ${
-                      isDragging
-                        ? "bg-text-primary text-white shadow-md"
-                        : "bg-surface-page border border-border text-text-secondary"
-                    }`}>
-                      <Upload size={22} strokeWidth={1.75} />
-                    </div>
-                  </div>
-                  <h3 className="text-[17px] font-semibold text-text-primary leading-tight mb-1">
-                    {isDragging ? "Drop your files to upload" : "Upload more leads"}
-                  </h3>
-                  <p className="text-[12.5px] text-text-secondary leading-relaxed max-w-[360px] mx-auto">
-                    Drag CSVs anywhere on this card, or click below to choose.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}
-                    className="inline-flex items-center gap-2 h-10 px-5 mt-4 bg-accent text-white text-[13px] font-medium rounded-button hover:bg-accent-hover transition-colors shadow-sm"
-                  >
-                    <Upload size={14} strokeWidth={2} />
-                    Choose CSV files
-                  </button>
-                </div>
-                <div className="relative border-t border-border-subtle bg-surface-page/70 px-5 py-2.5 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10.5px] text-text-tertiary">
-                    <span className="inline-flex items-center gap-1.5">
-                      <span className="w-1 h-1 rounded-full bg-text-tertiary" />
-                      Name + Phone columns required
+        {/* Body — tab-specific */}
+        {tab === "csv" ? (
+          <div className="px-6 py-6 space-y-3">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".csv,.xlsx,.xls,text/csv"
+              multiple={true}
+              className="hidden"
+              onChange={(e) => { submitFiles(e.target.files); e.target.value = ""; }}
+            />
+            <div
+              onClick={() => fileInputRef.current?.click()}
+              onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+              onDragEnter={(e) => { e.preventDefault(); setIsDragging(true); }}
+              onDragLeave={() => setIsDragging(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setIsDragging(false);
+                submitFiles(e.dataTransfer.files);
+              }}
+              className={`cursor-pointer rounded-card border-2 border-dashed transition-colors duration-150 px-6 py-10 text-center ${
+                isDragging
+                  ? "border-text-primary bg-text-primary/[0.03]"
+                  : "border-border hover:border-text-tertiary bg-white"
+              }`}
+            >
+              <Upload size={22} strokeWidth={1.5} className="mx-auto mb-4 text-text-secondary" />
+              <p className="text-[14px] font-medium text-text-primary mb-1.5">
+                {isDragging ? (
+                  "Drop your files to upload"
+                ) : (
+                  <>
+                    Drop CSVs here or{" "}
+                    <span className="underline underline-offset-2 decoration-text-primary/40">
+                      click to browse
                     </span>
-                    <span className="inline-flex items-center gap-1.5">
-                      <span className="w-1 h-1 rounded-full bg-text-tertiary" />
-                      Up to {ADD_LEADS_MAX_FILES_PER_UPLOAD} files
-                    </span>
-                    <span className="inline-flex items-center gap-1.5">
-                      <span className="w-1 h-1 rounded-full bg-text-tertiary" />
-                      {ADD_LEADS_MAX_ROWS_PER_FILE.toLocaleString()} rows max per file
-                    </span>
-                    <span className="inline-flex items-center gap-1.5">
-                      <span className="w-1 h-1 rounded-full bg-text-tertiary" />
-                      .csv only
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); downloadTextFile("leads-sample.csv", generateSampleCsv()); }}
-                    className="inline-flex items-center gap-1 text-[11px] font-medium text-text-secondary hover:text-accent transition-colors"
-                  >
-                    <Download size={11} strokeWidth={1.75} />
-                    Download sample CSV
-                  </button>
-                </div>
-              </div>
-
-              {/* Upload errors — red banner with dismissible X. Stays
-                  visible until the user dismisses; we don't auto-clear
-                  because the user needs to see *why* a file didn't
-                  appear in the list below. */}
-              {uploadErrors.length > 0 && (
-                <div className="bg-[#FEF2F2] border border-[#FECACA] rounded-card p-3.5">
-                  <div className="flex items-start gap-3">
-                    <AlertCircle
-                      size={15}
-                      strokeWidth={1.75}
-                      className="shrink-0 text-[#DC2626] mt-0.5"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="text-[12px] font-semibold text-[#B91C1C] mb-1">
-                        {uploadErrors.length === 1
-                          ? "Couldn't add that file"
-                          : `Couldn't add ${uploadErrors.length} files`}
-                      </div>
-                      <ul className="space-y-0.5">
-                        {uploadErrors.map((msg, i) => (
-                          <li
-                            key={i}
-                            className="text-[11.5px] text-[#B91C1C] leading-relaxed"
-                          >
-                            {msg}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setUploadErrors([])}
-                      aria-label="Dismiss"
-                      className="shrink-0 inline-flex items-center justify-center w-6 h-6 text-[#B91C1C]/70 hover:text-[#B91C1C] hover:bg-[#FEE2E2] rounded transition-colors"
-                    >
-                      <X size={13} strokeWidth={1.75} />
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Uploaded files — one row per file. Same chrome as the
-                  wizard: icon tile coloured by status, filename + status
-                  pill + row count, prose breakdown of valid vs skipped,
-                  Download CSV + Remove actions on the right. */}
-              {csvFiles.length > 0 && (
-                <div>
-                  <div className="mb-2 text-[10px] font-semibold text-text-tertiary uppercase tracking-[0.5px]">
-                    Uploaded files · {csvFiles.length}
-                  </div>
-                  <div className="space-y-2">
-                    {csvFiles.map((file, idx) => {
-                      const invalidTotal = Object.values(file.invalid).reduce((a, b) => a + b, 0);
-                      const hasErrors = invalidTotal > 0;
-                      const allClean = invalidTotal === 0 && file.totalRows > 0;
-                      const reasonPhrases: string[] = [];
-                      if (file.invalid.missingPhone   > 0) reasonPhrases.push(`${file.invalid.missingPhone} missing phone`);
-                      if (file.invalid.invalidFormat  > 0) reasonPhrases.push(`${file.invalid.invalidFormat} invalid phone`);
-                      if (file.invalid.duplicatePhone > 0) reasonPhrases.push(`${file.invalid.duplicatePhone} duplicate`);
-                      if (file.invalid.missingName    > 0) reasonPhrases.push(`${file.invalid.missingName} missing name`);
-                      const iconCls = hasErrors
-                        ? "bg-[#FEF3C7] text-[#92400E]"
-                        : "bg-[#F0FDF4] text-[#15803D]";
-                      return (
-                        <div
-                          key={idx}
-                          className="bg-white border border-border rounded-card overflow-hidden hover:border-text-tertiary transition-colors"
-                        >
-                          {/* While the file is "uploading" the row reads
-                              as a progress strip — neutral chrome, a
-                              "Uploading…" pill, and a fill bar that ticks
-                              up over ~1.5 s. Once the simulated upload
-                              completes the row flips to the parsed-results
-                              layout below. */}
-                          {file.status === "uploading" ? (
-                            <div className="px-4 py-3 flex items-start gap-4">
-                              <div className="shrink-0 w-10 h-10 rounded-[8px] flex items-center justify-center bg-surface-page text-text-tertiary">
-                                <FileSpreadsheet size={18} strokeWidth={1.5} />
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                                  <div className="text-[13px] text-text-primary truncate" title={file.name}>
-                                    {file.name}
-                                  </div>
-                                  <span className="inline-flex items-center gap-1 text-[10.5px] font-medium px-2 py-0.5 rounded-badge bg-[#EFF6FF] text-[#1D4ED8]">
-                                    <Loader2 size={9} strokeWidth={2.25} className="animate-spin" />
-                                    Uploading…
-                                  </span>
-                                </div>
-                                <div className="h-1 rounded-full bg-border-subtle overflow-hidden">
-                                  <div
-                                    className="h-full bg-accent transition-all duration-300 ease-out"
-                                    style={{ width: `${file.progress ?? 0}%` }}
-                                  />
-                                </div>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => removeCsv(idx)}
-                                className="shrink-0 inline-flex items-center justify-center w-8 h-8 text-text-tertiary hover:text-[#DC2626] hover:bg-surface-page rounded-button transition-colors"
-                                title="Cancel upload"
-                                aria-label={`Cancel ${file.name}`}
-                              >
-                                <X size={14} strokeWidth={1.75} />
-                              </button>
-                            </div>
-                          ) : (
-                            <div className="px-4 py-3 flex items-start gap-4">
-                            <div className={`shrink-0 w-10 h-10 rounded-[8px] flex items-center justify-center ${iconCls}`}>
-                              <FileSpreadsheet size={18} strokeWidth={1.5} />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 mb-1 flex-wrap">
-                                <div className="text-[13px] text-text-primary truncate" title={file.name}>
-                                  {file.name}
-                                </div>
-                                <span className="inline-flex items-center text-[10.5px] font-medium px-2 py-0.5 rounded-badge bg-[#F0FDF4] text-[#15803D]">
-                                  Uploaded
-                                </span>
-                                <span className="text-[10.5px] text-text-tertiary tabular-nums shrink-0">
-                                  {file.totalRows.toLocaleString()} rows
-                                </span>
-                              </div>
-                              <p className="text-[12px] text-text-secondary leading-relaxed">
-                                {allClean ? (
-                                  <>
-                                    All <span className="text-[#15803D]">{file.validRows.toLocaleString()}</span> rows look good — ready to add.
-                                  </>
-                                ) : (
-                                  <>
-                                    <span className="text-[#15803D]">{file.validRows.toLocaleString()} valid</span>
-                                    {hasErrors && (
-                                      <>
-                                        , <span className="text-[#92400E]">{invalidTotal.toLocaleString()} skipped</span>
-                                        {reasonPhrases.length > 0 && (
-                                          <span className="text-text-tertiary"> — {reasonPhrases.join(", ")}</span>
-                                        )}
-                                      </>
-                                    )}
-                                    .
-                                  </>
-                                )}
-                              </p>
-                            </div>
-                            <div className="shrink-0 flex items-center gap-1">
-                              <button
-                                type="button"
-                                onClick={() => downloadValidatedCsv(file)}
-                                title="Download validated CSV"
-                                className="inline-flex items-center gap-1.5 h-8 px-3 text-[11.5px] text-text-secondary hover:text-accent hover:bg-surface-page rounded-button transition-colors"
-                              >
-                                <Download size={12} strokeWidth={1.75} />
-                                Download CSV
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => removeCsv(idx)}
-                                className="inline-flex items-center justify-center w-8 h-8 text-text-tertiary hover:text-[#DC2626] hover:bg-surface-page rounded-button transition-colors"
-                                title="Remove file"
-                                aria-label={`Remove ${file.name}`}
-                              >
-                                <X size={14} strokeWidth={1.75} />
-                              </button>
-                            </div>
-                          </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* Aggregate readout — two big numbers side-by-side
-                      so the user sees the calling audience vs what got
-                      skipped at a glance, then a breakdown of skip
-                      reasons when there are any. Matches the wizard's
-                      "Will be dialled / Skipped" panel; here the label
-                      is "Will be added" since the leads enter an
-                      already-running outreach. */}
-                  {(() => {
-                    const totalValidRows  = csvFiles.reduce((s, f) => s + f.validRows, 0);
-                    const totalRowsParsed = csvFiles.reduce((s, f) => s + f.totalRows, 0);
-                    const skipBreakdown = csvFiles.reduce(
-                      (acc, f) => ({
-                        missingPhone:   acc.missingPhone   + f.invalid.missingPhone,
-                        invalidFormat:  acc.invalidFormat  + f.invalid.invalidFormat,
-                        duplicatePhone: acc.duplicatePhone + f.invalid.duplicatePhone,
-                        missingName:    acc.missingName    + f.invalid.missingName,
-                      }),
-                      { missingPhone: 0, invalidFormat: 0, duplicatePhone: 0, missingName: 0 }
-                    );
-                    const totalSkipped = Object.values(skipBreakdown).reduce((a, b) => a + b, 0);
-                    const skipPhrases: string[] = [];
-                    if (skipBreakdown.missingPhone   > 0) skipPhrases.push(`${skipBreakdown.missingPhone.toLocaleString()} missing phone`);
-                    if (skipBreakdown.invalidFormat  > 0) skipPhrases.push(`${skipBreakdown.invalidFormat.toLocaleString()} invalid phone`);
-                    if (skipBreakdown.duplicatePhone > 0) skipPhrases.push(`${skipBreakdown.duplicatePhone.toLocaleString()} duplicate`);
-                    if (skipBreakdown.missingName    > 0) skipPhrases.push(`${skipBreakdown.missingName.toLocaleString()} missing name`);
-
-                    return (
-                      <div className="mt-4 bg-white border border-border rounded-card overflow-hidden">
-                        <div className="grid grid-cols-2 divide-x divide-border-subtle">
-                          <div className="px-5 py-4">
-                            <div className="flex items-center gap-1.5 text-[10px] font-medium text-text-tertiary uppercase tracking-[0.6px] mb-1.5">
-                              <Phone size={11} strokeWidth={1.75} />
-                              Will be added
-                            </div>
-                            <div className="flex items-baseline gap-2">
-                              <div className="text-[28px] font-semibold text-text-primary leading-none tabular-nums">
-                                {totalValidRows.toLocaleString()}
-                              </div>
-                              <div className="text-[12px] text-text-secondary">
-                                lead{totalValidRows === 1 ? "" : "s"}
-                              </div>
-                            </div>
-                            <div className="text-[11px] text-text-tertiary mt-1.5">
-                              Across {csvFiles.length} file{csvFiles.length === 1 ? "" : "s"} · {totalRowsParsed.toLocaleString()} rows scanned
-                            </div>
-                          </div>
-                          <div className="px-5 py-4">
-                            <div className="flex items-center gap-1.5 text-[10px] font-medium text-text-tertiary uppercase tracking-[0.6px] mb-1.5">
-                              <AlertCircle size={11} strokeWidth={1.75} />
-                              Skipped
-                            </div>
-                            <div className="flex items-baseline gap-2">
-                              <div className={`text-[28px] font-semibold leading-none tabular-nums ${totalSkipped > 0 ? "text-[#92400E]" : "text-text-tertiary"}`}>
-                                {totalSkipped.toLocaleString()}
-                              </div>
-                              <div className="text-[12px] text-text-secondary">
-                                row{totalSkipped === 1 ? "" : "s"}
-                              </div>
-                            </div>
-                            <div className="text-[11px] text-text-tertiary mt-1.5">
-                              {totalSkipped === 0
-                                ? "No skipped rows."
-                                : skipPhrases.join(", ")}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })()}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Manual tab */}
-          {tab === "manual" && (
-            <div className="space-y-3">
-              <p className="text-[12px] text-text-secondary">
-                Add leads directly with their name and phone number.
+                  </>
+                )}
               </p>
-              <div className="space-y-2">
-                <div className="grid grid-cols-[1fr_1fr_32px] gap-2 px-1">
-                  <span className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wider">Name</span>
-                  <span className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wider">Phone</span>
-                  <span />
-                </div>
-                {manualLeads.map((lead, idx) => {
-                  const issue       = rowIssues[idx];
-                  const phoneBlock  = issue.phoneExisting || issue.phoneInForm;
-                  const phoneBorder = phoneBlock ? "border-[#DC2626] focus-within:border-[#DC2626]" : "";
-                  const nameBorder  = issue.nameExisting ? "border-[#D97706] focus-within:border-[#D97706]" : "";
-                  return (
-                    <div key={lead.id}>
-                      <div className="grid grid-cols-[1fr_1fr_32px] gap-2">
-                        <input
-                          type="text"
-                          value={lead.name}
-                          onChange={(e) => updateManual(lead.id, "name", e.target.value)}
-                          placeholder="Full name"
-                          className={`h-9 px-3 text-[12.5px] border rounded-input bg-white text-text-primary focus:outline-none focus:border-accent transition-colors placeholder:text-text-tertiary ${nameBorder || "border-border"}`}
-                        />
-                        <div className={`rounded-input border ${phoneBorder || "border-border"} transition-colors`}>
-                          <PhoneInput
-                            value={lead.phone}
-                            onChange={(v) => updateManual(lead.id, "phone", v)}
-                            placeholder="98765 43210"
-                          />
-                        </div>
-                        <button
-                          onClick={() => removeRow(lead.id)}
-                          disabled={manualLeads.length === 1}
-                          className="h-9 w-8 flex items-center justify-center text-text-tertiary hover:text-text-primary disabled:opacity-30 transition-colors"
-                        >
-                          <X size={13} strokeWidth={1.5} />
-                        </button>
-                      </div>
-                      {/* Per-row validation notes. Phone dupes are
-                          BLOCKING (red, prevents Add); name dupes are
-                          ADVISORY (amber, can proceed). */}
-                      {(phoneBlock || issue.nameExisting) && (
-                        <div className="mt-1 flex flex-col gap-0.5 px-0.5">
-                          {issue.phoneExisting && (
-                            <p className="text-[10.5px] text-[#B91C1C] inline-flex items-center gap-1">
-                              <AlertCircle size={10} strokeWidth={2} />
-                              This phone number is already in this outreach. Edit or remove the row to continue.
-                            </p>
-                          )}
-                          {issue.phoneInForm && !issue.phoneExisting && (
-                            <p className="text-[10.5px] text-[#B91C1C] inline-flex items-center gap-1">
-                              <AlertCircle size={10} strokeWidth={2} />
-                              Same phone number used in another row above.
-                            </p>
-                          )}
-                          {issue.nameExisting && !phoneBlock && (
-                            <p className="text-[10.5px] text-[#92400E] inline-flex items-center gap-1">
-                              <Info size={10} strokeWidth={2} />
-                              A lead with this name already exists — confirm it's a different person.
-                            </p>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-              <button onClick={addRow} className="inline-flex items-center gap-1.5 text-[12.5px] text-accent font-medium hover:underline">
-                <Plus size={13} strokeWidth={2.5} />
-                Add row
+              <p className="text-[12px] text-text-tertiary">
+                One or more files · CSV, XLSX, XLS up to 50 MB · Name + Phone columns required
+              </p>
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); downloadTextFile("leads-sample.csv", generateSampleCsv()); }}
+                className="inline-flex items-center gap-1.5 mt-5 text-[12px] font-medium text-text-secondary hover:text-text-primary transition-colors underline underline-offset-2 decoration-text-tertiary/50"
+              >
+                <Download size={12} strokeWidth={1.75} />
+                Download sample CSV
               </button>
             </div>
-          )}
-        </div>
 
-        {/* Scheduling — binary toggle between "start dialing now" and
-            "schedule for a specific date + time". Sits above the footer
-            so the user makes this choice deliberately before submitting.
-            Both branches share the same audience upload above; only the
-            dialing-start moment differs. Gated on totalNew > 0: choosing
-            a schedule before any leads exist is meaningless, so we don't
-            show the picker until there's something to dial. */}
-        {totalNew > 0 && (
-        <div className="px-5 py-4 border-t border-border flex-shrink-0 bg-surface-page/40">
-          <div className="flex items-start gap-4">
-            <label
-              className={`flex-1 flex items-start gap-2.5 p-3 border rounded-card cursor-pointer transition-colors ${
-                startMode === "immediate"
-                  ? "border-text-primary bg-white"
-                  : "border-border bg-white hover:border-text-tertiary"
-              }`}
-            >
-              <input
-                type="radio"
-                name="addleads-schedule"
-                checked={startMode === "immediate"}
-                onChange={() => setStartMode("immediate")}
-                className="mt-0.5 accent-text-primary"
-              />
-              <div className="min-w-0">
-                <p className="text-[12.5px] font-medium text-text-primary leading-tight">
-                  Launch now
-                </p>
-                <p className="text-[11px] text-text-tertiary mt-0.5 leading-snug">
-                  Start dialing as soon as the audience is added. Calls go out within the standard window.
-                </p>
+            {uploadErrors.length > 0 && (
+              <div className="rounded-card bg-[#FEF2F2] border border-[#FECACA] px-4 py-3 flex items-start gap-2">
+                <AlertCircle size={14} strokeWidth={1.75} className="text-[#B91C1C] mt-0.5 shrink-0" />
+                <div className="flex-1 min-w-0 space-y-0.5">
+                  {uploadErrors.map((e, i) => (
+                    <p key={i} className="text-[12px] text-[#B91C1C]">{e}</p>
+                  ))}
+                </div>
+                <button
+                  onClick={() => setUploadErrors([])}
+                  className="text-[#B91C1C]/70 hover:text-[#B91C1C] shrink-0"
+                  aria-label="Dismiss"
+                >
+                  <X size={12} strokeWidth={1.75} />
+                </button>
               </div>
-            </label>
-            <label
-              className={`flex-1 flex items-start gap-2.5 p-3 border rounded-card cursor-pointer transition-colors ${
-                startMode === "schedule"
-                  ? "border-text-primary bg-white"
-                  : "border-border bg-white hover:border-text-tertiary"
-              }`}
-            >
-              <input
-                type="radio"
-                name="addleads-schedule"
-                checked={startMode === "schedule"}
-                onChange={() => setStartMode("schedule")}
-                className="mt-0.5 accent-text-primary"
-              />
-              <div className="min-w-0 flex-1">
-                <p className="text-[12.5px] font-medium text-text-primary leading-tight">
-                  Schedule for later
-                </p>
-                <p className="text-[11px] text-text-tertiary mt-0.5 leading-snug">
-                  Pick a date and time to start dialing. Audience uploads now; calls wait.
-                </p>
-                {startMode === "schedule" && (
-                  <div className="mt-2.5 flex items-center gap-2">
-                    <input
-                      type="date"
-                      value={startDate}
-                      min={new Date().toISOString().slice(0, 10)}
-                      onChange={(e) => setStartDate(e.target.value)}
-                      className="h-8 px-2 text-[12px] border border-border rounded-input bg-white"
-                    />
-                    <span className="text-[11px] text-text-tertiary">at</span>
-                    <input
-                      type="time"
-                      value={startTime}
-                      onChange={(e) => setStartTime(e.target.value)}
-                      className="h-8 px-2 text-[12px] border border-border rounded-input bg-white"
-                    />
-                  </div>
-                )}
-              </div>
-            </label>
-          </div>
-        </div>
-
-        )}
-
-        {/* Footer — count left, actions right. The cost line was removed
-            because it framed adding leads as a "contact extraction" charge,
-            which is the wrong product for outreach: dialing is billed per
-            connected minute, not per lead added. */}
-        <div className="flex items-center justify-between px-5 py-4 border-t border-border flex-shrink-0">
-          <div className="text-[12px] text-text-secondary flex flex-col gap-0.5">
-            <span>
-              {totalNew > 0 ? (
-                <>
-                  <span className="font-medium text-text-primary">{totalNew.toLocaleString()} lead{totalNew !== 1 ? "s" : ""}</span>{" "}
-                  ready to call
-                  {totalInvalid > 0 && (
-                    <span className="text-text-tertiary">
-                      {" "}· <span className="text-[#DC2626]">{totalInvalid} skipped</span>
-                    </span>
-                  )}
-                </>
-              ) : (
-                "No leads added yet"
-              )}
-            </span>
-            {hasBlockingIssue && (
-              <span className="text-[11px] text-[#B91C1C] inline-flex items-center gap-1 mt-0.5">
-                <AlertCircle size={10} strokeWidth={2} />
-                Resolve duplicate phone numbers before adding.
-              </span>
             )}
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={onClose}
-              className="h-9 px-4 text-[13px] font-medium text-text-secondary border border-border rounded-button bg-white hover:bg-surface-page transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              disabled={totalNew === 0 || hasBlockingIssue || !scheduleReady}
-              onClick={() => {
-                // Fire the commit hook with what the page needs to
-                // patch the draft: lead count, schedule choice, file
-                // names (for the Sources tab). Then close.
-                const scheduledFor = startMode === "schedule"
-                  ? `${startDate}T${startTime}`
-                  : null;
-                const sourceNames = csvFiles
-                  .filter((f) => f.status === "ready")
-                  .map((f) => f.file.name);
-                onCommit?.({ totalNew, startMode, scheduledFor, sourceNames });
-                onClose();
-              }}
-              className="h-9 px-4 text-[13px] font-medium text-white bg-text-primary rounded-button hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
-            >
-              {startMode === "schedule"
-                ? `Schedule ${totalNew > 0 ? `${totalNew} lead${totalNew !== 1 ? "s" : ""}` : "leads"}`
-                : `Launch ${totalNew > 0 ? `${totalNew} lead${totalNew !== 1 ? "s" : ""}` : "leads"}`}
-            </button>
-          </div>
-        </div>
+        ) : (
+          // Manual tab — name + phone grid, with Add row + footer commit.
+          <>
+            <div className="px-5 py-4 flex-1 overflow-y-auto">
+              <div className="grid grid-cols-[1fr_1fr_auto] gap-2 items-center mb-1">
+                <span className="text-[11px] font-medium text-text-tertiary uppercase tracking-[0.5px]">Name</span>
+                <span className="text-[11px] font-medium text-text-tertiary uppercase tracking-[0.5px]">Phone</span>
+                <span />
+              </div>
+              <div className="space-y-2">
+                {manualLeads.map((row) => (
+                  <div key={row.id} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-center">
+                    <input
+                      type="text"
+                      value={row.name}
+                      onChange={(e) => updateRow(row.id, "name", e.target.value)}
+                      placeholder="e.g. Aman Verma"
+                      className="h-9 px-3 text-[13px] border border-border rounded-input bg-white text-text-primary focus:outline-none focus:border-text-primary transition-colors placeholder:text-text-tertiary"
+                    />
+                    <input
+                      type="tel"
+                      value={row.phone}
+                      onChange={(e) => updateRow(row.id, "phone", e.target.value)}
+                      placeholder="98765 43210"
+                      className="h-9 px-3 text-[13px] border border-border rounded-input bg-white text-text-primary focus:outline-none focus:border-text-primary transition-colors placeholder:text-text-tertiary tabular-nums"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeRow(row.id)}
+                      disabled={manualLeads.length === 1}
+                      className="p-2 text-text-tertiary hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                      aria-label="Remove row"
+                    >
+                      <X size={14} strokeWidth={1.5} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={addRow}
+                className="mt-3 inline-flex items-center gap-1.5 text-[12px] font-medium text-text-secondary hover:text-text-primary transition-colors"
+              >
+                + Add another row
+              </button>
+
+              {uploadErrors.length > 0 && (
+                <div className="mt-4 rounded-card bg-[#FEF2F2] border border-[#FECACA] px-4 py-3 flex items-start gap-2">
+                  <AlertCircle size={14} strokeWidth={1.75} className="text-[#B91C1C] mt-0.5 shrink-0" />
+                  <div className="flex-1 min-w-0 space-y-0.5">
+                    {uploadErrors.map((e, i) => (
+                      <p key={i} className="text-[12px] text-[#B91C1C]">{e}</p>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => setUploadErrors([])}
+                    className="text-[#B91C1C]/70 hover:text-[#B91C1C] shrink-0"
+                    aria-label="Dismiss"
+                  >
+                    <X size={12} strokeWidth={1.75} />
+                  </button>
+                </div>
+              )}
+            </div>
+            {/* Footer commit — count of valid rows live, so the user
+                sees exactly what they'll add. */}
+            <div className="shrink-0 flex items-center justify-between px-5 py-3 border-t border-border bg-surface-page/40">
+              <span className="text-[12px] text-text-tertiary tabular-nums">
+                {validManualLeads.length} valid row{validManualLeads.length === 1 ? "" : "s"} of {manualLeads.length}
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="inline-flex items-center h-9 px-3 text-[12.5px] text-text-secondary hover:text-text-primary transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={submitManual}
+                  disabled={validManualLeads.length === 0}
+                  className="inline-flex items-center gap-1.5 h-9 px-4 bg-accent text-white text-[12.5px] font-medium rounded-button hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  Add {validManualLeads.length || ""} lead{validManualLeads.length === 1 ? "" : "s"}
+                </button>
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -2796,6 +2256,299 @@ const VERIFIED_OPTS: { id: "yes" | "no"; label: string }[] = [
   { id: "no",  label: "No" },
 ];
 
+// ── Uploaded sources panel ────────────────────────────────────────────────
+//
+// One unified card layout renders every uploaded CSV (or manual entry)
+// across its entire lifecycle. The shape of the row never changes; only
+// the contents of the meta line + the right-hand action shift between
+// states. This means processing and ready states share the same visual
+// rhythm, instead of a separate blue "Uploading…" banner that looks
+// disconnected from where the source ends up living afterward.
+//
+// States and what each row shows:
+//   processing → "Processing N%" meta + inline progress bar; no action
+//                button (the row is locked while the file is parsed)
+//   queued     → "X valid · Y invalid" meta; Start calling button on
+//                the right (the only post-processing decision the user
+//                makes from this surface — Schedule lives elsewhere)
+//   dialing    → "Dialing" pulse pill; Pause button
+//   paused     → "Paused" badge; Resume button
+//
+// Used in two places: inline on the detail page (always-visible panel
+// when sources exist) and inside the SourcesModal triggered by the
+// header button. Same component, same layout, same actions either way.
+
+function SourceCard({
+  outreachId,
+  source,
+}: {
+  outreachId: string;
+  source: OutreachAddedSource;
+}) {
+  const setState = useOutreachDraftStore.getState().setSourceDialState;
+  const removeSource = useOutreachDraftStore.getState().removeAddedSource;
+  const isProcessing = source.dialState === "processing";
+  const pct = source.progress ?? 0;
+  // Default validRows to the full leads count when the field is missing.
+  // This keeps stale entries written before the field existed from
+  // rendering as "0 valid" — better to assume everything is valid than
+  // to falsely tell the user nothing can be dialed. New sources get a
+  // real split from computeValidSplit at processing-complete time.
+  const valid = source.validRows ?? source.leads;
+  const invalid = source.invalidRows ?? 0;
+  const hasInvalid = invalid > 0;
+  const canCall = valid > 0;
+
+  const downloadCsv = () => {
+    const safeName = source.name.replace(/\.csv$/i, "").replace(/[^a-z0-9\-_]/gi, "-");
+    downloadTextFile(`${safeName}.csv`, generateSampleCsv());
+  };
+
+  return (
+    <li className="flex items-center gap-4 px-4 py-3">
+      {/* Icon + filename — locked to a fixed width so every row's
+          progress bar starts at the SAME x position. Shrink-only
+          inside that fixed slot via truncate. */}
+      <div className="flex items-center gap-2.5 min-w-0 shrink-0 w-[280px]">
+        <div className="w-9 h-9 rounded-[6px] bg-surface-page border border-border flex items-center justify-center shrink-0">
+          <FileSpreadsheet size={15} strokeWidth={1.5} className="text-text-secondary" />
+        </div>
+        <div className="min-w-0">
+          <div className="text-[13px] font-medium text-text-primary truncate" title={source.name}>
+            {source.name}
+          </div>
+          <div className="text-[10.5px] text-text-tertiary mt-0.5">
+            uploaded {format(new Date(source.uploadedAt), "dd MMM, HH:mm")}
+          </div>
+        </div>
+      </div>
+
+      {/* Middle column — progress bar fills, counts pinned in a
+          fixed-width right slot so the bar ALWAYS ends at the same x
+          position. Without the fixed slot, "1,189" vs "318" widths
+          would shift the bar end and the rows would look misaligned. */}
+      <div className="flex-1 min-w-0 flex items-center gap-3">
+        <div className="flex-1 h-[4px] rounded-full bg-surface-secondary overflow-hidden">
+          <div
+            className="h-full bg-text-primary transition-[width] duration-300 ease-out"
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+        <div className="text-[11px] tabular-nums shrink-0 w-[220px] text-right">
+          {isProcessing ? (
+            <span className="text-text-tertiary">
+              Processing · <span className="font-medium text-text-primary">{pct}%</span>
+            </span>
+          ) : (
+            <span className="text-text-tertiary">
+              <span className="font-medium text-text-primary">{valid.toLocaleString("en-IN")}</span> valid rows
+              {hasInvalid && (
+                <>
+                  <span> · </span>
+                  <span className="font-medium text-text-primary">{invalid.toLocaleString("en-IN")}</span> invalid rows
+                </>
+              )}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Action area — every row in the Pending panel gets an X to
+          dismiss, including in-flight processing rows: the user owns
+          which rows clutter this surface. Starting a call removes the
+          row entirely (the source transitions to "dialing" which is
+          filtered out of this panel). Schedule lives elsewhere — the
+          only post-processing decision here is Start calling. */}
+      <div className="flex items-center gap-2 shrink-0">
+        {isProcessing && (
+          <>
+            <span className="inline-flex items-center gap-1.5 text-[11px] text-text-tertiary">
+              <Loader2 size={11} strokeWidth={1.75} className="animate-spin" />
+              Processing…
+            </span>
+            <button
+              type="button"
+              onClick={() => removeSource(outreachId, source.id)}
+              className="p-1.5 text-text-tertiary hover:text-text-primary rounded-button hover:bg-surface-page transition-colors"
+              aria-label="Dismiss row"
+              title="Dismiss"
+            >
+              <X size={14} strokeWidth={1.5} />
+            </button>
+          </>
+        )}
+
+        {source.dialState === "queued" && (
+          <>
+            {canCall ? (
+              <button
+                type="button"
+                onClick={() => setState(outreachId, source.id, "dialing")}
+                className="inline-flex items-center gap-1.5 h-8 px-3 bg-accent text-white text-[12px] font-medium rounded-button hover:bg-accent-hover transition-colors"
+              >
+                <Play size={11} strokeWidth={2} />
+                Start calling
+              </button>
+            ) : (
+              // No valid rows → nothing to dial. Surface why the
+              // primary action isn't available so the user doesn't sit
+              // wondering, and point them to a fix (re-upload).
+              <span className="text-[11px] text-[#B91C1C] font-medium px-2 py-1 rounded-badge bg-[#FEF2F2] border border-[#FECACA]">
+                No valid leads — re-upload
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={downloadCsv}
+              className="p-1.5 text-text-tertiary hover:text-text-primary rounded-button hover:bg-surface-page transition-colors"
+              aria-label="Download source"
+              title="Download a copy of this source"
+            >
+              <Download size={13} strokeWidth={1.75} />
+            </button>
+            <button
+              type="button"
+              onClick={() => removeSource(outreachId, source.id)}
+              className="p-1.5 text-text-tertiary hover:text-text-primary rounded-button hover:bg-surface-page transition-colors"
+              aria-label="Dismiss row"
+              title="Dismiss"
+            >
+              <X size={14} strokeWidth={1.5} />
+            </button>
+          </>
+        )}
+
+        {/* dialing + paused sources don't appear in the Pending panel.
+            Dialing data flows into the top Source filter for per-source
+            analytics; paused was removed at user request — manage
+            paused rows from the Sources button modal instead. */}
+      </div>
+    </li>
+  );
+}
+
+// The inline panel renders ONLY pre-activation sources — files still
+// processing and files awaiting a Start-calling decision. The moment
+// the user clicks Start calling, the source transitions to "dialing"
+// and disappears from this view: its data flows into the per-source
+// analytics filter at the top of the page, and the row would otherwise
+// be a redundant restatement. Paused rows live in the Sources modal so
+// this surface stays focused on "what needs my attention right now".
+function SourcesPanel({
+  outreachId,
+  sources,
+}: {
+  outreachId: string;
+  sources: OutreachAddedSource[];
+}) {
+  const pending = sources.filter(
+    (s) => s.dialState === "processing" || s.dialState === "queued",
+  );
+  // Hooks must run unconditionally — keep collapse state above the
+  // early return so the rules-of-hooks aren't violated when the panel
+  // empties out and re-fills.
+  const [collapsed, setCollapsed] = useState(false);
+  if (pending.length === 0) return null;
+  const processingCount = pending.filter((s) => s.dialState === "processing").length;
+  const queuedCount = pending.filter((s) => s.dialState === "queued").length;
+  return (
+    <div className="mb-4 rounded-card border border-border-subtle bg-white overflow-hidden">
+      {/* Header doubles as the collapse toggle so a heavy pending list
+          (5–10 uploads in flight) can be tucked away with a single
+          click without losing access — same affordance as standard
+          accordion sections. The chevron at the right is the visual
+          cue; the whole header is the hit target. */}
+      <button
+        type="button"
+        onClick={() => setCollapsed((v) => !v)}
+        aria-expanded={!collapsed}
+        className="w-full flex items-center justify-between px-4 py-2.5 border-b border-border-subtle bg-surface-page/60 hover:bg-surface-page transition-colors text-left"
+      >
+        {/* Header counts — only the two real states a source can be
+            in on this surface (processing or queued). The earlier
+            "N waiting" total was an umbrella that lumped both together
+            and read as a third status; dropped per user direction. */}
+        <div className="text-[12px] text-text-secondary">
+          <span className="font-medium text-text-primary">Pending sources</span>
+          {processingCount > 0 && (
+            <>
+              <span className="text-text-tertiary"> · </span>
+              <span className="text-text-primary">{processingCount} processing</span>
+            </>
+          )}
+          {queuedCount > 0 && (
+            <>
+              <span className="text-text-tertiary"> · </span>
+              <span className="text-[#92400E]">{queuedCount} ready to call</span>
+            </>
+          )}
+        </div>
+        <ChevronDown
+          size={14}
+          strokeWidth={1.75}
+          className={`text-text-tertiary transition-transform ${collapsed ? "" : "rotate-180"}`}
+        />
+      </button>
+      {!collapsed && (
+        <ul className="divide-y divide-border-subtle">
+          {pending.map((src) => (
+            <SourceCard key={src.id} outreachId={outreachId} source={src} />
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function SourcesModal({
+  outreachId,
+  sources,
+  onClose,
+}: {
+  outreachId: string;
+  sources: OutreachAddedSource[];
+  onClose: () => void;
+}) {
+  const totalLeads = sources.reduce((sum, s) => sum + s.leads, 0);
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative bg-white rounded-[12px] shadow-xl w-[680px] max-w-[96vw] max-h-[80vh] flex flex-col overflow-hidden">
+        <div className="flex items-start justify-between px-5 py-4 border-b border-border shrink-0">
+          <div>
+            <div className="text-[14px] font-semibold text-text-primary">Sources</div>
+            <div className="text-[11.5px] text-text-tertiary mt-0.5">
+              {sources.length === 0
+                ? "No CSV uploaded yet — use Add Leads to upload your first file."
+                : <>
+                    {sources.length} {sources.length === 1 ? "source" : "sources"}
+                    {" · "}
+                    <span className="tabular-nums">{totalLeads.toLocaleString("en-IN")}</span> leads
+                  </>
+              }
+            </div>
+          </div>
+          <button onClick={onClose} className="text-text-tertiary hover:text-text-primary transition-colors">
+            <X size={16} strokeWidth={1.5} />
+          </button>
+        </div>
+        {sources.length === 0 ? (
+          <div className="flex-1 flex flex-col items-center justify-center text-center px-6 py-10 text-text-tertiary">
+            <FileSpreadsheet size={28} strokeWidth={1.25} className="mb-3 text-text-tertiary/70" />
+            <p className="text-[12.5px]">Sources you upload will appear here.</p>
+          </div>
+        ) : (
+          <ul className="flex-1 overflow-y-auto divide-y divide-border-subtle">
+            {sources.map((src) => (
+              <SourceCard key={src.id} outreachId={outreachId} source={src} />
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 type OutreachStatus = "running" | "paused" | "completed" | "draft";
@@ -2830,12 +2583,38 @@ export default function OutreachDetailPage() {
   const searchParams = useSearchParams();
   const justCreated = searchParams?.get("just_created") === "1";
   const [audienceNudgeOpen, setAudienceNudgeOpen] = useState(false);
+  // Persisted, per-source upload record + dial state. Drives the
+  // Sources panel below — the user's per-source decisions live here,
+  // survive reload, and work whether the outreach was created via the
+  // speedrun flow or pre-existed in the static list. Processing
+  // sources also live here (dialState="processing" + progress 0-100),
+  // rendered with the same FileCard layout they get later — just with
+  // a progress bar in place of the validation summary.
+  const addedSources = useOutreachDraftStore((s) => s.addedSources[outreachId]);
+  const addedSourcesList = useMemo<OutreachAddedSource[]>(
+    () => addedSources ?? [],
+    [addedSources],
+  );
+  const hasProcessing = addedSourcesList.some((s) => s.dialState === "processing");
   useEffect(() => {
-    if (justCreated && detail && detail.totalContacts === 0) {
+    if (justCreated && detail && detail.totalContacts === 0 && !hasProcessing) {
       const t = setTimeout(() => setAudienceNudgeOpen(true), 200);
       return () => clearTimeout(t);
     }
-  }, [justCreated, detail]);
+  }, [justCreated, detail, hasProcessing]);
+
+  // Processing tick loop — while any source on this outreach is still
+  // processing, advance every 250ms. The store does the actual math
+  // (wall-clock based on startedAt, so refresh + tab-switch don't
+  // reset progress) and flips processing → queued at 100% with valid/
+  // invalid counts populated.
+  useEffect(() => {
+    if (!hasProcessing) return;
+    const tick = useOutreachDraftStore.getState().tickProcessing;
+    const interval = setInterval(() => tick(outreachId), 250);
+    tick(outreachId);
+    return () => clearInterval(interval);
+  }, [hasProcessing, outreachId]);
 
   // Per-outreach contact list — drives the table, the funnel counts, and
   // the duplicate validation in Add Leads. Computed once per id change.
@@ -2864,13 +2643,10 @@ export default function OutreachDetailPage() {
   // out of the box.
   const [rangePreset, setRangePreset] = useState<string>("7");
   const [addLeadsOpen, setAddLeadsOpen] = useState(false);
-  // Which scheduling mode the AddLeadsModal opens in. The nudge modal's
-  // two CTAs ("Add audiences now" vs "Schedule for later") both open the
-  // same AddLeadsModal — they only differ by which startMode is pre-
-  // selected. Persisting it as page-level state means subsequent opens
-  // (e.g. from the Add Leads button later on) remember the user's last
-  // pick rather than resetting.
-  const [addLeadsStartMode, setAddLeadsStartMode] = useState<"immediate" | "schedule">("immediate");
+  // Sources listing modal — opens from the header "Sources (N)" button.
+  // Holds the per-source listing with state pills + Dial / Schedule /
+  // Pause / Resume controls.
+  const [sourcesModalOpen, setSourcesModalOpen] = useState(false);
   // Lead drill-down — opened when a row in the contacts table is clicked.
   // Holds the contact whose detail drawer is currently visible (or null).
   const [drillContact, setDrillContact] = useState<OutreachContact | null>(null);
@@ -3248,7 +3024,25 @@ export default function OutreachDetailPage() {
               surfaces. */}
           <DateRangeSelector compact onChange={setRangePreset} defaultPreset="7" />
           <SourceFilter
-            sources={d.sources}
+            sources={(() => {
+              // Merge the user's activated sources (anything that has
+              // left the Pending panel via "Start calling" — dialing
+              // or paused) into the dropdown. The Pending panel and
+              // this filter are now two halves of one journey: the
+              // panel handles pre-activation, the filter scopes
+              // analytics across activated sources. Activated sources
+              // contribute their valid-row count as `leads` because
+              // invalid rows can't be dialed.
+              const activated = addedSourcesList
+                .filter((s) => s.dialState === "dialing" || s.dialState === "paused")
+                .map((s) => ({
+                  id: s.id,
+                  name: s.name,
+                  leads: s.validRows ?? s.leads,
+                  uploadedAt: s.uploadedAt,
+                }));
+              return [...d.sources, ...activated];
+            })()}
             activeSourceId={activeSourceId}
             menuOpen={sourceMenuOpen}
             setMenuOpen={setSourceMenuOpen}
@@ -3276,31 +3070,27 @@ export default function OutreachDetailPage() {
         </div>
       </div>
 
-      {/* Source filter context banner — only when scoped to a single file.
-          The trigger label already names the active file, but this banner
-          reinforces it across the full page width so the user always knows
-          which file the widgets and table are tied to. */}
-      {activeSourceId !== null && (() => {
-        const active = d.sources.find((s) => s.id === activeSourceId);
-        if (!active) return null;
-        return (
-          <div className="flex items-center gap-2 mb-4 px-3 py-2 rounded-card bg-accent/5 border border-accent/20 text-[12px]">
-            <FilterIcon size={12} strokeWidth={1.5} className="text-accent" />
-            <span className="text-text-secondary">
-              Showing data from{" "}
-              <span className="font-medium text-text-primary">{active.name}</span>
-              {" "}
-              <span className="text-text-tertiary">· {active.leads.toLocaleString("en-IN")} leads</span>
-            </span>
-            <button
-              onClick={() => setActiveSourceId(null)}
-              className="ml-auto text-[12px] font-medium text-accent hover:underline"
-            >
-              Show all uploads
-            </button>
-          </div>
-        );
-      })()}
+      {/* Sources panel — always visible inline once any source exists.
+          Renders each source through its entire lifecycle in one
+          consistent card layout: processing rows carry an inline
+          progress bar + %, queued rows show valid / invalid counts
+          + a Start calling button, dialing rows show the live state
+          + Pause. Same layout the modal uses, so the user's read of
+          the panel never changes shape between states. */}
+      {addedSourcesList.length > 0 && (
+        <SourcesPanel
+          outreachId={outreachId}
+          sources={addedSourcesList}
+        />
+      )}
+
+      {sourcesModalOpen && (
+        <SourcesModal
+          outreachId={outreachId}
+          sources={addedSourcesList}
+          onClose={() => setSourcesModalOpen(false)}
+        />
+      )}
 
       {/* 0. KPI hero strip — Talktime + Spend + Performance funnel, the same
           three widgets that anchor the listing page so per-outreach metrics
@@ -3804,20 +3594,16 @@ export default function OutreachDetailPage() {
           uploadable in parallel even when calls won't start yet. */}
       <AudienceNudgeModal
         open={audienceNudgeOpen}
-        agentName={d.voiceAgent}
         outreachName={d.name}
-        onAddNow={() => {
+        onAddLeads={() => {
           setAudienceNudgeOpen(false);
           // Strip the just_created flag so a refresh doesn't re-open it.
           router.replace(`/outreach/${outreachId}`);
-          setAddLeadsStartMode("immediate");
           setAddLeadsOpen(true);
         }}
-        onAddLater={() => {
+        onClose={() => {
           setAudienceNudgeOpen(false);
           router.replace(`/outreach/${outreachId}`);
-          setAddLeadsStartMode("schedule");
-          setAddLeadsOpen(true);
         }}
       />
 
@@ -3825,34 +3611,36 @@ export default function OutreachDetailPage() {
       {addLeadsOpen && (
         <AddLeadsModal
           onClose={() => setAddLeadsOpen(false)}
-          existingContacts={contactsForOutreach}
-          defaultStartMode={addLeadsStartMode}
-          onCommit={({ totalNew, startMode, scheduledFor, sourceNames }) => {
-            // Drafts only — established outreaches are read-only from
-            // the static dataset for this demo, so we only patch the
-            // draft store when one exists for this id. The hydrateDraftDetail
-            // overlay turns these fields into the funnel/counters/badge
-            // the user sees.
-            if (!draftSeed) return;
-            const patch: Partial<OutreachDraftSeed> = {
-              totalContacts: (draftSeed.totalContacts ?? 0) + totalNew,
-              status: startMode === "schedule" ? "scheduled" : "in_progress",
-              startMode,
-              scheduledFor: scheduledFor ?? undefined,
-              sources: [
-                ...(draftSeed.sources ?? []),
-                ...sourceNames.map((name, i) => ({
-                  id: `src-${Date.now()}-${i}`,
-                  name,
-                  uploadedAt: new Date().toISOString(),
-                  // Equally distribute the just-added leads across the
-                  // uploaded files — close enough for the demo, and the
-                  // total at the top of the page stays accurate.
-                  leads: Math.round(totalNew / Math.max(1, sourceNames.length)),
-                })),
-              ],
-            };
-            useOutreachDraftStore.getState().patchDraft(draftSeed.id, patch);
+          onCommit={({ files, manualLeads }) => {
+            // CSV path — queue the files for the tick-simulated upload.
+            // startUpload appends to the outreach's pending-uploads
+            // list — works for both fresh drafts AND existing outreaches
+            // since the upload state lives in its own dictionary,
+            // independent of draftSeed.
+            if (files && files.length > 0) {
+              const now = new Date().toISOString();
+              const pending = files.map((f, i) => ({
+                id: `pf-${Date.now()}-${i}`,
+                name: f.name,
+                totalRows: f.totalRows,
+                parsedRows: 0,
+                startedAt: now,
+              }));
+              useOutreachDraftStore.getState().startUpload(outreachId, pending);
+            }
+            // Manual path — instant insert into addedSources as a queued
+            // source. No modal pop — the inline Pending sources panel
+            // already shows the new row, so an extra dialog is noise.
+            if (manualLeads && manualLeads.length > 0) {
+              const stamp = new Date();
+              const label = `Manual entry · ${stamp.toLocaleString("en-IN", {
+                day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true,
+              })}`;
+              useOutreachDraftStore.getState().addInstantSource(outreachId, {
+                name: label,
+                leads: manualLeads.length,
+              });
+            }
           }}
         />
       )}
