@@ -6,8 +6,8 @@
 
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { Plus, ChevronRight, Folder, ArrowUpRight } from "lucide-react";
-import { PRODUCTS, readinessLabel } from "@/lib/products-data";
+import { Plus, ChevronRight, Folder, ArrowUpRight, ArrowRight } from "lucide-react";
+import { PRODUCTS, readinessLabel, spotNudgeFor } from "@/lib/products-data";
 import {
   planForProduct,
   PLAN_STATUS_LABEL,
@@ -54,7 +54,15 @@ function MetricStack({
 export default function ProjectsPage() {
   const router = useRouter();
   const askSpot = useSpotStore((s) => s.askSpot);
+  const startAnalystReview = useSpotStore((s) => s.startAnalystReview);
   const wsLabel = useCurrentWorkspaceLabel();
+
+  // After the Analyst Agent's daily scan, Spot reads each project and may
+  // surface one move — scale, optimize, or test new angles — or stay quiet.
+  // The nudge opens the Analyst-review session: the Agent's weekly scan, then
+  // Spot reading it and landing on the matching recommendation + Accept gate.
+  const runNudge = (p: { id: string; name: string }) =>
+    startAnalystReview({ id: p.id, name: p.name });
 
   const rows = PRODUCTS.map((p) => ({
     p,
@@ -71,7 +79,8 @@ export default function ProjectsPage() {
   const cpvl = totalVerified ? totalSpend / totalVerified : 0;
   const cpql = totalQualified ? totalSpend / totalQualified : 0;
 
-  const COLS = "minmax(200px, 2fr) 90px 120px 130px 130px 150px 80px 20px";
+  const COLS =
+    "minmax(180px, 1.7fr) 210px 84px 110px 120px 120px 116px 76px 20px";
   const gridStyle: React.CSSProperties = { gridTemplateColumns: COLS, columnGap: 18 };
 
   const attention = rows.filter(
@@ -113,12 +122,13 @@ export default function ProjectsPage() {
 
       {/* Portfolio table */}
       <div className="card-base overflow-x-auto">
-        <div style={{ minWidth: 900 }}>
+        <div style={{ minWidth: 1080 }}>
           <div
             className="grid items-center px-5 py-2.5 border-b border-border bg-surface-page text-[10px] uppercase tracking-[0.04em] font-semibold text-text-tertiary"
             style={gridStyle}
           >
             <span>Project</span>
+            <span>Spot recommendation</span>
             <span className="text-right">Spend</span>
             <span className="text-right">Leads</span>
             <span className="text-right">Verified</span>
@@ -131,11 +141,20 @@ export default function ProjectsPage() {
           {rows.map(({ p, rollup, plan, health }, i) => {
             const last = i === rows.length - 1;
             const r = readinessLabel(p.readiness);
+            const nudge = spotNudgeFor(p.id);
             return (
-              <button
+              <div
                 key={p.id}
+                role="button"
+                tabIndex={0}
                 onClick={() => router.push(`/projects/${p.id}`)}
-                className={`hover-row text-left w-full grid items-center px-5 py-3.5 ${last ? "" : "border-b border-border-subtle"}`}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    router.push(`/projects/${p.id}`);
+                  }
+                }}
+                className={`hover-row cursor-pointer text-left w-full grid items-center px-5 py-3.5 ${last ? "" : "border-b border-border-subtle"}`}
                 style={gridStyle}
               >
                 <div className="flex items-center gap-3 min-w-0">
@@ -158,6 +177,34 @@ export default function ProjectsPage() {
                     </div>
                   </div>
                 </div>
+
+                {/* Spot recommendation — only when this morning's analyst scan
+                    gave Spot one clear move. Quiet otherwise. Clicking it opens
+                    the Analyst-review session (scan → Spot's read → Accept). */}
+                {nudge ? (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      runNudge({ id: p.id, name: p.name });
+                    }}
+                    title={nudge.reason}
+                    className="group flex items-center gap-1.5 h-7 pl-2 pr-2.5 rounded-button border border-border bg-white hover:border-border-hover hover:bg-[var(--spot-tint,#FAF8F2)] transition-colors w-fit"
+                  >
+                    <SpotMark size={12} className="flex-shrink-0" />
+                    <span className="text-[11.5px] font-semibold text-text-primary whitespace-nowrap">
+                      {nudge.label}
+                    </span>
+                    <ArrowRight
+                      size={11}
+                      strokeWidth={2}
+                      className="flex-shrink-0 text-text-tertiary transition-transform group-hover:translate-x-0.5"
+                    />
+                  </button>
+                ) : (
+                  <span className="text-[11px] text-text-tertiary">Holding</span>
+                )}
+
                 <MetricStack value={fmtRupees(rollup.spend)} sub="total" align="right" emphasize />
                 <MetricStack
                   value={rollup.leads.toLocaleString()}
@@ -190,14 +237,16 @@ export default function ProjectsPage() {
                     {health.label}
                   </span>
                 </div>
+
                 <ChevronRight size={14} className="text-text-tertiary" />
-              </button>
+              </div>
             );
           })}
 
           {/* Footer totals */}
           <div className="grid items-center px-5 py-3 border-t border-border bg-surface-page text-[12px] font-medium" style={gridStyle}>
             <span>Portfolio total</span>
+            <span />
             <MetricStack value={fmtRupees(totalSpend)} sub={`${rows.length} products`} align="right" emphasize />
             <MetricStack value={totalLeads.toLocaleString()} sub={cpl ? `${fmtRupees(cpl)} CPL` : "—"} align="right" />
             <MetricStack value={totalVerified.toLocaleString()} sub={cpvl ? `${fmtRupees(cpvl)} CPVL` : "—"} align="right" />

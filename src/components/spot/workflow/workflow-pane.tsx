@@ -50,7 +50,7 @@ import { SpotMark } from "@/components/spot/spot-mark";
 import { SpotLoader, SpotFullscreen } from "@/components/spot/spot-loader";
 import { PRODUCTS } from "@/lib/products-data";
 import { analystReportFor } from "@/lib/spot/analyst-data";
-import { planMarkdownFor } from "@/lib/spot/extended-flows";
+import { planMarkdownFor, analysisFor } from "@/lib/spot/extended-flows";
 
 const STEP_ICONS: Record<WorkflowStep, typeof Users> = {
   // Launch flow (new consolidated structure)
@@ -182,15 +182,15 @@ export function fileTabsForWorkflow(workflow: SpotWorkflow | null) {
     workflow.kind === "optimize" ||
     workflow.kind === "test-angles";
   const isLaunch = workflow.kind === "launch-campaign";
-  // Execution.live only exists for diagnostic flows once the plan is live
-  // (the *-live step), so the tab doesn't show before there's anything to
-  // tick off.
-  const atLive = isDiagnostic && workflow.step.endsWith("-live");
+  // The execution canvas is gone: approving a plan no longer opens a separate
+  // execution file (scale / optimize / test-angles). The plan stays in the
+  // panel and execution progress is surfaced in the chat, so the tab is never
+  // shown for any flow.
   return FILE_TABS.filter(
     (t) =>
+      t.key !== "execution" &&
       (t.key !== "analysis" || isDiagnostic) &&
-      (t.key !== "strategy" || isLaunch) &&
-      (t.key !== "execution" || atLive),
+      (t.key !== "strategy" || isLaunch),
   );
 }
 
@@ -424,12 +424,19 @@ function FileBody({
     // than a bespoke structured canvas. Spot's audit stays visible even
     // after the workflow moves on to clarify/plan/live.
     if (tab === "analysis") {
-      const prod = PRODUCTS.find((p) => p.id === workflow.productId);
-      if (!prod) return null;
-      const report = analystReportFor(prod);
+      const diag = workflow as DiagnosticWorkflow;
+      // Continued from an analyst review → keep the analyst's Weekly scan
+      // in the panel through clarify/plan so the user reads one continuous
+      // analysis doc, not a second near-duplicate audit. Standalone entries
+      // (no prior review) render their own per-kind audit (analysisFor).
+      const prod = PRODUCTS.find((p) => p.id === diag.productId);
+      const source =
+        diag.fromAnalystReview && prod
+          ? analystReportFor(prod).reportMd
+          : analysisFor(diag.kind).reportMd;
       return (
         <div className="px-6 py-6 max-w-[760px] mx-auto">
-          <Markdown source={report.reportMd} theme="light" />
+          <Markdown source={source} theme="light" />
         </div>
       );
     }

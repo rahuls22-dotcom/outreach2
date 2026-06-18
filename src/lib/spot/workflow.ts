@@ -235,6 +235,10 @@ export type LaunchWorkflow = {
   approvals: WorkflowApprovals;
   /** Stamped when workflow started — used for "started X ago" labels. */
   startedAt: number;
+  /** When this workflow was opened by resuming a saved session, the exact
+   *  session title from the Sessions list — shown verbatim in the header so
+   *  inside-session name matches outside. Undefined for fresh starts. */
+  resumedTitle?: string;
   /** Memory Spot researched live (only set when productId is null). */
   researchedMemory: ResearchedMemory | null;
   /**
@@ -289,6 +293,8 @@ export type DiagnosticWorkflow = {
   productId: string;
   productName: string;
   startedAt: number;
+  /** Exact saved-session title when opened via resume (else undefined). */
+  resumedTitle?: string;
   /** Loader → reveal gate. */
   ready: boolean;
   /** Map of clarify-question id → selected option id (string for
@@ -296,6 +302,13 @@ export type DiagnosticWorkflow = {
   clarifyAnswers: Record<string, string | string[]>;
   /** True once the user has approved the plan. */
   planApproved: boolean;
+  /** True when this diagnostic was started by accepting an analyst
+   *  review (analyst-review → scale/optimize/test-angles). The analysis
+   *  panel keeps showing the analyst's Weekly scan instead of swapping
+   *  to the per-kind Scale/Optimize/Angles audit, so the user sees one
+   *  continuous analysis doc. Standalone entries leave this unset and
+   *  render their own per-kind audit. */
+  fromAnalystReview?: boolean;
   /** Live-execution checklist · seeded when the *-live step begins and
    *  ticked off by the store on a timer. Undefined before live. */
   executionMoves?: ExecutionMove[];
@@ -326,6 +339,8 @@ export type CampaignDiveWorkflow = {
   channel: "Meta" | "Google";
   metaUrl: string;
   startedAt: number;
+  /** Exact saved-session title when opened via resume (else undefined). */
+  resumedTitle?: string;
 };
 
 /** Analyst review · a chat-only conversation between the Analyst Agent and
@@ -341,6 +356,8 @@ export type AnalystReviewWorkflow = {
   /** CTA label for the recommended action. */
   recommendedLabel: string;
   startedAt: number;
+  /** Exact saved-session title when opened via resume (else undefined). */
+  resumedTitle?: string;
 };
 
 /** Any workflow currently active in the Spot store. */

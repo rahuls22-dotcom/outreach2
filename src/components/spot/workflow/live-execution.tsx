@@ -1,19 +1,33 @@
 "use client";
 
-// LiveExecution — the cowork-style live progress checklist that fills the
+// LiveExecution — the calm, single-focus live progress view that fills the
 // right canvas when a diagnostic plan goes live (the *-live step). It reads
 // the ticking execution state off the store (DiagnosticWorkflow.executionMoves
 // + executionDone, driven by startLiveExecution) and renders the plan's
-// concrete moves ticking off pending → running → done, with a thin progress
-// bar at the top and a settled "Done" state when everything completes.
+// concrete moves ticking pending → running → done, under one quiet header and
+// one slim progress bar, settling into a composed "Done" state.
 //
-// Light mode, impeccable: tinted neutrals + the brand --spot-* tokens, no
-// dark surface, no gear-icon clutter. The done check uses the brand tint, not
-// the reserved dark action fill (#1A1A1A) which belongs to user actions only.
+// Design intent: editorial calm over dashboard density. ONE accent (the warm
+// gold), generous whitespace, no stacked "what changed / recommendations /
+// guardrails" cards, no competing progress read-outs. Light mode only. The
+// done check uses the brand tint, never the reserved dark action fill
+// (#1A1A1A) which belongs to user-action buttons.
+//
+// API ({ workflow }) and store reliance are fixed by the canvas contract —
+// do not change them. The checklist primitive in execution-checklist.tsx is a
+// separate timer-driven, dark-themed component used by the launch-deploy flow
+// (consumed by workflow-pane); this store-driven view stays self-contained so
+// it can settle exactly when the store says executionDone, not on a timer.
 
-import { Check, Loader2 } from "lucide-react";
+import { Check } from "lucide-react";
 import { useSpotStore } from "@/lib/spot/store";
 import type { DiagnosticWorkflow, ExecutionMove } from "@/lib/spot/workflow";
+
+// The single accent — a restrained warm gold. The brand --spot-tint/-stroke
+// are too pale to read as an accent on their own, so the gold carries every
+// "live / running / progress" cue. Done switches to the calm green --ok tokens.
+const ACCENT = "#C9A227";
+const ACCENT_INK = "#8A6D1F";
 
 export function LiveExecution({ workflow }: { workflow: DiagnosticWorkflow }) {
   // Subscribe to the live execution slice so the panel re-renders as the
@@ -34,81 +48,105 @@ export function LiveExecution({ workflow }: { workflow: DiagnosticWorkflow }) {
         : false,
     ) || Boolean(workflow.executionDone);
 
+  const total = moves.length;
   const doneCount = moves.filter((m) => m.status === "done").length;
-  const pct = moves.length ? (doneCount / moves.length) * 100 : 0;
+  const pct = total ? (doneCount / total) * 100 : 0;
 
   return (
-    <div className="px-6 py-7 max-w-[640px] mx-auto">
-      {/* Header · running affordance vs. settled done state */}
-      <div className="flex items-center gap-2.5 mb-1.5">
-        <StatusDot allDone={allDone} />
-        <h1 className="text-[16px] font-semibold tracking-tight text-text-primary">
+    <div className="px-7 py-9 max-w-[560px] mx-auto">
+      {/* Scoped motion — a gentle pulse for the live dot and a breathing ring
+          for the running row. Calm, slow, no spinner whir. Local to this file
+          so the component stays self-contained. */}
+      <style>{`
+        @keyframes execDotPulse {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50%      { opacity: 0.45; transform: scale(0.78); }
+        }
+        @keyframes execRingPulse {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50%      { opacity: 0.5; transform: scale(0.86); }
+        }
+        .exec-live-dot {
+          width: 6px; height: 6px; border-radius: 9999px;
+          animation: execDotPulse 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        .exec-run-ring {
+          width: 13px; height: 13px; border-radius: 9999px;
+          border: 1.5px solid; box-sizing: border-box;
+          animation: execRingPulse 1.6s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .exec-live-dot, .exec-run-ring { animation: none; }
+        }
+      `}</style>
+
+      {/* Header — one quiet line: what's running + a single live/done status. */}
+      <div className="flex items-baseline justify-between gap-4 mb-2">
+        <h1 className="text-[17px] font-semibold tracking-tight text-text-primary">
           {allDone ? "Plan executed" : "Executing the plan"}
         </h1>
-        <span
-          className="inline-flex items-center h-[18px] px-2 rounded-full text-[10px] font-semibold uppercase tracking-wide flex-shrink-0"
-          style={
-            allDone
-              ? { background: "var(--ok-bg)", color: "var(--ok-fg)" }
-              : { background: "var(--spot-tint)", color: "#8A6D1F", border: "1px solid var(--spot-stroke)" }
-          }
-        >
-          {allDone ? "Done" : "Live"}
-        </span>
+        <StatusPill allDone={allDone} />
       </div>
-      <p className="text-[12px] text-text-tertiary mb-5 ml-[26px]">
+      <p className="text-[12.5px] leading-relaxed text-text-tertiary max-w-[44ch]">
         {allDone
-          ? "Every move is live. My analyst is watching from here, I'll surface the next decision the moment a watcher fires."
-          : "Each move ticks off as I make it, you can watch it work or step away."}
+          ? "Every move is live. My analyst watches from here and surfaces the next decision the moment a watcher fires."
+          : "Each move ticks off as I make it. Watch it work, or step away."}
       </p>
 
-      {/* Progress bar */}
-      <div className="ml-[26px] mb-5 flex items-center gap-2.5">
+      {/* One progress affordance — a slim bar carries the motion. No competing
+          N-of-M readout; the pill gives the live/done state, the bar the pace. */}
+      <div
+        className="mt-7 h-[3px] rounded-full overflow-hidden"
+        style={{ background: "var(--spot-tint)", boxShadow: "inset 0 0 0 1px var(--spot-stroke)" }}
+      >
         <div
-          className="flex-1 h-1 rounded-full overflow-hidden"
-          style={{ background: "var(--spot-tint)", border: "1px solid var(--spot-stroke)" }}
-        >
-          <div
-            className="h-full rounded-full transition-all duration-500 ease-out"
-            style={{
-              width: `${pct}%`,
-              background: allDone ? "var(--ok-fg)" : "#C9A227",
-            }}
-          />
-        </div>
-        <span className="text-[11px] tabular-nums text-text-tertiary flex-shrink-0">
-          {doneCount} / {moves.length}
-        </span>
+          className="h-full rounded-full transition-[width] duration-700"
+          style={{
+            width: `${pct}%`,
+            background: allDone ? "var(--ok-fg)" : ACCENT,
+            transitionTimingFunction: "cubic-bezier(0.22, 1, 0.36, 1)",
+          }}
+        />
       </div>
 
-      {/* Checklist */}
-      <ul className="ml-[26px] space-y-2.5">
+      {/* Checklist — the moves ticking off. */}
+      <ul className="mt-7 space-y-3.5">
         {moves.map((move, i) => (
           <MoveRow key={i} move={move} />
         ))}
       </ul>
+
+      {/* One understated reassurance line — not a card. */}
+      <p className="mt-9 pt-5 text-[11.5px] leading-relaxed text-text-tertiary border-t border-border-subtle">
+        {allDone
+          ? "Nothing more for you to do here. I'll bring the next decision to chat."
+          : "I'll pause and ping you in chat if a guardrail trips. Otherwise this runs on its own."}
+      </p>
     </div>
   );
 }
 
-function StatusDot({ allDone }: { allDone: boolean }) {
+/** The single live/done status — count while running, settled green when done. */
+function StatusPill({ allDone }: { allDone: boolean }) {
   if (allDone) {
     return (
       <span
-        className="inline-flex items-center justify-center w-[18px] h-[18px] rounded-full flex-shrink-0"
-        style={{ background: "var(--ok-bg)" }}
+        className="inline-flex items-center gap-1.5 h-[22px] pl-1.5 pr-2.5 rounded-full text-[11px] font-medium flex-shrink-0"
+        style={{ background: "var(--ok-bg)", color: "var(--ok-fg)" }}
       >
-        <Check size={12} strokeWidth={2.4} style={{ color: "var(--ok-fg)" }} />
+        <Check size={12} strokeWidth={2.6} />
+        Done
       </span>
     );
   }
   return (
-    <Loader2
-      size={16}
-      strokeWidth={2}
-      className="animate-spin flex-shrink-0"
-      style={{ color: "#C9A227", animationDuration: "1.4s" }}
-    />
+    <span
+      className="inline-flex items-center gap-1.5 h-[22px] px-2.5 rounded-full text-[11px] font-medium flex-shrink-0"
+      style={{ background: "var(--spot-tint)", color: ACCENT_INK, boxShadow: "inset 0 0 0 1px var(--spot-stroke)" }}
+    >
+      <span className="exec-live-dot" style={{ background: ACCENT }} />
+      Live
+    </span>
   );
 }
 
@@ -116,51 +154,36 @@ function MoveRow({ move }: { move: ExecutionMove }) {
   const isDone = move.status === "done";
   const isRunning = move.status === "running";
   return (
-    <li className="flex items-start gap-2.5 text-[13px] leading-snug">
-      <span className="mt-[1px] w-[16px] h-[16px] flex items-center justify-center flex-shrink-0">
+    <li className="flex items-start gap-3 text-[13.5px] leading-snug">
+      <span className="mt-[1px] w-[15px] h-[15px] flex items-center justify-center flex-shrink-0">
         {isDone ? (
           <span
-            className="inline-flex items-center justify-center w-[16px] h-[16px] rounded-full"
-            style={{ background: "var(--spot-tint)", border: "1px solid var(--spot-stroke)" }}
+            className="inline-flex items-center justify-center w-[15px] h-[15px] rounded-full"
+            style={{ background: "var(--spot-tint)", boxShadow: "inset 0 0 0 1px var(--spot-stroke)" }}
           >
-            <Check size={11} strokeWidth={2.6} style={{ color: "#8A6D1F" }} />
+            <Check size={10} strokeWidth={2.8} style={{ color: ACCENT_INK }} />
           </span>
         ) : isRunning ? (
-          <Loader2
-            size={13}
-            strokeWidth={2}
-            className="animate-spin"
-            style={{ color: "#C9A227", animationDuration: "1.1s" }}
-          />
+          // Subtle pulsing ring — alive without the dashboard-spinner whir.
+          <span className="exec-run-ring" style={{ borderColor: ACCENT }} />
         ) : (
           <span
-            className="w-[12px] h-[12px] rounded-full"
-            style={{ border: "1.5px solid var(--spot-stroke)" }}
+            className="w-[11px] h-[11px] rounded-full"
+            style={{ boxShadow: "inset 0 0 0 1.5px var(--spot-stroke)" }}
           />
         )}
       </span>
       <span
-        className="flex-1 transition-colors"
+        className="flex-1 transition-colors duration-500"
         style={{
-          color: isDone
-            ? "var(--text-3)"
-            : isRunning
-              ? "var(--text-1)"
-              : "var(--text-2)",
+          color: isDone ? "var(--text-3)" : isRunning ? "var(--text-1)" : "var(--text-2)",
+          fontWeight: isRunning ? 500 : 400,
           textDecoration: isDone ? "line-through" : "none",
           textDecorationColor: "var(--spot-stroke)",
         }}
       >
         {move.label}
       </span>
-      {isRunning && (
-        <span
-          className="text-[9.5px] uppercase tracking-wider font-semibold flex-shrink-0 mt-[2px]"
-          style={{ color: "#8A6D1F" }}
-        >
-          running
-        </span>
-      )}
     </li>
   );
 }

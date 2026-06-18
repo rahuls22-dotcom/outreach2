@@ -27,12 +27,10 @@ import {
   Plus,
   History,
   Check,
-  Clock,
-  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   X,
-  Home,
+  ArrowLeft,
   Square,
 } from "lucide-react";
 import { SpotMark } from "@/components/spot/spot-mark";
@@ -118,7 +116,6 @@ export default function SpotPage() {
   const panelOpen = panelFile !== null;
   const viewHomeOverride = useSpotStore((s) => s.viewHomeOverride);
   const showHomeView = useSpotStore((s) => s.showHomeView);
-  const resumeWorkflow = useSpotStore((s) => s.resumeWorkflow);
 
   const [draft, setDraft] = useState("");
   const [pending, setPending] = useState(false);
@@ -126,14 +123,18 @@ export default function SpotPage() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const threadScrollRef = useRef<HTMLDivElement>(null);
 
-  // Drop the legacy `open` flag — the route is the surface now.
+  // Clean entry only: when the user lands on /spot with NO active workflow,
+  // reset stale panel + scope state. Crucially, do NOT close the panel when we
+  // arrive mid-flow — startAnalystReview / startDiagnostic set panelFile +
+  // workflow before routing here, so the analysis (analyst weekly scan, then
+  // the per-kind audit) is open by DEFAULT the moment the session starts.
+  // Closing unconditionally here was force-closing that panel on arrival.
   useEffect(() => {
-    closePanel();
-    closeCanvas();
-    // Default chat scope back to Workspace whenever the user lands on
-    // /spot without an active workflow. Without this, the scope sticks
-    // on whatever the last workflow set it to (a product or campaign).
     if (!workflow) {
+      closePanel();
+      closeCanvas();
+      // Default chat scope back to Workspace. Without this, the scope sticks
+      // on whatever the last workflow set it to (a product or campaign).
       setScope({ kind: "workspace", label: workspaceLabel });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -269,7 +270,7 @@ export default function SpotPage() {
 
   // Resizable right artifact panel. Width is dragged via the handle on
   // the panel's left edge; clamped so the chat always keeps room.
-  const [panelW, setPanelW] = useState(380);
+  const [panelW, setPanelW] = useState(520);
   const startPanelResize = (e: React.MouseEvent) => {
     e.preventDefault();
     const onMove = (ev: MouseEvent) => {
@@ -334,29 +335,43 @@ export default function SpotPage() {
               title="Back to Spot home · workflow stays alive"
               className="inline-flex items-center justify-center h-7 w-7 rounded-button text-text-secondary hover:bg-surface-secondary hover:text-text-primary"
             >
-              <Home size={14} strokeWidth={1.6} />
+              <ArrowLeft size={15} strokeWidth={1.7} />
             </button>
-            {isAgentRunning ? (
-              <SpotLoader mode="orbit" size={21} className="!gap-0" />
-            ) : (
-              <SpotMark size={21} />
-            )}
-            <div className="flex-1 min-w-0">
-              <div className="text-[12.5px] font-semibold leading-tight">Spot</div>
-              <div className="text-[10.5px] text-text-tertiary leading-tight truncate">
-                {workflow.kind === "scale"
-                  ? `Scaling · ${workflow.productName}`
-                  : workflow.kind === "optimize"
-                    ? `Optimizing · ${workflow.productName}`
-                    : workflow.kind === "test-angles"
-                      ? `Angle test · ${workflow.productName}`
-                      : workflow.kind === "campaign-dive"
-                        ? `Spot it · ${workflow.entityName}`
-                        : workflow.kind === "analyst-review"
-                          ? `Analyst review · ${workflow.productName}`
-                          : `Launching · ${workflow.productName}`}
-              </div>
+            {/* Inside a session the scope is fixed — it's whatever project +
+                campaign was selected when the chat started. Session name on
+                top, project + campaign as plain read-only text below. */}
+            <div className="flex flex-col min-w-0">
+              <span className="text-[12.5px] font-semibold text-text-primary leading-tight truncate">
+                {workflow.resumedTitle ??
+                  (workflow.kind === "scale"
+                    ? // Title tracks the phase, not the flow: while Spot is
+                      // still auditing / asking, it reads "Scaling". It only
+                      // becomes "Scale plan" once the plan is actually built
+                      // (plan step settled, or live/done) — same moment the
+                      // right panel switches from analysis.md to plan.md.
+                      workflow.step === "scale-live" ||
+                      workflow.step === "done" ||
+                      (workflow.step === "scale-plan" && workflow.ready)
+                      ? "Scale plan"
+                      : "Scaling"
+                    : workflow.kind === "optimize"
+                      ? "Optimize pass"
+                      : workflow.kind === "test-angles"
+                        ? "Angle test"
+                        : workflow.kind === "campaign-dive"
+                          ? `Spot it · ${workflow.entityName}`
+                          : workflow.kind === "analyst-review"
+                            ? "Analyst review"
+                            : "Launch campaign")}
+              </span>
+              <span className="text-[10.5px] text-text-tertiary leading-tight truncate">
+                {scope.label}
+                {scope.kind === "project"
+                  ? ` · ${scope.campaignLabel ?? "All campaigns"}`
+                  : ""}
+              </span>
             </div>
+            <div className="flex-1" />
             {/* Files dropdown · the only file-inventory surface. Shown for
                 every workflow (incl. analyst-review, which has analysis.md). */}
             <ChatHeaderFilePicker compact />
@@ -443,6 +458,7 @@ export default function SpotPage() {
                 onChangeScope={setScope}
                 scopeOpen={scopeOpen}
                 onScopeOpenChange={setScopeOpen}
+                showScope={false}
                 inputRef={inputRef}
                 placeholder={composerPlaceholderFor(workflow)}
                 isWorking={isAgentRunning}
@@ -588,13 +604,6 @@ export default function SpotPage() {
           Pushed down with pt-32 (vs the old pt-14) so the hero sits in
           the visual sweet spot rather than crowding the top edge. */}
       <div className="max-w-[780px] mx-auto w-full px-6 pt-24">
-        {/* Resume banner — when a workflow is parked. We give the building
-            and review states their own visual treatment so the user
-            understands what's happening at a glance. */}
-        {workflow && viewHomeOverride && (
-          <WorkflowParkBanner workflow={workflow} onResume={resumeWorkflow} />
-        )}
-
         {/* Hero — large, breathing Spot mark. The breathe loader's soft
             pulsing aura signals "Spot is alive · ambient agents working"
             even when the user hasn't asked anything yet. */}
@@ -620,14 +629,10 @@ export default function SpotPage() {
         />
       </div>
 
-      {/* Lower half: wider canvas. Active products row + Sessions
-          panel. Sits just below the composer so the projects are
-          glanceable without a big scroll. */}
-      <div className="max-w-[1200px] mx-auto w-full px-6 pt-10 pb-20">
-        <ActiveProductsRail />
-        <div className="mt-5">
-          <SessionsCard />
-        </div>
+      {/* Lower half: just Sessions. Aligned to the composer column so
+          the page reads as intro → chat box → what's on Spot's desk. */}
+      <div className="max-w-[780px] mx-auto w-full px-6 pt-10 pb-20">
+        <SessionsCard />
       </div>
     </div>
   );
@@ -750,44 +755,40 @@ function ClarifyDock({ workflow }: { workflow: DiagnosticWorkflow }) {
   }, [workflow.step]);
 
   const confirmLabel = kind === "test-angles" ? "Draft the angles" : "Build the plan";
+  const isLast = idx >= total - 1;
   const goBack = () => setIdx((i) => Math.max(0, i - 1));
-  const goNext = () => setIdx((i) => Math.min(total, i + 1));
 
   const handleConfirm = () => {
-    // Echo the captured picks as a compact user message, Claude-style.
-    const lines = questions
-      .map((q) => `- ${answerLabel(kind, q.id, answers[q.id] ?? q.defaultValue)}`)
-      .join("\n");
-    appendMessage({ role: "user", text: `${confirmLabel}.\n${lines}` });
+    // Read answers FRESH from the store — a single-select pick on the last
+    // question lands its answer and commits in the same tick, so the closure
+    // copy would still be stale.
+    const wf = useSpotStore.getState().workflow;
+    const fresh =
+      wf && "clarifyAnswers" in wf
+        ? (wf as DiagnosticWorkflow).clarifyAnswers
+        : answers;
+    // Record the picks as a decision CARD (not a user chat bubble) so every
+    // decision point in the thread reads the same — the picks live in the card.
+    const items = questions.map((q) =>
+      answerLabel(kind, q.id, fresh[q.id] ?? q.defaultValue),
+    );
+    appendMessage({
+      role: "spot",
+      parts: [{ type: "decision", title: confirmLabel, items }],
+    });
     advanceWorkflow();
   };
 
-  // ── Confirm page ──────────────────────────────────────────────
-  if (idx >= total) {
-    return (
-      <DockShell total={total} onPrev={goBack} onClose={closePanel}>
-        <div className="text-[15px] font-semibold text-text-primary leading-snug">
-          That&apos;s everything I need.
-        </div>
-        <div className="text-[13px] text-text-secondary mt-1 leading-relaxed">
-          {kind === "test-angles"
-            ? "I'll draft a fresh set of angles from these constraints for you to review."
-            : "I'll fold these into one time-phased plan for you to approve."}
-        </div>
-        <div className="mt-3.5 flex items-center justify-end">
-          <button
-            type="button"
-            onClick={handleConfirm}
-            className="inline-flex items-center gap-1.5 h-9 px-4 rounded-full text-[13.5px] font-medium transition-colors"
-            style={{ background: "#1A1A1A", color: "#FAFAF8" }}
-          >
-            {confirmLabel}
-            <ArrowRight size={14} strokeWidth={2} />
-          </button>
-        </div>
-      </DockShell>
-    );
-  }
+  // Advancing off the LAST question commits straight to the plan — there is
+  // no separate "that's everything I need" review slide. The last question's
+  // answer IS the confirmation.
+  const goNext = () => {
+    if (isLast) {
+      handleConfirm();
+      return;
+    }
+    setIdx((i) => Math.min(total - 1, i + 1));
+  };
 
   // ── Question page ─────────────────────────────────────────────
   const q = questions[idx];
@@ -889,7 +890,7 @@ function ClarifyDock({ workflow }: { workflow: DiagnosticWorkflow }) {
             className="inline-flex items-center gap-1.5 h-9 px-4 rounded-full text-[13.5px] font-medium transition-colors"
             style={{ background: "#1A1A1A", color: "#FAFAF8" }}
           >
-            {idx === total - 1 ? "Review" : "Next"}
+            {isLast ? confirmLabel : "Next"}
             <ArrowRight size={14} strokeWidth={2} />
           </button>
         </div>
@@ -1210,6 +1211,7 @@ function Composer({
   onChangeScope,
   scopeOpen,
   onScopeOpenChange,
+  showScope = true,
   inputRef,
   placeholder,
   onAttachFiles,
@@ -1223,6 +1225,9 @@ function Composer({
   onChangeScope: (s: SpotScope) => void;
   scopeOpen: boolean;
   onScopeOpenChange: (b: boolean) => void;
+  /** When false, the project/campaign scope pickers are hidden (the
+   *  workflow view moves them up into the chat header instead). */
+  showScope?: boolean;
   inputRef: React.RefObject<HTMLTextAreaElement | null>;
   placeholder?: string;
   /** Optional file-attach handler. When provided, the Attach button
@@ -1286,14 +1291,18 @@ function Composer({
             e.target.value = "";
           }}
         />
-        <ScopePicker
-          scope={scope}
-          onChange={onChangeScope}
-          open={scopeOpen}
-          onOpenChange={onScopeOpenChange}
-        />
-        {scope.kind === "project" && scope.target && (
-          <CampaignScopePicker scope={scope} onChange={onChangeScope} />
+        {showScope && (
+          <>
+            <ScopePicker
+              scope={scope}
+              onChange={onChangeScope}
+              open={scopeOpen}
+              onOpenChange={onScopeOpenChange}
+            />
+            {scope.kind === "project" && scope.target && (
+              <CampaignScopePicker scope={scope} onChange={onChangeScope} />
+            )}
+          </>
         )}
         <div className="flex-1" />
         {isWorking ? (
@@ -1340,11 +1349,15 @@ function ScopePicker({
   onChange,
   open,
   onOpenChange,
+  allowNewProject = true,
 }: {
   scope: SpotScope;
   onChange: (s: SpotScope) => void;
   open: boolean;
   onOpenChange: (b: boolean) => void;
+  /** Show the "New project — start with research" action at the bottom.
+   *  On in the home composer; off in the workflow header. */
+  allowNewProject?: boolean;
 }) {
   const startNewProductFlow = useSpotStore((s) => s.startNewProductFlow);
   const workspaceLabel = useCurrentWorkspaceLabel();
@@ -1374,7 +1387,7 @@ function ScopePicker({
       <button
         type="button"
         onClick={() => onOpenChange(!open)}
-        className="inline-flex items-center gap-1.5 h-7 px-2 rounded-button border border-border bg-white hover:border-border-hover text-[12px] text-text-secondary hover:text-text-primary"
+        className="inline-flex items-center gap-1.5 h-7 px-2 rounded-button border border-border bg-white hover:border-border-hover text-[12px] text-text-secondary hover:text-text-primary focus:outline-none focus-visible:border-border-hover"
         title="Change scope"
       >
         <span
@@ -1387,7 +1400,7 @@ function ScopePicker({
       </button>
       {open && (
         <div
-          className="absolute bottom-[calc(100%+6px)] left-0 z-50 bg-white border border-border rounded-card py-1.5 min-w-[260px]"
+          className="absolute top-[calc(100%+6px)] left-0 z-50 bg-white border border-border rounded-card py-1.5 min-w-[260px]"
           style={{ boxShadow: "0 8px 28px -8px rgba(0,0,0,0.12)" }}
         >
           <div className="px-3 py-1 text-[10px] uppercase tracking-wider text-text-tertiary font-medium">
@@ -1416,18 +1429,22 @@ function ScopePicker({
               }}
             />
           ))}
-          <div className="border-t border-border-subtle my-1" />
-          <button
-            type="button"
-            onClick={() => {
-              onOpenChange(false);
-              startNewProductFlow();
-            }}
-            className="w-full text-left flex items-center gap-2 px-3 h-8 hover:bg-surface-secondary text-[12.5px] text-text-primary"
-          >
-            <Plus size={12} strokeWidth={2} className="text-text-tertiary" />
-            <span className="flex-1">New project — start with research</span>
-          </button>
+          {allowNewProject && (
+            <>
+              <div className="border-t border-border-subtle my-1" />
+              <button
+                type="button"
+                onClick={() => {
+                  onOpenChange(false);
+                  startNewProductFlow();
+                }}
+                className="w-full text-left flex items-center gap-2 px-3 h-8 hover:bg-surface-secondary text-[12.5px] text-text-primary"
+              >
+                <Plus size={12} strokeWidth={2} className="text-text-tertiary" />
+                <span className="flex-1">New project — start with research</span>
+              </button>
+            </>
+          )}
         </div>
       )}
     </div>
@@ -1467,7 +1484,7 @@ function CampaignScopePicker({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="inline-flex items-center gap-1.5 h-7 px-2 rounded-button border border-border bg-white hover:border-border-hover text-[12px] text-text-secondary hover:text-text-primary"
+        className="inline-flex items-center gap-1.5 h-7 px-2 rounded-button border border-border bg-white hover:border-border-hover text-[12px] text-text-secondary hover:text-text-primary focus:outline-none focus-visible:border-border-hover"
         title="Scope to a campaign"
       >
         <span aria-hidden className="inline-block w-1.5 h-1.5 rounded-full" style={{ background: scope.campaignId ? "#9B9B9B" : "#9B9B9B" }} />
@@ -1476,7 +1493,7 @@ function CampaignScopePicker({
       </button>
       {open && (
         <div
-          className="absolute bottom-[calc(100%+6px)] left-0 z-50 bg-white border border-border rounded-card py-1.5 min-w-[260px]"
+          className="absolute top-[calc(100%+6px)] left-0 z-50 bg-white border border-border rounded-card py-1.5 min-w-[260px]"
           style={{ boxShadow: "0 8px 28px -8px rgba(0,0,0,0.12)" }}
         >
           <div className="px-3 py-1 text-[10px] uppercase tracking-wider text-text-tertiary font-medium">
@@ -1546,10 +1563,11 @@ function ScopeRow({
 /* ─── History panels ──────────────────────────────────────────── */
 
 /**
- * Active products rail — full-width row of product cards. The recommended
- * action and "View analysis" both open the Analyst Agent ↔ Spot review for
- * the product; the action CTA inside that conversation launches the flow.
+ * Active products rail — REMOVED from the /spot home page (the home is now
+ * just intro + chat box + Sessions). Kept here, unmounted, in case the rail
+ * needs to return on a dedicated projects surface.
  */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function ActiveProductsRail() {
   const { isEmpty } = useDemoMode();
   const { openMemory } = useMemoryPanel();
@@ -1746,6 +1764,51 @@ function SessionsCard() {
   const workflow = useSpotStore((s) => s.workflow);
   const viewHomeOverride = useSpotStore((s) => s.viewHomeOverride);
   const resumeWorkflow = useSpotStore((s) => s.resumeWorkflow);
+  const startLaunchFlow = useSpotStore((s) => s.startLaunchFlow);
+  const startScaleFlow = useSpotStore((s) => s.startScaleFlow);
+  const startOptimizeFlow = useSpotStore((s) => s.startOptimizeFlow);
+  const startTestAnglesFlow = useSpotStore((s) => s.startTestAnglesFlow);
+  const askSpot = useSpotStore((s) => s.askSpot);
+  const setResumedTitle = useSpotStore((s) => s.setResumedTitle);
+
+  // Clicking a session resumes it: re-open the same flow it was running.
+  // Resolve the product from the session's scope (scope === product name),
+  // then route by kind. Workspace-scoped or unmatched sessions fall back to
+  // a scoped Ask so the user lands back in context instead of a dead end.
+  // After starting, stamp the exact list title so the in-session header
+  // shows the same name the user clicked.
+  const resumeSession = (session: SpotSession) => {
+    const product = PRODUCTS.find((p) => p.name === session.scope);
+    if (product) {
+      const target = { id: product.id, name: product.name };
+      switch (session.kind) {
+        case "launch":
+          startLaunchFlow(target);
+          break;
+        case "scale":
+          startScaleFlow(target);
+          break;
+        case "optimize":
+          startOptimizeFlow(target);
+          break;
+        case "test-angles":
+          startTestAnglesFlow(target);
+          break;
+        default:
+          askSpot(`Pick up where we left off: ${session.title}`, {
+            kind: "project",
+            label: product.name,
+            target: product.id,
+          });
+      }
+    } else {
+      askSpot(`Pick up where we left off: ${session.title}`, {
+        kind: "workspace",
+        label: session.scope,
+      });
+    }
+    setResumedTitle(session.title);
+  };
 
   // Empty-state preview — no sessions run yet.
   if (isEmpty) {
@@ -1779,8 +1842,17 @@ function SessionsCard() {
   const sessions = [...SPOT_SESSIONS].sort(
     (a, b) => order.indexOf(a.status) - order.indexOf(b.status),
   );
-  const needCount = sessions.filter((s) => s.status === "needs-approval").length;
-  const runningCount = sessions.filter((s) => s.status === "executing").length;
+
+  // Paginate — 10 sessions per page. The pinned "current session" row sits
+  // above the paginated list and isn't counted toward the page size.
+  const PER_PAGE = 10;
+  const totalPages = Math.max(1, Math.ceil(sessions.length / PER_PAGE));
+  const [page, setPage] = useState(0);
+  const safePage = Math.min(page, totalPages - 1);
+  const pageSessions = sessions.slice(
+    safePage * PER_PAGE,
+    safePage * PER_PAGE + PER_PAGE,
+  );
 
   return (
     <div className="bg-white border border-border rounded-card overflow-hidden">
@@ -1789,20 +1861,6 @@ function SessionsCard() {
         <span className="text-[11px] font-medium uppercase tracking-wider text-text-tertiary">
           Sessions
         </span>
-        <span className="flex-1" />
-        {needCount > 0 && (
-          <span className="pill pill-warn" style={{ fontSize: 10 }}>
-            {needCount} need review
-          </span>
-        )}
-        {runningCount > 0 && (
-          <span className="text-[11px] text-text-secondary inline-flex items-center gap-1">
-            <span className="inline-flex w-1.5 h-1.5 rounded-full bg-[#15803D] relative">
-              <span className="absolute inset-0 rounded-full bg-[#15803D] opacity-50 animate-ping" />
-            </span>
-            {runningCount} executing
-          </span>
-        )}
       </div>
       <ul className="divide-y divide-border-subtle">
         {showParked && workflow && (
@@ -1810,444 +1868,89 @@ function SessionsCard() {
             <button
               type="button"
               onClick={resumeWorkflow}
-              className="w-full text-left px-4 py-3 hover-row flex items-center gap-3"
+              className="w-full text-left px-4 py-3 hover-row"
             >
-              <SpotLoader mode="orbit" size={18} className="!gap-0 flex-shrink-0" />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5 mb-0.5">
-                  <span className="text-[13px] font-semibold text-text-primary truncate">
-                    {workflow.kind === "campaign-dive"
-                      ? `Spot it · ${workflow.entityName}`
-                      : `${workflow.kind === "launch-campaign" ? "Launching" : workflow.kind === "scale" ? "Scaling" : workflow.kind === "optimize" ? "Optimizing" : "Testing angles ·"} ${workflow.productName}`}
-                  </span>
-                  <span className="pill pill-info" style={{ fontSize: 9.5 }}>
-                    Your current session
-                  </span>
-                </div>
-                <div className="text-[11.5px] text-text-secondary leading-snug">
-                  Tap to resume from where you left off.
-                </div>
+              <div className="flex items-baseline gap-2">
+                <span className="text-[13px] font-semibold text-text-primary leading-tight flex-1 min-w-0 truncate">
+                  {workflow.kind === "campaign-dive"
+                    ? `Spot it · ${workflow.entityName}`
+                    : `${workflow.kind === "launch-campaign" ? "Launching" : workflow.kind === "scale" ? "Scaling" : workflow.kind === "optimize" ? "Optimizing" : "Testing angles ·"} ${workflow.productName}`}
+                </span>
+                <span className="pill pill-info flex-shrink-0" style={{ fontSize: 9.5 }}>
+                  Your current session
+                </span>
               </div>
-              <span className="inline-flex items-center gap-1 h-7 px-2.5 rounded-button bg-[#111] text-[#FAFAF8] text-[11px] font-medium flex-shrink-0">
-                Resume
-                <ArrowRight size={11} strokeWidth={2} />
-              </span>
+              <div className="text-[12px] text-text-secondary leading-snug mt-0.5">
+                Tap to resume from where you left off.
+              </div>
             </button>
           </li>
         )}
-        {sessions.map((s) => (
+        {pageSessions.map((s) => (
           <li key={s.id}>
-            <SessionRow session={s} />
+            <SessionRow session={s} onResume={() => resumeSession(s)} />
           </li>
         ))}
       </ul>
-    </div>
-  );
-}
-
-const KIND_TONE: Record<SpotSession["kind"], { ring: string; text: string }> = {
-  launch: { ring: "bg-[#EFF6FF]", text: "text-[#1D4ED8]" },
-  scale: { ring: "bg-[#F0FDF4]", text: "text-[#15803D]" },
-  optimize: { ring: "bg-[#FEF3C7]", text: "text-[#92400E]" },
-  "test-angles": { ring: "bg-[#FEE7F2]", text: "text-[#9D174D]" },
-  "campaign-dive": { ring: "bg-surface-secondary", text: "text-text-secondary" },
-  other: { ring: "bg-surface-secondary", text: "text-text-secondary" },
-};
-
-function SessionRow({ session }: { session: SpotSession }) {
-  const isExecuting = session.status === "executing";
-  const isApproval = session.status === "needs-approval";
-  const isDone = session.status === "completed";
-
-  return (
-    <div className="px-4 py-3 hover-row flex items-start gap-3">
-      {/* Left affordance — orbit when executing, status ring otherwise */}
-      <div className="flex-shrink-0 flex items-center justify-center mt-0.5">
-        {isExecuting ? (
-          <SpotLoader mode="orbit" size={18} className="!gap-0" />
-        ) : (
-          <div
-            className={`w-7 h-7 rounded-full flex items-center justify-center ${
-              isApproval ? "bg-[#FEF3C7]" : "bg-[#F0FDF4]"
-            }`}
-          >
-            {isApproval ? (
-              <Clock size={12} strokeWidth={1.8} className="text-[#92400E]" />
-            ) : (
-              <CheckCircle2 size={12} strokeWidth={2} className="text-[#15803D]" />
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Middle — title, scope, current step / detail */}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
-          <span className="text-[13px] font-semibold text-text-primary leading-tight">
-            {session.title}
+      {totalPages > 1 && (
+        <div className="px-4 py-2.5 border-t border-border-subtle flex items-center justify-between">
+          <span className="text-[11px] text-text-tertiary tabular">
+            Page {safePage + 1} of {totalPages}
           </span>
-        </div>
-        <div className="text-[11px] text-text-tertiary mb-1">
-          {session.scope} · {session.when}
-        </div>
-        <div className="text-[12px] text-text-secondary leading-snug line-clamp-2">
-          {isExecuting && session.currentStep ? session.currentStep : session.detail}
-        </div>
-        {/* Executing: progress bar */}
-        {isExecuting && typeof session.progress === "number" && (
-          <div className="flex items-center gap-2 mt-1.5">
-            <div className="flex-1 h-1 rounded-full bg-surface-page overflow-hidden">
-              <div
-                className="h-full bg-gradient-to-r from-[#15803D] to-[#22C55E] transition-all duration-500"
-                style={{ width: `${session.progress}%` }}
-              />
-            </div>
-            <span className="text-[10.5px] text-text-tertiary tabular flex-shrink-0">
-              {Math.round(session.progress)}%
-              {session.eta && ` · ${session.eta}`}
-            </span>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+              disabled={safePage === 0}
+              className="inline-flex items-center justify-center w-7 h-7 rounded-button text-text-tertiary transition-colors enabled:hover:text-text-primary enabled:hover:bg-surface-secondary disabled:opacity-30 disabled:cursor-default"
+              aria-label="Previous page"
+            >
+              <ChevronLeft size={14} strokeWidth={1.8} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+              disabled={safePage >= totalPages - 1}
+              className="inline-flex items-center justify-center w-7 h-7 rounded-button text-text-tertiary transition-colors enabled:hover:text-text-primary enabled:hover:bg-surface-secondary disabled:opacity-30 disabled:cursor-default"
+              aria-label="Next page"
+            >
+              <ChevronRight size={14} strokeWidth={1.8} />
+            </button>
           </div>
-        )}
-      </div>
-
-      {/* Right affordance — Review for approval, View for done */}
-      {isApproval && (
-        <button
-          type="button"
-          className="inline-flex items-center gap-1 h-7 px-2.5 rounded-button bg-[#111] text-[#FAFAF8] hover:bg-black text-[11.5px] font-medium flex-shrink-0"
-        >
-          <SpotMark size={10} />
-          Review
-        </button>
-      )}
-      {isDone && (
-        <button
-          type="button"
-          className="inline-flex items-center gap-1 h-7 px-2.5 rounded-button text-[11px] text-text-tertiary hover:text-text-primary flex-shrink-0"
-        >
-          View
-          <ChevronRight size={11} strokeWidth={1.8} />
-        </button>
+        </div>
       )}
     </div>
   );
 }
 
-
-/**
- * Banner shown on the /spot homepage when a workflow is parked. Three
- * visual states drive different copy + accents:
- *
- *   · launch-building → "Spot is working" with progress bar (no jump-in
- *     CTA; the user just waits).
- *   · launch-review   → "Ready to review" with a green pulsing dot and
- *     a primary Approve CTA — high-energy invitation back into the canvas.
- *   · anything else    → Default Resume banner.
- *
- * The launch-building bar fills from 0% → 100% over the building delay
- * so the user has something to watch.
- */
-function WorkflowParkBanner({
-  workflow,
+function SessionRow({
+  session,
   onResume,
 }: {
-  workflow: SpotWorkflow;
+  session: SpotSession;
   onResume: () => void;
 }) {
-  const isBuilding = workflow.step === "launch-building";
-  const isReview = workflow.step === "launch-review";
-  const isDeploying = workflow.step === "launch-deploy";
-
-  // Progress bar fill animation while building OR deploying.
-  const [progress, setProgress] = useState(0);
-  useEffect(() => {
-    if (!isBuilding && !isDeploying) return;
-    setProgress(8); // start visible
-    // Deploy completes in 14s, building runs longer · faster ramp for deploy.
-    const stepUp = isDeploying ? 12 : 6;
-    const interval = setInterval(() => {
-      setProgress((p) => {
-        if (p >= 92) return 92;
-        return p + Math.random() * stepUp;
-      });
-    }, isDeploying ? 500 : 800);
-    return () => clearInterval(interval);
-  }, [isBuilding, isDeploying]);
-
-  if (isDeploying) {
-    return (
-      <button
-        type="button"
-        onClick={onResume}
-        className="w-full mb-5 rounded-card p-4 relative overflow-hidden text-left transition-colors"
-        style={{
-          background:
-            "linear-gradient(135deg, #1F1B14 0%, #181612 50%, #131110 100%)",
-          border: "1px solid #3A3530",
-          boxShadow:
-            "0 12px 32px -12px rgba(0,0,0,0.45), 0 0 0 1px rgba(201,168,106,0.12) inset",
-        }}
-      >
-        <div
-          aria-hidden
-          className="absolute inset-0 pointer-events-none"
-          style={{
-            background:
-              "radial-gradient(ellipse 60% 60% at 100% 0%, rgba(201, 168, 106, 0.28) 0%, transparent 70%)",
-          }}
-        />
-        <div className="absolute -top-2 -right-2 opacity-[0.12]">
-          <SpotMark size={64} />
-        </div>
-        <div className="relative">
-          <div className="flex items-start gap-3 mb-3">
-            <div className="flex-shrink-0 flex items-center justify-center w-12 h-12">
-              <SpotLoader mode="orbit" size={20} className="!gap-0" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-1.5 mb-0.5">
-                <span className="relative inline-flex w-1.5 h-1.5 rounded-full bg-[#9B9B9B]">
-                  <span className="absolute inset-0 rounded-full bg-[#9B9B9B] opacity-60 animate-ping" />
-                </span>
-                <span
-                  className="text-[10.5px] uppercase tracking-wider font-semibold"
-                  style={{ color: "#C7C4BC" }}
-                >
-                  Spot is deploying
-                </span>
-              </div>
-              <div
-                className="text-[14px] font-semibold leading-tight"
-                style={{ color: "#F5F4EF" }}
-              >
-                Pushing {workflow.productName} to Meta · Google · WhatsApp
-              </div>
-              <div
-                className="text-[12px] mt-1 leading-relaxed"
-                style={{ color: "#A8A8A0" }}
-              >
-                Ads, landing pages, lead forms, pixels and trackers going live
-                right now. I&apos;ll switch this to a launch summary the moment
-                it&apos;s done.
-              </div>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <div
-              className="flex-1 h-1.5 rounded-full overflow-hidden"
-              style={{ background: "rgba(255,255,255,0.06)" }}
-            >
-              <div
-                className="h-full transition-all duration-300"
-                style={{
-                  width: `${progress}%`,
-                  background:
-                    "linear-gradient(90deg, #9B9B9B 0%, #C7C4BC 60%, #22C55E 100%)",
-                }}
-              />
-            </div>
-            <span
-              className="text-[11px] tabular flex-shrink-0"
-              style={{ color: "#A8A8A0" }}
-            >
-              {Math.round(progress)}% · live in seconds
-            </span>
-          </div>
-        </div>
-      </button>
-    );
-  }
-
-  if (isBuilding) {
-    return (
-      <div
-        className="w-full mb-5 rounded-card p-4 relative overflow-hidden"
-        style={{
-          background:
-            "linear-gradient(135deg, #1F1B14 0%, #181612 50%, #131110 100%)",
-          border: "1px solid #2E2820",
-          boxShadow:
-            "0 12px 32px -12px rgba(0,0,0,0.45), 0 0 0 1px rgba(201,168,106,0.06) inset",
-        }}
-      >
-        <div
-          aria-hidden
-          className="absolute inset-0 pointer-events-none"
-          style={{
-            background:
-              "radial-gradient(ellipse 60% 60% at 100% 0%, rgba(201, 168, 106, 0.20) 0%, transparent 70%)",
-          }}
-        />
-        <div className="absolute -top-2 -right-2 opacity-[0.10]">
-          <SpotMark size={64} />
-        </div>
-        <div className="relative">
-          <div className="flex items-start gap-3 mb-3">
-            <div className="flex-shrink-0 flex items-center justify-center w-12 h-12">
-              <SpotLoader mode="orbit" size={20} className="!gap-0" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-1.5 mb-0.5">
-                <span className="relative inline-flex w-1.5 h-1.5 rounded-full bg-[#22C55E]">
-                  <span className="absolute inset-0 rounded-full bg-[#22C55E] opacity-50 animate-ping" />
-                </span>
-                <span
-                  className="text-[10.5px] uppercase tracking-wider font-semibold"
-                  style={{ color: "#22C55E" }}
-                >
-                  Spot is working
-                </span>
-              </div>
-              <div
-                className="text-[14px] font-semibold leading-tight"
-                style={{ color: "#F5F4EF" }}
-              >
-                Building {workflow.productName}
-              </div>
-              <div
-                className="text-[12px] mt-1 leading-relaxed"
-                style={{ color: "#A8A8A0" }}
-              >
-                Six agents running in parallel · Creative · Resize · Landing · Forms ·
-                Campaigns · Voice. I&apos;ll ping you when it&apos;s ready to review.
-              </div>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <div
-              className="flex-1 h-1.5 rounded-full overflow-hidden"
-              style={{ background: "rgba(255,255,255,0.06)" }}
-            >
-              <div
-                className="h-full transition-all duration-500"
-                style={{
-                  width: `${progress}%`,
-                  background:
-                    "linear-gradient(90deg, #9B9B9B 0%, #C7C4BC 60%, #22C55E 100%)",
-                }}
-              />
-            </div>
-            <span
-              className="text-[11px] tabular flex-shrink-0"
-              style={{ color: "#A8A8A0" }}
-            >
-              {Math.round(progress)}% · ETA ~2 hrs
-            </span>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (isReview) {
-    return (
-      <button
-        type="button"
-        onClick={onResume}
-        className="w-full mb-5 group rounded-card p-4 flex items-center gap-3 text-left relative overflow-hidden transition-colors"
-        style={{
-          background:
-            "linear-gradient(135deg, #0E2A1A 0%, #0A1F14 50%, #07170E 100%)",
-          border: "1px solid #1A4D2A",
-          boxShadow: "0 12px 32px -12px rgba(0,0,0,0.5)",
-        }}
-      >
-        <div
-          aria-hidden
-          className="absolute inset-0 pointer-events-none"
-          style={{
-            background:
-              "radial-gradient(ellipse 60% 60% at 100% 0%, rgba(34, 197, 94, 0.22) 0%, transparent 70%)",
-          }}
-        />
-        <div className="absolute -top-2 -right-2 opacity-[0.10]">
-          <SpotMark size={64} />
-        </div>
-        <div
-          className="relative w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
-          style={{
-            background: "#0A1F14",
-            border: "1px solid #1A4D2A",
-            boxShadow: "0 0 18px rgba(34, 197, 94, 0.25)",
-          }}
-        >
-          <span className="relative inline-flex w-2 h-2 rounded-full bg-[#22C55E]">
-            <span className="absolute inset-0 rounded-full bg-[#22C55E] opacity-50 animate-ping" />
-          </span>
-        </div>
-        <div className="relative flex-1 min-w-0">
-          <div
-            className="text-[10.5px] uppercase tracking-wider font-semibold mb-0.5"
-            style={{ color: "#22C55E" }}
-          >
-            Ready to review · {workflow.productName}
-          </div>
-          <div
-            className="text-[13.5px] font-semibold leading-tight"
-            style={{ color: "#F5F4EF" }}
-          >
-            Spot finished building · approve to deploy live
-          </div>
-          <div
-            className="text-[11.5px] mt-0.5"
-            style={{ color: "#A8A8A0" }}
-          >
-            18 creatives · 72 resized variants · 3 landing pages · 2 forms · 3 campaigns
-          </div>
-        </div>
-        <span
-          className="relative inline-flex items-center gap-1 h-8 px-3 rounded-button text-[12px] font-medium flex-shrink-0"
-          style={{
-            background: "#22C55E",
-            color: "#0A1F14",
-          }}
-        >
-          Review &amp; approve
-          <ArrowRight size={12} strokeWidth={2} />
-        </span>
-      </button>
-    );
-  }
-
-  // Default — generic parked workflow (dark warm tone).
+  // Pared down to the essentials: heading, subtitle, and when. No loaders,
+  // status rings, progress bars, or action buttons. The whole row is the
+  // affordance — clicking it resumes the session.
   return (
     <button
       type="button"
       onClick={onResume}
-      className="w-full mb-5 group rounded-card p-3 flex items-center gap-3 text-left transition-colors"
-      style={{
-        background: "#1A1A18",
-        border: "1px solid #2E2820",
-      }}
+      className="w-full text-left px-4 py-3 hover-row cursor-pointer"
     >
-      <SpotMark size={20} />
-      <div className="flex-1 min-w-0">
-        <div
-          className="text-[10.5px] uppercase tracking-wider font-medium"
-          style={{ color: "#8A8980" }}
-        >
-          {workflow.kind === "launch-campaign"
-            ? "Launch in progress"
-            : workflow.kind === "scale"
-              ? "Scale plan in progress"
-              : workflow.kind === "optimize"
-                ? "Optimize plan in progress"
-                : "Angle test in progress"}
-        </div>
-        <div
-          className="text-[13px] font-medium truncate"
-          style={{ color: "#F5F4EF" }}
-        >
-          {workflow.productName} · {STEP_LABELS[workflow.step] || workflow.step}
-        </div>
+      <div className="flex items-baseline gap-2">
+        <span className="text-[13px] font-semibold text-text-primary leading-tight flex-1 min-w-0 truncate">
+          {session.title}
+        </span>
+        <span className="text-[11px] text-text-tertiary flex-shrink-0">
+          {session.when}
+        </span>
       </div>
-      <span
-        className="inline-flex items-center gap-1 h-7 px-2.5 rounded-button text-[11.5px] font-medium"
-        style={{ background: "#FAFAF8", color: "#0A0A09" }}
-      >
-        Resume
-        <ArrowRight size={11} strokeWidth={2} />
-      </span>
+      <div className="text-[12px] text-text-secondary leading-snug mt-0.5 line-clamp-2">
+        {session.detail}
+      </div>
     </button>
   );
 }
+

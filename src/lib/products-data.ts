@@ -601,3 +601,43 @@ export function diagnoseProduct(p: ProductSummary): ProductDiagnosis {
     prompt: `Scale ${p.name} — performance is healthy. Recommend the next budget tier + audience expansion.`,
   };
 }
+
+/**
+ * Spot's daily nudge for a product — one of the three diagnostic flows,
+ * or nothing.
+ *
+ * Each morning the Analyst Agent finishes its scan; Spot reads the
+ * findings and decides what (if anything) to do with the product. It can
+ * land on Scale, Optimize, or Test new angles — or stay quiet when there's
+ * no clear move. `spotNudgeFor` returns null for the quiet case, so some
+ * rows in the projects list carry no nudge.
+ */
+export type SpotNudge = {
+  kind: "scale" | "optimize" | "test-angles";
+  label: string;
+  /** One-line reason from this morning's analyst scan. */
+  reason: string;
+};
+
+const SPOT_NUDGES: Record<string, SpotNudge> = {
+  "prod-guyjus-jee": {
+    kind: "scale",
+    label: "Scale with Spot",
+    reason: "Engineer Parent + Self-Studier are converting well under budget.",
+  },
+  "prod-guyjus-neet": {
+    kind: "optimize",
+    label: "Optimize with Spot",
+    reason: "CPL drifted +18% this week — 3 ad sets look fixable.",
+  },
+  "prod-guyjus-foundation": {
+    kind: "test-angles",
+    label: "Test new angles with Spot",
+    reason: "Top hooks are fatiguing — fresh angles could reset CTR.",
+  },
+  // Spoken English is mid-launch — Spot stays quiet until it has data.
+};
+
+export function spotNudgeFor(productId: string): SpotNudge | null {
+  return SPOT_NUDGES[productId] ?? null;
+}

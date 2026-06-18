@@ -158,6 +158,13 @@ export type AnalysisFindings = {
   hasHeadroom: boolean;
   /** Memory entries Spot read while analysing — cited for traceability. */
   memoryRefs: string[];
+  /** Title for the analysis.md document card the user opens on the right. */
+  headline: string;
+  /** The full analysis as real markdown — the document the render layer
+   *  opens uniformly for every kind via analysisFor(kind).reportMd. This is
+   *  the per-kind equivalent of analystReportFor().reportMd, grounded in the
+   *  same signals this findings object carries. */
+  reportMd: string;
 };
 
 /**
@@ -210,6 +217,41 @@ export const SCALE_ANALYSIS: AnalysisFindings = {
     "Memory · last 30 days · workspace audience graph",
     "Memory · 'Mentor-led hook outperforms rank-focused hook by 31% on hold-rate' (May 24)",
   ],
+  headline: "Scale audit · Guyju's JEE Crack",
+  reportMd: `## Scale audit · Guyju's JEE Crack
+
+_Spot's read · last 30 days. Two ad sets are winning with real headroom, and Brand Search defense is leaving free volume on the table._
+
+### Top line
+
+Two ad sets are winning with significant headroom left, and Brand Search is severely underspent at near-100% intent. There's clear room to push without breaking what's working.
+
+### What's winning
+
+- **JEE Crack · LAL · Class 11 parents** — best CPL on the workspace at **₹336** (down 22% WoW), qualification up 7pts to 14.4%. Only **28% audience saturation**, so room to roughly 2× spend before reach plateaus.
+- **JEE Crack · TOFU · Mentor-led hook** — strongest qualified-lead pull at **₹356** CPL, qualification 13.7% (up 5pts). At 52% saturation, and the 1% lookalike seed has just crossed the threshold to launch.
+
+### Where the headroom is
+
+- **BOFU · Demo-abandoner retargeting** is underspent by ~60% — ₹38K against the warm demo-abandoner pool, sitting on a tiny cap. Reach share has slipped 8pts to 69%.
+- The 1% lookalike seed cohort hit 248 qualified leads (verified + qualified pool now 860). Sharper than the visitor lookalike we used to run.
+- Top 2 winning Reels run on Feed only — workspace benchmarks show +18% CTR on Stories for video-led EdTech creative.
+
+### Biggest single problem
+
+Not enough money chasing the winners. Brand Search defense alone has ~₹50K/week of free, near-100%-intent volume going uncaptured.
+
+### What memory says
+
+- Mentor-led hook outperforms the rank-focused hook by 31% on hold-rate (logged May 24).
+- The workspace audience graph shows no saturation at the audience level on the two winners.
+
+### Recommendation
+
+- Stage budget onto the two winners and lift the BOFU retargeting cap toward the warm pool.
+- Launch the new 1% lookalike from the verified + qualified cohort.
+- Open Stories placements on the top Reels and hold guardrails on CPL drift before each lift.
+`,
 };
 
 export const OPTIMIZE_ANALYSIS: AnalysisFindings = {
@@ -257,6 +299,44 @@ export const OPTIMIZE_ANALYSIS: AnalysisFindings = {
     "Memory · constraint · 'Avoid pressure-free framing — parents read it as unserious' (May 18)",
     "Memory · last 14 days · sentiment scoring on Reels",
   ],
+  headline: "Optimize audit · Guyju's JEE Crack",
+  reportMd: `## Optimize audit · Guyju's JEE Crack
+
+_Spot's read · last 14 days. Two different problems sit side by side: a recent decay on NEET TOFU and a chronic underperformer on Foundation. Different root causes, different fixes._
+
+### Top line
+
+NEET TOFU was working until two weeks ago — CPL jumped 18% with a falling qualification rate. Foundation 9-10 has underperformed since launch. These are separate problems and I'd treat them separately.
+
+### Recent decay · NEET Pro · TOFU · Parents-see-progress
+
+CPL is up 13% to **₹612**, qualification down 3.6pts to 9.5%, and frequency is at **5.2×** against a 4× cap. Three things broke at once:
+
+- **Creative fatigue** — the top Reel passed frequency 5.2 and CTR slid from 2.4% to 1.49% over 21 days. We're spending against an exhausted audience.
+- **Sentiment** — 14 negative comments in three days flagged the "Parents see weekly progress" hook as surveillance framing. Sentiment dropped from +0.78 to −0.18; Meta's relevance score fell from 8 to 5.
+- **Competitor pressure** — Allen launched a ₹6K NEET price drop on May 12. Our /pricing click-through dropped 41% the same day.
+
+### Chronic · Foundation 9-10 · Lab-bench hook
+
+- CPL has never hit target since launch — **₹657** against a ₹420 target, qualification 6.6% against a 12% average.
+- The lab-bench hook reads as "play-school" to JEE-prep parents. Memory already carries the constraint ("avoid pressure-free framing"); the Creative Agent missed it on the brief.
+- The /pricing landing page hides the mobile CTA below the fold — 71% of visitors never reach it; average mobile session is 24s.
+
+### Biggest single problem
+
+NEET TOFU decay. Three causes stacked at once and CPL is still climbing, so this is the one to stop first.
+
+### What memory says
+
+- Mentor-led hook outperforms rank-focused (May 24) — the obvious replacement hook.
+- Constraint: avoid pressure-free framing, parents read it as unserious (May 18).
+
+### Recommendation
+
+- Ship the small reversible fixes first: pause the fatigued Reel, brief two fresh NEET hooks, re-frame the surveillance line.
+- Counter-position on price and rewrite the Foundation brief to respect the memory constraint.
+- Hold targeting steady and re-measure CPL before any bigger swing; rebuild the Foundation page only with sign-off.
+`,
 };
 
 export const ANGLES_ANALYSIS: AnalysisFindings = {
@@ -303,6 +383,45 @@ export const ANGLES_ANALYSIS: AnalysisFindings = {
     "Memory · constraint · 'Avoid name-checking competitors'",
     "Memory · creative-feedback · 'Mentor-led hook outperforms rank-focused by 31%'",
   ],
+  headline: "Creative audit · Guyju's JEE Crack",
+  reportMd: `## Creative audit · Guyju's JEE Crack
+
+_Spot's read · last 30 days, Engineer Parent persona. The winners and losers split along a clean line, so the pattern is sharp enough to generate fresh angles against._
+
+### Top line
+
+Engineer Parent has 3 clear winners and 2 clear losers. Winners share a pattern (specificity + autonomy); losers share the inverse (anxiety + outcome promises). The split is clean enough to brief new angles from.
+
+### What's winning
+
+- **"Mentor-led · capped at 60"** — best CPL on the persona at **₹312**, qualification 16.8%, CTR 2.81%. Specific plus authority framing.
+- The winning concepts all lean specific and student-owned — a named constraint, a concrete moment, the learner in control.
+
+### What's losing
+
+- **"All-India ranked mocks weekly"** — CPL **₹612** against a ₹360 target. Anxiety framing; 6 of 9 top comments express stress.
+- **"Crack JEE — guaranteed strategy"** — CPL **₹584**, qualification down to 3.4%. Outcome promise triggers skepticism, and it's already flagged in memory.
+
+### The pattern
+
+- **Winners:** specificity + autonomy — name the moment, name the constraint, let the kid own it.
+- **Losers:** anxiety + outcome promises — vague pressure and guarantees parents don't trust.
+
+### Biggest single problem
+
+A few loud losers in the rotation are dragging the cohort CPL up. Replacing them with insight-grounded angles should lift the whole portfolio, not just the test cells.
+
+### Constraints any new angle must respect
+
+- No rank or outcome guarantees — legal flagged this.
+- No name-checking competitors.
+- Mentor-led framing beats rank-focused by 31% on hold-rate (logged).
+
+### Recommendation
+
+- Generate a fresh set of angles off the winning pattern (specificity + parent autonomy), each screened against the memory constraints.
+- Run them on the Engineer Parent ad set (highest volume, fastest signal), prune fast, scale what breaks out.
+`,
 };
 
 export function analysisFor(kind: "scale" | "optimize" | "test-angles"): AnalysisFindings {

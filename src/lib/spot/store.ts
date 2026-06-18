@@ -153,6 +153,11 @@ type PanelState = {
   showHomeView: () => void;
   /** Resume the active workflow (homepage banner / past-chats click). */
   resumeWorkflow: () => void;
+  /** Stamp the active workflow with the exact saved-session title, so the
+   *  in-session header shows the same name as the Sessions list. Called
+   *  right after a flow starter when resuming an existing session. No-op if
+   *  no workflow is active. */
+  setResumedTitle: (title: string) => void;
   /** Set of step-CTA labels the user has already clicked in the
    *  current workflow. We hide the button after click so the chat
    *  doesn't render the same dark CTA next to the user's echo. */
@@ -231,6 +236,22 @@ function startDiagnostic(
 ) {
   const thinking = DIAGNOSTIC_THINKING[kind];
 
+  // The clarify (questions) step for each kind — where we jump to when the
+  // analysis has already happened.
+  const CLARIFY_STEP: Record<DiagnosticWorkflow["kind"], WorkflowStep> = {
+    scale: "scale-clarify",
+    optimize: "opt-clarify",
+    "test-angles": "ang-clarify",
+  };
+
+  // When the user accepts an Analyst recommendation, the analysis is already
+  // done and read (it's the analyst review sitting right above). Re-running an
+  // analyze step would be redundant and makes Accept feel like "go". So in
+  // that case we skip straight to the questions; fresh entries (resume,
+  // dashboard) still open on the analyze step. Captured out of `set` so the
+  // thinking runner below uses the same step.
+  let openStep = firstStep;
+
   set((s) => {
     // Continue the SAME chat session when the user is accepting an Analyst
     // recommendation — the analyst review (finding + report + Spot's reasoning)
@@ -238,6 +259,7 @@ function startDiagnostic(
     // (dashboard cards, campaign table) start a fresh thread.
     const continuing =
       s.workflow?.kind === "analyst-review" && s.workflow.productId === product.id;
+    if (continuing) openStep = CLARIFY_STEP[kind];
     const base = continuing ? s.thread : [];
     // No user echo on accept — the recommendation card morphs into its own
     // "Accepted" state, which carries the decision. A separate user bubble
@@ -260,19 +282,22 @@ function startDiagnostic(
       panelFile: "analysis",
       workflow: {
         kind,
-        step: firstStep,
+        step: openStep,
         productId: product.id,
         productName: product.name,
         startedAt: Date.now(),
         ready: false,
         clarifyAnswers: {},
         planApproved: false,
+        // Continuing from an analyst review → keep the Weekly scan in the
+        // panel; don't swap to the per-kind audit (one continuous doc).
+        fromAnalystReview: continuing,
       },
       thread: [...base, pickup],
     };
   });
 
-  runDiagnosticThinking(set, thinking, firstStep);
+  runDiagnosticThinking(set, thinking, openStep);
 }
 
 /** Stream the diagnostic's opening chain of thought, then land the analyze
@@ -318,31 +343,11 @@ function runDiagnosticThinking(
       // analysis document card + the analyze narration as new messages.
       const settled = settleThought(s.thread, `think-${thinking.length - 1}`, []);
       const intro = stepIntroMessage(firstStep, wf);
-      // The analysis is a real artefact: surface an analysis.md card in the
-      // chat the same way the Analyst Agent does, so the document is created
-      // (and visible as a card) before the panel opens it as markdown. When
-      // we're continuing from an analyst review, that card already lives above
-      // (the analyst-report part), so don't double it up.
-      const hasAnalysisCard = s.thread.some(
-        (m) =>
-          m.role === "spot" &&
-          m.parts.some(
-            (p) =>
-              (p.type === "artifact" && p.file === "analysis") ||
-              p.type === "analyst-report",
-          ),
-      );
-      const prod = PRODUCTS.find((p) => p.id === wf.productId);
-      const card =
-        !hasAnalysisCard && prod
-          ? artifactCardMessage(
-              "analysis",
-              analystReportFor(prod).headline,
-              "Full report · Markdown",
-              analystReportFor(prod).reportMd,
-            )
-          : null;
-      const tail = [card, intro].filter(Boolean) as SpotMessage[];
+      // The analysis is a panel artefact, not a chat card. It opens in the
+      // right pane by default (panelFile = "analysis"), so the chat carries
+      // only the conversation — recommendation → accept → questions → plan →
+      // approve → work. No duplicate downloadable doc card in the thread.
+      const tail = [intro].filter(Boolean) as SpotMessage[];
       return {
         workflow: { ...wf, ready: true },
         thread: [...settled, ...tail],
@@ -1420,7 +1425,10 @@ export const useSpotStore = create<PanelState>((set) => ({
     ) {
       return;
     }
-    // Seed the checklist (all pending) + swap the panel to the live canvas.
+    // Seed the checklist (all pending). The panel intentionally stays on the
+    // approved plan.md — approving does NOT open a separate execution file
+    // (removed for all three kinds: scale / optimize / test-angles). Execution
+    // progress is surfaced in the chat thread, not as a new canvas file.
     const moves = executionMovesFor(wf.kind);
     const isDiag = (w: SpotWorkflow | null): w is DiagnosticWorkflow =>
       !!w && (w.kind === "scale" || w.kind === "optimize" || w.kind === "test-angles");
@@ -1428,7 +1436,6 @@ export const useSpotStore = create<PanelState>((set) => ({
       if (!isDiag(st.workflow)) return {};
       return {
         workflow: { ...st.workflow, executionMoves: moves, executionDone: false },
-        panelFile: "execution",
       };
     });
 
@@ -1727,6 +1734,9 @@ export const useSpotStore = create<PanelState>((set) => ({
 
   showHomeView: () => set({ viewHomeOverride: true, panelFile: null }),
   resumeWorkflow: () => set({ viewHomeOverride: false }),
+
+  setResumedTitle: (title) =>
+    set((s) => (s.workflow ? { workflow: { ...s.workflow, resumedTitle: title } } : {})),
 
   connectWhatsApp: () =>
     set((s) => ({

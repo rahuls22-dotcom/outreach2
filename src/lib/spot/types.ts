@@ -30,6 +30,11 @@ export type SpotPart =
   // Spent rendered the right-pane canvas as a place to *see* the work
   // and the chat as the place to *act on it*, like Claude's flows.
   | { type: "step-cta"; label: string; helper?: string; refineHint?: string }
+  // A user decision recorded inline as a card (never a chat bubble) — the
+  // standardized way Spot logs "you chose X", so every decision point reads
+  // like the recommendation card's Accepted state. `items` lists the captured
+  // picks (e.g. clarify answers); `chip` overrides the status label.
+  | { type: "decision"; title: string; items?: string[]; chip?: string }
   // A saved artefact, surfaced as a floating chat card. Clicking Open
   // calls openCanvasFile(file) — the ONLY way Spot proactively surfaces
   // an artefact. Carries no approve action (gates remain separate parts).

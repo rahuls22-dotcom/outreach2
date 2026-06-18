@@ -6,7 +6,12 @@
 // diagnostic (scale / optimize) deploy step. Dark-themed for the canvas.
 
 import { useEffect, useState } from "react";
-import { CheckCircle2, Cog } from "lucide-react";
+import { Check } from "lucide-react";
+
+// One accent for the dark deploy canvas — a calm green for completion. The
+// gradient bar and AI-slop "✓" glyph are gone; motion is a slow pulsing ring,
+// not a spinning gear, so the deploy reads composed rather than frantic.
+const DONE = "#4ADE80";
 
 export function ExecutionChecklist({
   title,
@@ -34,76 +39,88 @@ export function ExecutionChecklist({
   const pct = items.length ? (done / items.length) * 100 : 0;
 
   return (
-    <div className="px-6 py-8 max-w-[640px] mx-auto" style={{ color: "#F5F4EF" }}>
-      {/* Header */}
-      <div className="flex items-center gap-2.5 mb-1">
-        {allDone ? (
-          <CheckCircle2 size={20} strokeWidth={1.9} style={{ color: "#22C55E" }} />
-        ) : (
-          <Cog size={18} strokeWidth={1.8} className="animate-spin" style={{ color: "#9B9B9B", animationDuration: "2s" }} />
-        )}
-        <h1 className="text-[18px] font-semibold tracking-tight">{title}</h1>
+    <div className="px-7 py-9 max-w-[560px] mx-auto" style={{ color: "#F5F4EF" }}>
+      <style>{`
+        @keyframes deployRingPulse {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50%      { opacity: 0.5; transform: scale(0.86); }
+        }
+        .deploy-run-ring {
+          width: 13px; height: 13px; border-radius: 9999px;
+          border: 1.5px solid; box-sizing: border-box;
+          animation: deployRingPulse 1.6s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        @media (prefers-reduced-motion: reduce) { .deploy-run-ring { animation: none; } }
+      `}</style>
+
+      {/* Header — one quiet line: what's deploying + a single live/done status. */}
+      <div className="flex items-baseline justify-between gap-4 mb-2">
+        <h1 className="text-[17px] font-semibold tracking-tight">{title}</h1>
+        <span
+          className="inline-flex items-center gap-1.5 h-[22px] px-2.5 rounded-full text-[11px] font-medium flex-shrink-0"
+          style={
+            allDone
+              ? { background: "rgba(74,222,128,0.12)", color: DONE }
+              : { background: "rgba(255,255,255,0.06)", color: "#C7C4BC" }
+          }
+        >
+          {allDone ? <Check size={12} strokeWidth={2.6} /> : <span className="deploy-run-ring" style={{ borderColor: "#C7C4BC", width: 7, height: 7, animation: "deployRingPulse 1.8s cubic-bezier(0.4,0,0.6,1) infinite" }} />}
+          {allDone ? "Live" : "Deploying"}
+        </span>
       </div>
       {subtitle && (
-        <p className="text-[12.5px] mb-4 ml-[30px]" style={{ color: "#A8A8A0" }}>{subtitle}</p>
+        <p className="text-[12.5px] leading-relaxed max-w-[44ch]" style={{ color: "#A8A8A0" }}>{subtitle}</p>
       )}
 
-      {/* Progress */}
-      <div className="ml-[30px] mb-4 flex items-center gap-2">
-        <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.06)" }}>
-          <div
-            className="h-full transition-all duration-300 ease-out"
-            style={{
-              width: `${pct}%`,
-              background: allDone ? "#22C55E" : "linear-gradient(90deg,#9B9B9B,#C7C4BC)",
-            }}
-          />
-        </div>
-        <span className="text-[11px] tabular flex-shrink-0" style={{ color: "#A8A8A0" }}>
-          {done} of {items.length}
-        </span>
+      {/* One progress affordance — a slim bar, no competing readout. */}
+      <div className="mt-7 h-[3px] rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.07)" }}>
+        <div
+          className="h-full rounded-full transition-[width] duration-700"
+          style={{
+            width: `${pct}%`,
+            background: allDone ? DONE : "#C7C4BC",
+            transitionTimingFunction: "cubic-bezier(0.22, 1, 0.36, 1)",
+          }}
+        />
       </div>
 
       {/* Checklist */}
-      <ul className="ml-[30px] space-y-1.5">
+      <ul className="mt-7 space-y-3.5">
         {items.map((it, i) => {
           const isDone = i < done;
           const isRunning = i === done && !allDone;
           return (
             <li
               key={i}
-              className="flex items-center gap-2.5 text-[13px] leading-relaxed transition-colors"
-              style={{ color: isDone ? "#C9C8C1" : isRunning ? "#F5F4EF" : "#7A7970" }}
+              className="flex items-start gap-3 text-[13.5px] leading-snug transition-colors duration-500"
+              style={{ color: isDone ? "#9B9A92" : isRunning ? "#F5F4EF" : "#7A7970", fontWeight: isRunning ? 500 : 400 }}
             >
-              <span className="w-4 h-4 flex items-center justify-center flex-shrink-0">
+              <span className="mt-[1px] w-[15px] h-[15px] flex items-center justify-center flex-shrink-0">
                 {isDone ? (
-                  <CheckCircle2 size={14} strokeWidth={2} style={{ color: "#22C55E" }} />
+                  <span
+                    className="inline-flex items-center justify-center w-[15px] h-[15px] rounded-full"
+                    style={{ background: "rgba(74,222,128,0.12)" }}
+                  >
+                    <Check size={10} strokeWidth={2.8} style={{ color: DONE }} />
+                  </span>
                 ) : isRunning ? (
-                  <Cog size={12} strokeWidth={1.8} className="animate-spin" style={{ color: "#C7C4BC", animationDuration: "1.2s" }} />
+                  <span className="deploy-run-ring" style={{ borderColor: "#C7C4BC" }} />
                 ) : (
-                  <span className="w-2.5 h-2.5 rounded-full" style={{ border: "1px solid #3A3A35" }} />
+                  <span className="w-[11px] h-[11px] rounded-full" style={{ boxShadow: "inset 0 0 0 1.5px #3A3A35" }} />
                 )}
               </span>
-              <span className="flex-1">{it}</span>
-              {isRunning && (
-                <span className="text-[9.5px] uppercase tracking-wider font-semibold flex-shrink-0" style={{ color: "#C7C4BC" }}>
-                  running…
-                </span>
-              )}
-              {isDone && (
-                <span className="text-[9.5px] uppercase tracking-wider font-semibold flex-shrink-0" style={{ color: "#22C55E" }}>
-                  done
-                </span>
-              )}
+              <span className="flex-1" style={{ textDecoration: isDone ? "line-through" : "none", textDecorationColor: "#3A3A35" }}>
+                {it}
+              </span>
             </li>
           );
         })}
       </ul>
 
       {allDone && (
-        <div className="ml-[30px] mt-4 text-[12.5px] font-medium" style={{ color: "#22C55E" }}>
-          ✓ All steps executed · live. I&apos;ll report back from here as data lands.
-        </div>
+        <p className="mt-9 pt-5 text-[11.5px] leading-relaxed border-t" style={{ color: "#A8A8A0", borderColor: "rgba(255,255,255,0.08)" }}>
+          All steps live. I&apos;ll report back here as data lands.
+        </p>
       )}
     </div>
   );

@@ -10,6 +10,7 @@ import { SpotLoader } from "./spot-loader";
 import { RichText } from "./rich-text";
 import type { SpotFinding, SpotKpi, SpotMessage, SpotPart, Verdict, GuidedKind, SpotChoiceOption, SpotChoiceIcon } from "@/lib/spot/types";
 import { useSpotStore } from "@/lib/spot/store";
+import { hasStreamed, markStreamed } from "@/lib/spot/streamed-text";
 import type { LaunchWorkflow, CanvasFile } from "@/lib/spot/workflow";
 import { fileMeta } from "@/components/spot/workflow/workflow-pane";
 import {
@@ -359,24 +360,57 @@ function RejectButton({ onClick }: { onClick: () => void }) {
  */
 function StepCtaPart({ label, helper, refineHint }: { label: string; helper?: string; refineHint?: string }) {
   const advanceWorkflow = useSpotStore((s) => s.advanceWorkflow);
-  const appendMessage = useSpotStore((s) => s.appendMessage);
-  const clicked = useSpotStore((s) => s.clickedCtas.has(label));
-  const markClicked = useSpotStore((s) => s.markCtaClicked);
   const rejectStep = useSpotStore((s) => s.rejectStep);
-
-  // After the user decides, hide the card entirely · their echo message +
-  // the next Spot reply already carry the decision.
-  if (clicked) return null;
+  const resolveCta = useSpotStore((s) => s.resolveCta);
+  // The decision lives on the card itself: once acted on, the gate morphs into
+  // its decided state (no buttons, a status chip) and stays. No user echo in
+  // the chat — every decision point reads as a card, never a bubble.
+  const sentinel = `step-cta:${label}`;
+  const resolution = useSpotStore((s) => s.ctaResolutions[sentinel]);
 
   const handleContinue = () => {
-    appendMessage({ role: "user", text: label });
-    markClicked(label);
+    resolveCta(sentinel, "accepted");
     advanceWorkflow();
   };
   const handleReject = () => {
-    markClicked(label);
+    resolveCta(sentinel, "rejected");
     rejectStep();
   };
+
+  // Decided state — buttons gone, a quiet chip carries the user's call.
+  if (resolution) {
+    const accepted = resolution === "accepted";
+    return (
+      <div
+        className="mt-2 mb-1 rounded-[14px] px-4 py-3.5"
+        style={{ background: "var(--bg-card)", border: "1px solid var(--border-subtle)" }}
+      >
+        <div className="flex items-center gap-4">
+          <div className="flex-1 min-w-0">
+            <div className="text-[10.5px] uppercase tracking-wider text-text-tertiary font-medium mb-1">
+              Next step
+            </div>
+            <div className="text-[16px] font-semibold text-text-primary leading-snug">
+              {label}
+            </div>
+          </div>
+          <div
+            className="flex-shrink-0 flex items-center gap-1.5 h-8 px-3 rounded-full"
+            style={{ background: "var(--surface-secondary)", color: "var(--text-secondary)" }}
+          >
+            {accepted ? (
+              <Check size={14} strokeWidth={2} />
+            ) : (
+              <X size={14} strokeWidth={2} />
+            )}
+            <span className="text-[12.5px] font-medium">
+              {accepted ? "Confirmed" : "Passed"}
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -907,10 +941,21 @@ function ChainOfThought({ steps }: { steps: CotStep[] }) {
  * fully revealed it just renders as static RichText. */
 function StreamingText({ text, onDone }: { text: string; onDone?: () => void }) {
   const tokens = useMemo(() => text.split(/(\s+)/), [text]);
-  const [n, setN] = useState(0);
+  // If this exact answer has already streamed once (this session or a prior
+  // one, via localStorage), render it whole — no re-animation on reopen,
+  // route change, or reload. Computed on mount so the very first render of an
+  // already-seen answer is already complete.
+  const alreadyDone = useMemo(() => hasStreamed(text), [text]);
+  const [n, setN] = useState(alreadyDone ? tokens.length : 0);
   useEffect(() => {
+    if (alreadyDone) {
+      setN(tokens.length);
+      onDone?.();
+      return;
+    }
     setN(0);
     if (tokens.length === 0) {
+      markStreamed(text);
       onDone?.();
       return;
     }
@@ -920,13 +965,14 @@ function StreamingText({ text, onDone }: { text: string; onDone?: () => void }) 
       setN(i);
       if (i >= tokens.length) {
         clearInterval(id);
+        markStreamed(text);
         onDone?.();
       }
     }, 42);
     return () => clearInterval(id);
     // onDone is a stable callback from the parent; tokens drives the run.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tokens]);
+  }, [tokens, alreadyDone]);
 
   let shown = tokens.slice(0, n).join("");
   // Drop a dangling, not-yet-closed bold marker so RichText never shows `**`.
@@ -1401,15 +1447,17 @@ function AnalystCtaPart({
     resolveCta(sentinel, "rejected");
     rejectRecommendation({ flow, productId, productName });
   };
-  // The recommendation Spot lands on, phrased as the action it would take.
+  // The recommendation Spot lands on, phrased as drafting the PLAN — not
+  // the live action. Accepting starts Spot working on a plan you approve
+  // before anything goes live (the helper line reinforces this).
   const suggestion =
     flow === "scale"
-      ? "Scale this campaign"
+      ? "Create the scaling plan"
       : flow === "optimize"
-        ? "Optimize this campaign"
+        ? "Create the optimization plan"
         : flow === "test-angles"
-          ? "Test new angles"
-          : "Launch this campaign";
+          ? "Draft angles to test"
+          : "Plan the campaign launch";
 
   // Decided state — buttons gone, a quiet status chip carries the user's
   // call. Neutral surface (not a dark primary): the action is already taken,
@@ -1476,6 +1524,49 @@ function AnalystCtaPart({
   );
 }
 
+/**
+ * DecisionPart · a settled user decision, rendered as a card so it matches the
+ * recommendation card's Accepted state. Used for choices that would otherwise
+ * land as a raw chat bubble (the clarify picks). Title is the action taken,
+ * `items` lists the captured picks, the chip records that it's done.
+ */
+function DecisionPart({ title, items, chip }: { title: string; items?: string[]; chip?: string }) {
+  return (
+    <div
+      className="mt-2 mb-1 rounded-[14px] px-4 py-3.5"
+      style={{ background: "var(--bg-card)", border: "1px solid var(--border-subtle)" }}
+    >
+      <div className="flex items-start gap-4">
+        <div className="flex-1 min-w-0">
+          <div className="text-[10.5px] uppercase tracking-wider text-text-tertiary font-medium mb-1">
+            Your call
+          </div>
+          <div className="text-[16px] font-semibold text-text-primary leading-snug">
+            {title}
+          </div>
+          {items && items.length > 0 && (
+            <ul className="mt-2 space-y-1">
+              {items.map((it, i) => (
+                <li key={i} className="flex gap-2 text-[12.5px] text-text-secondary leading-snug">
+                  <span className="text-text-tertiary flex-shrink-0">·</span>
+                  <span className="min-w-0">{it}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        <div
+          className="flex-shrink-0 flex items-center gap-1.5 h-8 px-3 rounded-full"
+          style={{ background: "var(--surface-secondary)", color: "var(--text-secondary)" }}
+        >
+          <Check size={14} strokeWidth={2} />
+          <span className="text-[12.5px] font-medium">{chip ?? "Confirmed"}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PartRenderer({ part, onTextDone }: { part: SpotPart; onTextDone?: () => void }) {
   switch (part.type) {
     case "headline":
@@ -1488,6 +1579,8 @@ function PartRenderer({ part, onTextDone }: { part: SpotPart; onTextDone?: () =>
       return <HandoffPart kind={part.kind} label={part.label} reason={part.reason} />;
     case "step-cta":
       return <StepCtaPart label={part.label} helper={part.helper} refineHint={part.refineHint} />;
+    case "decision":
+      return <DecisionPart title={part.title} items={part.items} chip={part.chip} />;
     case "artifact":
       return (
         <ArtifactCardPart
