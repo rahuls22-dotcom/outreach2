@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import type { Variants } from "framer-motion";
 import {
-  ArrowLeft, ArrowRight, Upload, FileSpreadsheet, X, Rocket, Save,
+  ArrowLeft, ArrowRight, Upload, FileSpreadsheet, X, Rocket,
   CheckCircle2, AlertCircle, Plus, Download, Check, Phone, Clock,
   Users, Calendar, Bot, FlaskConical, Loader2, FolderKanban,
   Info, ChevronDown, Sparkles, Pencil,
@@ -13,6 +13,7 @@ import {
 import { voiceAgents } from "@/lib/outreach-data";
 import { projectsList } from "@/lib/project-data";
 import { useDemoMode } from "@/lib/demo-mode";
+import { useOutreachDraftStore } from "@/lib/outreach-draft-store";
 import { PhoneInput } from "@/components/shared/phone-input";
 
 // Opacity-only step transition. Earlier the variant animated `x: 10 → 0`,
@@ -47,14 +48,17 @@ const MAX_ROWS_PER_FILE    = 10000;
 // audience (CSV + schedule + optional test calls). The old "Review & Launch"
 // step was folded into Step 2 because there's no meaningful review work to
 // do once the audience is in place — the user already saw their settings
-// on Step 1 and can edit them by going back. A confirmation interstitial
-// appears between Step 1 and Step 2 so the user explicitly chooses to add
-// audience now vs. later.
+// Speedrun: a single Setup step. The user names the outreach, picks a
+// voice agent + cadence, and clicks Create. We persist a draft and route
+// straight to the outreach detail page where an "Add audiences now /
+// later" nudge modal greets them. This replaces the older two-step
+// (Outreach → Audience) wizard — the audience upload now lives on the
+// detail page itself, so the user can come back to it any time without
+// being trapped inside the wizard.
 const STEPS = [
   { id: 1 as const, label: "Outreach",  icon: Sparkles },
-  { id: 2 as const, label: "Audience",  icon: Users },
 ];
-type Step = 1 | 2;
+type Step = 1;
 
 interface ManualLead { id: string; name: string; phone: string; }
 
@@ -556,6 +560,7 @@ function AgentPicker({
 function CreateOutreachInner() {
   const router = useRouter();
   const { isEmpty, setMode } = useDemoMode();
+  const upsertDraft = useOutreachDraftStore((s) => s.upsertDraft);
   const [step, setStep] = useState<Step>(1);
   // `phase` controls what's rendered for the current step:
   //   "form"    → the step's form fields
@@ -578,7 +583,7 @@ function CreateOutreachInner() {
   const [name, setName]               = useState("");
   const [agent, setAgent]             = useState("");
 
-  // Agent hand-off from /agents-mvp/create. When the user clicks
+  // Agent hand-off from /agents/create. When the user clicks
   // "Save & use in outreach" there, the agent id is encoded in the
   // URL and the agent name is stashed in sessionStorage. We pluck
   // both, prepend a synthetic entry to the agent picker list, and
@@ -836,73 +841,9 @@ function CreateOutreachInner() {
         <span className="text-meta text-text-secondary">Lead Generation › Outreach › Create</span>
       </div>
 
-      {/* Step indicator — same shape as campaigns/create. Each step is an
-          icon circle with the label below; completed steps show a Check
-          and a filled accent connector to the next one. Centered on the
-          page rather than stretched edge-to-edge, which reads as a more
-          intentional progress strip and stops the labels from drifting
-          far from their dots. */}
-      <div className="flex items-center justify-center mb-10">
-        <div className="flex items-center gap-0">
-          {STEPS.map((s, idx) => {
-            const Icon = s.icon;
-            const isComplete = step > s.id;
-            const isCurrent  = step === s.id;
-            const isReachable = s.id <= step;
-            return (
-              <div key={s.id} className="flex items-center">
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (!isReachable) return;
-                    setStep(s.id);
-                    // Stepping back resets the interstitial — phase only
-                    // affects Step 2's render, so this is safe to always
-                    // reset to "form" when the user jumps to another step.
-                    if (s.id !== step) setPhase("form");
-                  }}
-                  disabled={!isReachable}
-                  className="flex flex-col items-center gap-1.5 group"
-                >
-                  <div
-                    className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200 ${
-                      isComplete
-                        ? "bg-status-success text-white"
-                        : isCurrent
-                          ? "bg-accent text-white ring-4 ring-accent/10"
-                          : "bg-surface-secondary text-text-tertiary"
-                    } ${isReachable ? "cursor-pointer" : "cursor-not-allowed"}`}
-                  >
-                    {isComplete ? (
-                      <Check size={14} strokeWidth={2.5} />
-                    ) : (
-                      <Icon size={14} strokeWidth={1.5} />
-                    )}
-                  </div>
-                  <span
-                    className={`text-[10px] font-medium transition-colors duration-150 whitespace-nowrap ${
-                      isCurrent
-                        ? "text-text-primary"
-                        : isComplete
-                          ? "text-text-secondary"
-                          : "text-text-tertiary"
-                    }`}
-                  >
-                    {s.label}
-                  </span>
-                </button>
-                {idx < STEPS.length - 1 && (
-                  <div
-                    className={`w-10 h-[2px] mx-1 mt-[-18px] transition-colors duration-200 ${
-                      isComplete ? "bg-status-success" : "bg-border"
-                    }`}
-                  />
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
+      {/* Step indicator removed — the speedrun flow is a single screen,
+          so a one-circle stepper read as decorative chrome rather than
+          actual progress. The page title carries the orientation now. */}
 
       {/* Step content lives in a centered 860px column — same width as
           /campaigns/create so the two flows feel like siblings. Earlier we
@@ -1072,66 +1013,23 @@ function CreateOutreachInner() {
                     </div>
                   </Section>
 
-                  {/* ── Recurring schedule (outreach-level) ─────────────
-                      Lives on the outreach because it's a property of
-                      *how* the agent operates, not what list it's
-                      dialing. Each audience inherits these days + hours.
-                      Only the "start now vs schedule for later" choice
-                      sits on the audience, since that's the one piece
-                      that varies batch-to-batch. */}
-                  <Section
-                    eyebrow="Calling schedule"
-                    title="Which days and hours can the agent call?"
-                    subtitle="Applies to every audience you add to this outreach. You can adjust it later if your hours change."
-                    icon={Clock}
-                  >
-                    <Field label="Active days">
-                      <div className="flex items-center gap-1.5">
-                        {DAYS.map(day => {
-                          const isOn = activeDays.includes(day);
-                          return (
-                            <button
-                              key={day}
-                              type="button"
-                              onClick={() => toggleDay(day)}
-                              title={day}
-                              aria-pressed={isOn}
-                              className={`w-9 h-9 text-[11px] font-bold rounded-[8px] transition-all ${
-                                isOn
-                                  ? "bg-accent/10 text-accent ring-1 ring-accent/30"
-                                  : "bg-white border border-border text-text-tertiary hover:border-text-tertiary hover:text-text-secondary"
-                              }`}
-                            >
-                              {day[0]}
-                            </button>
-                          );
-                        })}
-                      </div>
-                      <p className="text-[11px] text-text-tertiary mt-2">
-                        {activeDays.length === 0
-                          ? "No days selected — pick at least one."
-                          : `Calling on ${activeDays.join(", ")}.`}
+                  {/* ── Recurring schedule (display only) ───────────────
+                      The speedrun create flow no longer asks the user
+                      to set days or hours — every new outreach runs the
+                      standard Mon–Sat 9–7 window. We surface the rule
+                      as a single advisory row so the user knows what
+                      they're signing up for; the schedule can be edited
+                      later from the outreach detail page if needed. */}
+                  <div className="mt-6 flex items-start gap-3 p-4 bg-surface-page border border-border-subtle rounded-card">
+                    <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-white border border-border shrink-0">
+                      <Clock size={14} strokeWidth={1.6} className="text-text-secondary" />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-[13px] font-medium text-text-primary">
+                        Calls run Monday to Saturday, 9:00 AM to 7:00 PM.
                       </p>
-                    </Field>
-
-                    <Field label="Calling hours">
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="time"
-                          value={callStart}
-                          onChange={e => setCallStart(e.target.value)}
-                          className="h-9 px-2.5 text-[12.5px] border border-border rounded-input"
-                        />
-                        <span className="text-[12px] text-text-tertiary">to</span>
-                        <input
-                          type="time"
-                          value={callEnd}
-                          onChange={e => setCallEnd(e.target.value)}
-                          className="h-9 px-2.5 text-[12.5px] border border-border rounded-input"
-                        />
-                      </div>
-                    </Field>
-                  </Section>
+                    </div>
+                  </div>
 
                 </div>
               </motion.div>
@@ -1929,37 +1827,66 @@ function CreateOutreachInner() {
           {/* Nav buttons — hidden during the interstitial because the
               success card carries its own CTAs ("Add audience now" /
               "I'll add audience later"). Otherwise:
-                Step 1 form:    "Save as Draft"   → "Create outreach"
-                Step 2 form:    "Back"            → "Launch outreach" */}
+                Step 1 form:    (nothing on left) → "Create outreach"
+                Step 2 form:    "Back"            → "Launch outreach"
+              Save as Draft was dropped — the flow is short enough that
+              "draft" wasn't carrying its weight (users either created
+              the outreach or abandoned, almost no one came back to a
+              half-finished draft) and the button sat in awkward
+              isolation on step 1's left edge. */}
           {!(step === 2 && phase === "created") && (
             <div className="flex items-center justify-between mt-5">
               <div>
-                {step === 2 && phase === "form" ? (
+                {step === 2 && phase === "form" && (
                   <button
                     onClick={() => { setStep(1); setPhase("form"); }}
                     className="inline-flex items-center gap-1.5 h-10 px-4 text-[13px] font-medium text-text-secondary border border-border rounded-button bg-white hover:bg-surface-page transition-colors"
                   >
                     <ArrowLeft size={14} strokeWidth={1.5} /> Back
                   </button>
-                ) : (
-                  <button className="inline-flex items-center gap-1.5 h-10 px-4 text-[13px] font-medium text-text-secondary border border-border rounded-button bg-white hover:bg-surface-page transition-colors">
-                    <Save size={14} strokeWidth={1.5} /> Save as Draft
-                  </button>
                 )}
               </div>
               {step === 1 ? (
                 <button
                   onClick={() => {
-                    // Commit the outreach — advance to step 2 in the
-                    // "created" phase so the success interstitial shows.
-                    // The actual persistence happens at launch / "later".
-                    setStep(2);
-                    setPhase("created");
+                    // Speedrun: commit the outreach as a draft, route to
+                    // its detail page, let the audience nudge modal greet
+                    // the user there. The wizard ends right here — no
+                    // step 2, no audience upload trapped behind a Next.
+                    const id = `out-new-${Date.now()}`;
+                    const createdAt = new Date().toISOString().slice(0, 10);
+                    const seed = {
+                      id,
+                      projectId,
+                      name: name.trim() || "Untitled outreach",
+                      voiceAgent: selectedAgent?.name ?? "—",
+                      createdAt,
+                    };
+                    upsertDraft(seed);
+                    // Keep the older sessionStorage hand-off alive so the
+                    // listing also picks up the new draft if the user
+                    // navigates there directly. Belt-and-braces.
+                    try {
+                      sessionStorage.setItem(
+                        "outreach_just_launched",
+                        JSON.stringify({
+                          ...seed,
+                          totalContacts: 0,
+                          status: "draft",
+                          needsAudience: true,
+                        }),
+                      );
+                    } catch { /* ignore */ }
+                    if (isEmpty) setMode("populated");
+                    if (searchParams?.get("onboarding") === "1") {
+                      try { sessionStorage.setItem("onboarding_outreach_done", "true"); } catch {}
+                    }
+                    router.push(`/outreach/${id}?just_created=1`);
                   }}
                   disabled={!canAdvance()}
                   className="inline-flex items-center gap-2 h-10 px-6 bg-accent text-white text-[13px] font-medium rounded-button hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                 >
-                  Create outreach <ArrowRight size={15} strokeWidth={1.5} />
+                  <Rocket size={15} strokeWidth={1.5} /> Create outreach
                 </button>
               ) : (
                 <button

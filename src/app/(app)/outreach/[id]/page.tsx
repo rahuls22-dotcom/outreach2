@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useRef, useEffect } from "react";
-import { useRouter, useParams } from "next/navigation";
+import { useRouter, useParams, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import type { Variants } from "framer-motion";
 import {
@@ -13,6 +13,7 @@ import {
   ChevronDown,
   Check,
   UserPlus,
+  Users,
   Upload,
   FileSpreadsheet,
   CheckCircle2,
@@ -40,6 +41,7 @@ import {
   Mail,
   MapPin,
   Copy,
+  ExternalLink,
 } from "lucide-react";
 import { format } from "date-fns";
 import {
@@ -50,6 +52,7 @@ import {
   outreachDailySpendForId,
 } from "@/lib/outreach-data";
 import type { ContactOutcome, AIQualStatus, OutreachContact, OutreachDetail } from "@/lib/outreach-data";
+import { useOutreachDraftStore, hydrateDraftDetail, type OutreachDraftSeed } from "@/lib/outreach-draft-store";
 import {
   dailySeriesForOutreach,
   rangeWindowFromPreset,
@@ -260,12 +263,28 @@ function StatusActionButton({
   );
 }
 
-// ── Lead profile intelligence ──────────────────────────────────────────────
-// Derive enrichment-style profile fields off the contact id so the
-// drill-down Profile tab can show city / languages / gender / email
-// without us needing real enrichment data. Deterministic — same id
-// always lands on the same fields, so the demo doesn't churn between
-// views.
+// ── Modern contact row ─────────────────────────────────────────────────────
+
+// Deterministic per-name avatar colour so the same lead always gets the same chip.
+function avatarColor(name: string): string {
+  const palette = ["#4F46E5", "#7C3AED", "#22C55E", "#0EA5E9", "#F59E0B", "#EC4899", "#14B8A6"];
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) % 2147483647;
+  return palette[hash % palette.length];
+}
+
+// ── ProfileTab ───────────────────────────────────────────────────────
+//
+// Mirrors the Profile tab on the /enquiries lead drawer 1:1 — same
+// "Contact Details" card (location · phone with copy + WhatsApp ·
+// email with copy) and same "Intelligence" cards (Profile Intelligence:
+// gender + languages; Geographical Intelligence: location + type).
+//
+// OutreachContact only carries phone + name, so the email / location /
+// gender / languages are fabricated deterministically per contact id —
+// same hash → same values across reloads. That keeps the demo stable
+// (no jitter on refresh) and gives every lead a plausible profile.
+// ─────────────────────────────────────────────────────────────────────
 function deriveProfileIntelligence(contact: OutreachContact): {
   email:        string;
   gender:       "M" | "F" | null;
@@ -323,12 +342,6 @@ function deriveProfileIntelligence(contact: OutreachContact): {
   };
 }
 
-// ── Profile tab — drill-down right panel ───────────────────────────────────
-// Shows Contact Details (location/phone/email with copy buttons) and
-// two Intelligence sections (Profile + Geographical). Replaces the
-// older single-column [label, value] list which buried the rich fields
-// in noise and duplicated the Outcome (already covered by Qualification
-// status and the AI Qualification column on the contacts table).
 function ProfileTab({ contact }: { contact: OutreachContact }) {
   const intel = useMemo(() => deriveProfileIntelligence(contact), [contact]);
   const locationTypeLabels: Record<string, string> = {
@@ -420,16 +433,6 @@ function ProfileTab({ contact }: { contact: OutreachContact }) {
       </div>
     </div>
   );
-}
-
-// ── Modern contact row ─────────────────────────────────────────────────────
-
-// Deterministic per-name avatar colour so the same lead always gets the same chip.
-function avatarColor(name: string): string {
-  const palette = ["#4F46E5", "#7C3AED", "#22C55E", "#0EA5E9", "#F59E0B", "#EC4899", "#14B8A6"];
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) % 2147483647;
-  return palette[hash % palette.length];
 }
 
 function ContactRow({ c }: { c: OutreachContact }) {
@@ -673,7 +676,16 @@ interface PreviewRow {
 }
 
 interface CsvFile {
+  // Unique id used to address the row during the simulated upload
+  // animation. The "Uploading…" / "Uploaded" flip in the UI is keyed
+  // by this id so multiple files in flight don't collide.
+  id?: string;
   name: string;
+  // "uploading" while the progress bar is animating, "ready" once the
+  // animation completes and the parsed counts are merged in. We keep
+  // optional for back-compat with code paths that pre-date this flow.
+  status?: "uploading" | "ready";
+  progress?: number;
   totalRows: number;
   validRows: number;
   invalid: CsvInvalidBreakdown;
@@ -863,9 +875,83 @@ function downloadTextFile(name: string, content: string) {
 const ADD_LEADS_MAX_FILES_PER_UPLOAD = 10;
 const ADD_LEADS_MAX_ROWS_PER_FILE     = 50000;
 
+// ── AudienceNudgeModal ───────────────────────────────────────────────
+//
+// Greets the user the moment they land on /outreach/[id] after the
+// speedrun create flow. Two CTAs: primary opens the existing
+// AddLeadsModal so the user can upload right away; secondary defers and
+// leaves the outreach in draft. Deliberately small — the page behind it
+// is the real reward, not this dialog.
+function AudienceNudgeModal({
+  open,
+  outreachName,
+  agentName,
+  onAddNow,
+  onAddLater,
+}: {
+  open: boolean;
+  outreachName: string;
+  agentName: string;
+  onAddNow: () => void;
+  onAddLater: () => void;
+}) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div
+        className="absolute inset-0 bg-black/40"
+        onClick={onAddLater}
+        aria-hidden
+      />
+      <div className="relative w-full max-w-[440px] bg-white rounded-card shadow-2xl border border-border overflow-hidden">
+        <div className="px-6 pt-6 pb-5">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-[#F0FDF4]">
+              <Check size={14} strokeWidth={2.25} className="text-[#15803D]" />
+            </span>
+            <p className="text-[12px] font-medium text-[#15803D] uppercase tracking-[0.5px]">
+              Outreach created
+            </p>
+          </div>
+          <h2 className="text-[18px] font-semibold text-text-primary leading-tight mb-1.5">
+            Upload your audience to get dialing
+          </h2>
+          <p className="text-[13px] text-text-secondary leading-relaxed">
+            <span className="text-text-primary">{outreachName}</span> is ready
+            with {agentName === "—" ? "an agent" : agentName} on the line.
+            Pick whether calls go out the moment leads are uploaded, or
+            schedule them for a specific time — the upload step is the
+            same either way.
+          </p>
+        </div>
+        <div className="px-6 pb-6 flex flex-col gap-2">
+          <button
+            type="button"
+            onClick={onAddNow}
+            className="inline-flex items-center justify-center gap-2 h-11 px-5 bg-text-primary text-white text-[13.5px] font-medium rounded-button hover:opacity-90 transition-opacity"
+          >
+            <Users size={15} strokeWidth={1.75} />
+            Add audience &amp; launch now
+          </button>
+          <button
+            type="button"
+            onClick={onAddLater}
+            className="inline-flex items-center justify-center gap-2 h-10 px-4 text-[12.5px] font-medium text-text-secondary border border-border rounded-button hover:bg-surface-page hover:text-text-primary transition-colors"
+          >
+            <Clock size={13} strokeWidth={1.75} />
+            Add audience &amp; schedule for later
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AddLeadsModal({
   onClose,
   existingContacts,
+  defaultStartMode = "immediate",
+  onCommit,
 }: {
   onClose: () => void;
   // Contacts already in *this* outreach — used for duplicate detection so the
@@ -873,9 +959,37 @@ function AddLeadsModal({
   // to the workspace as a whole. Different outreaches are allowed to reach
   // the same person.
   existingContacts: OutreachContact[];
+  // Pre-selects the scheduling block: "immediate" means start dialing as
+  // soon as the audience is added, "schedule" defers to a chosen date +
+  // time. The audience upload UX is identical either way — only the
+  // scheduling toggle starts in a different position. Driven by the
+  // entry point on the detail page (nudge modal CTAs pass different
+  // defaults so the user lands in the right mode).
+  defaultStartMode?: "immediate" | "schedule";
+  // Fires when the user clicks Launch / Schedule with valid input.
+  // The detail page uses this to patch the draft store so totalContacts,
+  // status, and scheduledFor flow back to the page (funnel + counters
+  // + status badge). Modal closes on the page side after this fires.
+  onCommit?: (result: {
+    totalNew: number;
+    startMode: "immediate" | "schedule";
+    scheduledFor: string | null;
+    sourceNames: string[];
+  }) => void;
 }) {
   const [tab, setTab] = useState<"csv" | "manual">("csv");
   const [csvFiles, setCsvFiles] = useState<CsvFile[]>([]);
+  // Scheduling block — sits above the footer, surfaces a single binary
+  // choice (start now vs schedule). Date defaults to tomorrow at the
+  // configured calling-window start so the user just clicks Schedule
+  // without filling either field if they're fine with that default.
+  const [startMode, setStartMode] = useState<"immediate" | "schedule">(defaultStartMode);
+  const [startDate, setStartDate] = useState<string>(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    return d.toISOString().slice(0, 10);
+  });
+  const [startTime, setStartTime] = useState<string>("09:00");
   // Inline upload-error feed — populated when the picker rejects files
   // (too many, oversize, wrong type). Rendered as a red banner the user
   // dismisses; we don't auto-clear because the user needs to see *why*
@@ -909,14 +1023,19 @@ function AddLeadsModal({
     if (!files || files.length === 0) return;
     const errs: string[] = [];
     const incoming = Array.from(files);
-    // Capacity check — clamp to the slots still available, kick the
-    // overflow into the error feed so the user understands why some
-    // files didn't land.
     const slotsLeft = Math.max(0, ADD_LEADS_MAX_FILES_PER_UPLOAD - csvFiles.length);
     if (incoming.length > slotsLeft) {
       errs.push(`Only ${slotsLeft} more file${slotsLeft === 1 ? "" : "s"} can be added in this batch (max ${ADD_LEADS_MAX_FILES_PER_UPLOAD}). Extra files were ignored.`);
     }
-    const next: CsvFile[] = [];
+
+    // Parse synchronously up-front so we can validate row counts and
+    // surface errors immediately, then queue an "uploading" placeholder
+    // per accepted file and animate it to "ready". The parse is instant
+    // in a demo, but instantaneous "Uploaded" reads as fake; the
+    // simulated progress gives the upload visual weight without
+    // misleading the user about what's actually happening.
+    type Job = { id: string; parsed: CsvFile };
+    const jobs: Job[] = [];
     for (const file of incoming.slice(0, slotsLeft)) {
       if (!file.name.toLowerCase().endsWith(".csv")) {
         errs.push(`${file.name} — only .csv files are supported.`);
@@ -928,10 +1047,49 @@ function AddLeadsModal({
         errs.push(`${file.name} — ${parsed.totalRows.toLocaleString()} rows exceeds the ${ADD_LEADS_MAX_ROWS_PER_FILE.toLocaleString()}-row limit per file.`);
         continue;
       }
-      next.push(parsed);
+      const id = `f${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      jobs.push({ id, parsed: { ...parsed, id } });
     }
     if (errs.length > 0) setUploadErrors((p) => [...p, ...errs]);
-    if (next.length > 0) setCsvFiles((p) => [...p, ...next]);
+    if (jobs.length === 0) return;
+
+    // Phase 1 — append "uploading" placeholders so the rows appear
+    // immediately. The placeholder has zeroed counts so the UI knows
+    // to render the "Uploading…" pill + progress bar.
+    const placeholders: CsvFile[] = jobs.map((j) => ({
+      id: j.id,
+      name: j.parsed.name,
+      status: "uploading",
+      progress: 0,
+      totalRows: 0,
+      validRows: 0,
+      invalid: { missingPhone: 0, invalidFormat: 0, duplicatePhone: 0, missingName: 0 },
+      previewHeaders: [],
+      previewRows: [],
+      allRows: [],
+    }));
+    setCsvFiles((p) => [...p, ...placeholders]);
+
+    // Phase 2 — animated progress per file. Staggered per file so a
+    // multi-file drop reads as a queue, then merge in the parsed
+    // counts at the end of each ramp.
+    const TICKS = [15, 40, 70, 95];
+    const TICK_MS = 320;
+    jobs.forEach((job, fileIdx) => {
+      const stagger = fileIdx * 180;
+      TICKS.forEach((pct, t) => {
+        setTimeout(() => {
+          setCsvFiles((p) => p.map((f) => f.id === job.id ? { ...f, progress: pct } : f));
+        }, stagger + (t + 1) * TICK_MS);
+      });
+      setTimeout(() => {
+        setCsvFiles((p) => p.map((f) =>
+          f.id === job.id
+            ? { ...job.parsed, id: job.id, status: "ready", progress: 100 }
+            : f,
+        ));
+      }, stagger + (TICKS.length + 1) * TICK_MS);
+    });
   };
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
@@ -1005,14 +1163,10 @@ function AddLeadsModal({
   );
   const totalNew = totalValid + manualLeads.filter((l) => l.phone.trim()).length;
 
-  // Credit cost estimate — Contact Extraction module currently charges
-  // ~2 credits per lead (phone extraction). Scales with totalNew so
-  // the user sees the budget impact grow as they keep adding rows.
-  // Real value comes from MODULES[0].capabilities[0].rate in
-  // production; hard-coded here to avoid a cross-import from credits-
-  // data into the outreach module just for a display estimate.
-  const CREDITS_PER_LEAD = 2;
-  const estCredits = totalNew * CREDITS_PER_LEAD;
+  // The scheduling block needs to know whether the user has actually
+  // picked both a date and a time before they can submit in "schedule"
+  // mode. Empty fields shouldn't silently fall back to "now".
+  const scheduleReady = startMode === "immediate" || (startDate !== "" && startTime !== "");
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center">
@@ -1216,7 +1370,46 @@ function AddLeadsModal({
                           key={idx}
                           className="bg-white border border-border rounded-card overflow-hidden hover:border-text-tertiary transition-colors"
                         >
-                          <div className="px-4 py-3 flex items-start gap-4">
+                          {/* While the file is "uploading" the row reads
+                              as a progress strip — neutral chrome, a
+                              "Uploading…" pill, and a fill bar that ticks
+                              up over ~1.5 s. Once the simulated upload
+                              completes the row flips to the parsed-results
+                              layout below. */}
+                          {file.status === "uploading" ? (
+                            <div className="px-4 py-3 flex items-start gap-4">
+                              <div className="shrink-0 w-10 h-10 rounded-[8px] flex items-center justify-center bg-surface-page text-text-tertiary">
+                                <FileSpreadsheet size={18} strokeWidth={1.5} />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                                  <div className="text-[13px] text-text-primary truncate" title={file.name}>
+                                    {file.name}
+                                  </div>
+                                  <span className="inline-flex items-center gap-1 text-[10.5px] font-medium px-2 py-0.5 rounded-badge bg-[#EFF6FF] text-[#1D4ED8]">
+                                    <Loader2 size={9} strokeWidth={2.25} className="animate-spin" />
+                                    Uploading…
+                                  </span>
+                                </div>
+                                <div className="h-1 rounded-full bg-border-subtle overflow-hidden">
+                                  <div
+                                    className="h-full bg-accent transition-all duration-300 ease-out"
+                                    style={{ width: `${file.progress ?? 0}%` }}
+                                  />
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => removeCsv(idx)}
+                                className="shrink-0 inline-flex items-center justify-center w-8 h-8 text-text-tertiary hover:text-[#DC2626] hover:bg-surface-page rounded-button transition-colors"
+                                title="Cancel upload"
+                                aria-label={`Cancel ${file.name}`}
+                              >
+                                <X size={14} strokeWidth={1.75} />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="px-4 py-3 flex items-start gap-4">
                             <div className={`shrink-0 w-10 h-10 rounded-[8px] flex items-center justify-center ${iconCls}`}>
                               <FileSpreadsheet size={18} strokeWidth={1.5} />
                             </div>
@@ -1274,6 +1467,7 @@ function AddLeadsModal({
                               </button>
                             </div>
                           </div>
+                          )}
                         </div>
                       );
                     })}
@@ -1432,18 +1626,96 @@ function AddLeadsModal({
           )}
         </div>
 
-        {/* Footer — count + credit estimate left, actions right. Add
-            CTA is disabled if there's no input OR if any row has a
-            blocking duplicate (phone clash). Estimate scales with
-            row count so the user sees the budget impact as they add
-            more leads. */}
+        {/* Scheduling — binary toggle between "start dialing now" and
+            "schedule for a specific date + time". Sits above the footer
+            so the user makes this choice deliberately before submitting.
+            Both branches share the same audience upload above; only the
+            dialing-start moment differs. Gated on totalNew > 0: choosing
+            a schedule before any leads exist is meaningless, so we don't
+            show the picker until there's something to dial. */}
+        {totalNew > 0 && (
+        <div className="px-5 py-4 border-t border-border flex-shrink-0 bg-surface-page/40">
+          <div className="flex items-start gap-4">
+            <label
+              className={`flex-1 flex items-start gap-2.5 p-3 border rounded-card cursor-pointer transition-colors ${
+                startMode === "immediate"
+                  ? "border-text-primary bg-white"
+                  : "border-border bg-white hover:border-text-tertiary"
+              }`}
+            >
+              <input
+                type="radio"
+                name="addleads-schedule"
+                checked={startMode === "immediate"}
+                onChange={() => setStartMode("immediate")}
+                className="mt-0.5 accent-text-primary"
+              />
+              <div className="min-w-0">
+                <p className="text-[12.5px] font-medium text-text-primary leading-tight">
+                  Launch now
+                </p>
+                <p className="text-[11px] text-text-tertiary mt-0.5 leading-snug">
+                  Start dialing as soon as the audience is added. Calls go out within the standard window.
+                </p>
+              </div>
+            </label>
+            <label
+              className={`flex-1 flex items-start gap-2.5 p-3 border rounded-card cursor-pointer transition-colors ${
+                startMode === "schedule"
+                  ? "border-text-primary bg-white"
+                  : "border-border bg-white hover:border-text-tertiary"
+              }`}
+            >
+              <input
+                type="radio"
+                name="addleads-schedule"
+                checked={startMode === "schedule"}
+                onChange={() => setStartMode("schedule")}
+                className="mt-0.5 accent-text-primary"
+              />
+              <div className="min-w-0 flex-1">
+                <p className="text-[12.5px] font-medium text-text-primary leading-tight">
+                  Schedule for later
+                </p>
+                <p className="text-[11px] text-text-tertiary mt-0.5 leading-snug">
+                  Pick a date and time to start dialing. Audience uploads now; calls wait.
+                </p>
+                {startMode === "schedule" && (
+                  <div className="mt-2.5 flex items-center gap-2">
+                    <input
+                      type="date"
+                      value={startDate}
+                      min={new Date().toISOString().slice(0, 10)}
+                      onChange={(e) => setStartDate(e.target.value)}
+                      className="h-8 px-2 text-[12px] border border-border rounded-input bg-white"
+                    />
+                    <span className="text-[11px] text-text-tertiary">at</span>
+                    <input
+                      type="time"
+                      value={startTime}
+                      onChange={(e) => setStartTime(e.target.value)}
+                      className="h-8 px-2 text-[12px] border border-border rounded-input bg-white"
+                    />
+                  </div>
+                )}
+              </div>
+            </label>
+          </div>
+        </div>
+
+        )}
+
+        {/* Footer — count left, actions right. The cost line was removed
+            because it framed adding leads as a "contact extraction" charge,
+            which is the wrong product for outreach: dialing is billed per
+            connected minute, not per lead added. */}
         <div className="flex items-center justify-between px-5 py-4 border-t border-border flex-shrink-0">
           <div className="text-[12px] text-text-secondary flex flex-col gap-0.5">
             <span>
               {totalNew > 0 ? (
                 <>
                   <span className="font-medium text-text-primary">{totalNew.toLocaleString()} lead{totalNew !== 1 ? "s" : ""}</span>{" "}
-                  ready to add
+                  ready to call
                   {totalInvalid > 0 && (
                     <span className="text-text-tertiary">
                       {" "}· <span className="text-[#DC2626]">{totalInvalid} skipped</span>
@@ -1454,11 +1726,6 @@ function AddLeadsModal({
                 "No leads added yet"
               )}
             </span>
-            {totalNew > 0 && (
-              <span className="text-[11px] text-text-tertiary tabular-nums">
-                ≈ <span className="font-medium text-text-secondary">₹{estCredits.toLocaleString()}</span> for contact extraction · ~₹{CREDITS_PER_LEAD} per lead
-              </span>
-            )}
             {hasBlockingIssue && (
               <span className="text-[11px] text-[#B91C1C] inline-flex items-center gap-1 mt-0.5">
                 <AlertCircle size={10} strokeWidth={2} />
@@ -1474,11 +1741,25 @@ function AddLeadsModal({
               Cancel
             </button>
             <button
-              disabled={totalNew === 0 || hasBlockingIssue}
-              onClick={onClose}
-              className="h-9 px-4 text-[13px] font-medium text-white bg-accent rounded-button hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              disabled={totalNew === 0 || hasBlockingIssue || !scheduleReady}
+              onClick={() => {
+                // Fire the commit hook with what the page needs to
+                // patch the draft: lead count, schedule choice, file
+                // names (for the Sources tab). Then close.
+                const scheduledFor = startMode === "schedule"
+                  ? `${startDate}T${startTime}`
+                  : null;
+                const sourceNames = csvFiles
+                  .filter((f) => f.status === "ready")
+                  .map((f) => f.file.name);
+                onCommit?.({ totalNew, startMode, scheduledFor, sourceNames });
+                onClose();
+              }}
+              className="h-9 px-4 text-[13px] font-medium text-white bg-text-primary rounded-button hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
             >
-              Add {totalNew > 0 ? `${totalNew} Lead${totalNew !== 1 ? "s" : ""}` : "Leads"}
+              {startMode === "schedule"
+                ? `Schedule ${totalNew > 0 ? `${totalNew} lead${totalNew !== 1 ? "s" : ""}` : "leads"}`
+                : `Launch ${totalNew > 0 ? `${totalNew} lead${totalNew !== 1 ? "s" : ""}` : "leads"}`}
             </button>
           </div>
         </div>
@@ -1915,14 +2196,21 @@ function formatRate(r: PlaybackRate): string {
 }
 
 function LeadDrillDown({ contact, onClose }: { contact: OutreachContact; onClose: () => void }) {
-  const [tab, setTab] = useState<"overview" | "profile" | "logs">("overview");
-  const [manuallyQualified, setManuallyQualified] = useState(false);
-  const [isQualifying, setIsQualifying] = useState(false);
-  // Per-call transcript collapse state — keyed by call id. Default to
-  // expanded so first-time viewers see the conversation; long transcripts
-  // get capped height with internal scroll so they don't push the rest of
-  // the drawer offscreen.
-  const [collapsedTranscripts, setCollapsedTranscripts] = useState<Set<string>>(new Set());
+  const [tab, setTab] = useState<"overview" | "profile" | "activity">("overview");
+  // Qualification used to be settable from this drawer ("Mark as
+  // Qualified" CTA) but that misrepresented the workflow: qualification
+  // isn't a manual decision the user makes on a lead — it's the
+  // outcome inferred from the call. The drawer now just reports the
+  // status; there's no longer a way to flip it here.
+  // Calls are now part of the unified Activity timeline. Each call
+  // entry starts collapsed — the user sees the timestamp + status
+  // pill, clicks the chevron to reveal the player + variables +
+  // transcript. Keeping the default closed lets the timeline read as
+  // a stream of events; expanding is opt-in.
+  const callsForCollapse = useMemo(() => generateCallLogs(contact), [contact]);
+  const [collapsedTranscripts, setCollapsedTranscripts] = useState<Set<string>>(
+    () => new Set(callsForCollapse.map((c) => c.id)),
+  );
   const toggleTranscript = (id: string) => setCollapsedTranscripts(prev => {
     const next = new Set(prev);
     if (next.has(id)) next.delete(id);
@@ -1954,7 +2242,66 @@ function LeadDrillDown({ contact, onClose }: { contact: OutreachContact; onClose
   // so the Overview stays scannable, but the user can pop it open
   // here without switching to the Call logs tab.
   const [showOverviewTranscript, setShowOverviewTranscript] = useState(false);
-  const calls = useMemo(() => generateCallLogs(contact), [contact]);
+  const calls = callsForCollapse;
+
+  // ── Activity timeline ─────────────────────────────────────────
+  // Combines lifecycle events (Lead created, Lead updated, Push to
+  // CRM) with each call into a single time-ordered stream. Newest
+  // first — same direction as the Overview tab's "most recent call"
+  // reads. Calls are still rendered as their full collapsible block;
+  // the lifecycle events are simple icon + label + timestamp rows
+  // since there's no body to expand.
+  type LifecycleEvent = {
+    kind:  "created" | "crm";
+    at:    string;
+    label: string;
+  };
+  type ActivityItem =
+    | { type: "event"; at: string; event: LifecycleEvent }
+    | { type: "call";  at: string; call: CallLog };
+
+  // Activity timeline mirrors the /enquiries Lead drawer: newest at
+  // the top, oldest at the bottom. Reading top-down the user sees the
+  // most recent thing that happened first — which for a sales rep is
+  // usually "what's the latest with this lead?".
+  //
+  // Concrete order:
+  //   1. Pushed to CRM   (most recent, if it happened)
+  //   2. Calls           (newest → oldest)
+  //   3. Lead created    (always at the bottom — origin of the lead)
+  const activityItems: ActivityItem[] = useMemo(() => {
+    const items: ActivityItem[] = [];
+
+    if (contact.sentToCrm) {
+      // No discrete CRM timestamp on the seed data, so anchor it AFTER
+      // the most-recent call (or fall back to the contact's updated
+      // timestamp). Adding an hour past the last call's time keeps
+      // CRM at the very top of the newest-first ordering.
+      const lastCall = calls[0]; // generateCallLogs hands back newest-first
+      const baseMs = lastCall
+        ? new Date(lastCall.dateTime).getTime() + 60 * 60 * 1000
+        : new Date(contact.updatedAt ?? contact.createdAt).getTime();
+      const anchorAt = new Date(baseMs).toISOString();
+      items.push({
+        type: "event",
+        at:   anchorAt,
+        event: { kind: "crm", at: anchorAt, label: "Pushed to CRM" },
+      });
+    }
+
+    // Calls are already newest-first from generateCallLogs; push as-is.
+    calls.forEach((c) => items.push({ type: "call", at: c.dateTime, call: c }));
+
+    // Lead created sits at the bottom — it's the chronologically
+    // earliest event, so newest-first puts it last.
+    items.push({
+      type: "event",
+      at:   contact.createdAt,
+      event: { kind: "created", at: contact.createdAt, label: "Lead created" },
+    });
+
+    return items;
+  }, [contact.createdAt, contact.updatedAt, contact.sentToCrm, calls]);
 
   const initials = contact.name
     .split(/\s+/)
@@ -1964,24 +2311,15 @@ function LeadDrillDown({ contact, onClose }: { contact: OutreachContact; onClose
     .join("")
     .toUpperCase();
 
-  const isQualified = contact.qualStatus === "qualified" || manuallyQualified;
-  const qBadge = drillQualBadge(isQualified ? "qualified" : contact.qualStatus);
+  const qBadge = drillQualBadge(contact.qualStatus);
   const summary = buildDrillSummary(calls);
   const mostRecentCall = calls.length > 0 ? calls[0] : null;
 
-  const handleQualify = () => {
-    if (isQualified || isQualifying) return;
-    setIsQualifying(true);
-    setTimeout(() => {
-      setIsQualifying(false);
-      setManuallyQualified(true);
-    }, 700);
-  };
 
   const tabs: Array<{ key: typeof tab; label: string }> = [
     { key: "overview", label: "Overview" },
     { key: "profile",  label: "Profile" },
-    { key: "logs",     label: "Call logs" },
+    { key: "activity", label: "Activity" },
   ];
 
   // Tone for the call-log status pill (Call logs tab).
@@ -2036,26 +2374,10 @@ function LeadDrillDown({ contact, onClose }: { contact: OutreachContact; onClose
             </div>
           </div>
 
-          {/* CTA row — only when the lead isn't yet qualified. When
-              they're already qualified the badge in the header above
-              says so; a disabled "Qualified" button below it just
-              repeats the same info, which is the duplication the
-              user called out. */}
-          {!isQualified && (
-            <div className="flex items-center gap-2.5 mt-4">
-              <button
-                onClick={handleQualify}
-                disabled={isQualifying}
-                className="inline-flex items-center gap-1.5 h-8 px-3.5 text-[12px] font-medium rounded-button bg-accent text-white hover:bg-accent-hover transition-colors duration-150 disabled:opacity-60"
-              >
-                {isQualifying ? (
-                  <><Loader2 size={13} strokeWidth={2} className="animate-spin" /> Qualifying…</>
-                ) : (
-                  "Mark as Qualified"
-                )}
-              </button>
-            </div>
-          )}
+          {/* No CTA here. The qualification pill in the header above
+              IS the state — qualification is the outcome the agent
+              infers from the call, not a manual decision the user
+              makes on this lead. The drawer just reports the status. */}
         </div>
 
         {/* Tab strip — underline style, same as Leads panel */}
@@ -2232,13 +2554,44 @@ function LeadDrillDown({ contact, onClose }: { contact: OutreachContact; onClose
             </div>
           )}
 
-          {tab === "profile" && <ProfileTab contact={contact} />}
+          {tab === "profile" && (
+            <ProfileTab contact={contact} />
+          )}
 
-          {tab === "logs" && (
-            <div className="space-y-5">
-              {calls.map((call) => (
-                <div key={call.id}>
-                  <div className="flex items-center justify-between mb-2 px-1">
+          {tab === "activity" && (
+            <div className="space-y-2">
+              {activityItems.map((item, idx) => {
+                if (item.type === "event") {
+                  const { event } = item;
+                  const Icon = event.kind === "created" ? UserPlus : Database;
+                  const iconBg = event.kind === "crm"
+                    ? "bg-[#EEF2FF] text-[#4338CA]"
+                    : "bg-[#DCFCE7] text-[#15803D]";
+                  // Lifecycle events (Lead created, Pushed to CRM) sit
+                  // in the same surface-page card chrome as the call
+                  // rows so the timeline reads as a single uniform
+                  // list. No chevron — there's nothing to expand into
+                  // for these markers.
+                  return (
+                    <div key={`event-${idx}`} className="bg-surface-page rounded-[8px] overflow-hidden">
+                      <div className="w-full flex items-center justify-between px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${iconBg}`}>
+                            <Icon size={12} strokeWidth={1.5} />
+                          </div>
+                          <span className="text-[12px] text-text-primary font-medium">{event.label}</span>
+                        </div>
+                        <span className="text-[11.5px] text-text-tertiary tabular-nums">
+                          {format(new Date(event.at), "dd MMM yyyy, hh:mm a")}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                }
+                const call = item.call;
+                return (
+                <div key={call.id} className="bg-surface-page rounded-[8px] overflow-hidden">
+                  <div className="flex items-center justify-between px-4 py-3">
                     <div className="text-[12.5px] font-medium text-text-primary tabular-nums">
                       {format(new Date(call.dateTime), "dd MMM yyyy, hh:mm a")}
                     </div>
@@ -2246,13 +2599,14 @@ function LeadDrillDown({ contact, onClose }: { contact: OutreachContact; onClose
                       <span className={`inline-flex items-center h-6 px-2.5 rounded-full border text-[11px] font-medium ${statusToneCls(call.statusTone)}`}>
                         {call.status}
                       </span>
-                      {/* Collapse / expand the transcript for this call.
-                          Chevron rotates to indicate state. Long transcripts
-                          also get a max-height + scroll below. */}
+                      {/* Toggle the entire call body — player + variables
+                          + transcript — for this entry. Default state is
+                          collapsed so the Activity timeline reads as a
+                          stream of events; expanding is opt-in per call. */}
                       <button
                         type="button"
                         onClick={() => toggleTranscript(call.id)}
-                        aria-label={collapsedTranscripts.has(call.id) ? "Show transcript" : "Hide transcript"}
+                        aria-label={collapsedTranscripts.has(call.id) ? "Show call details" : "Hide call details"}
                         aria-expanded={!collapsedTranscripts.has(call.id)}
                         className="inline-flex items-center justify-center w-7 h-7 rounded border border-border bg-white text-text-tertiary hover:text-text-primary hover:bg-surface-page transition-colors"
                       >
@@ -2265,6 +2619,8 @@ function LeadDrillDown({ contact, onClose }: { contact: OutreachContact; onClose
                     </div>
                   </div>
 
+                  {!collapsedTranscripts.has(call.id) && (
+                  <>
                   <div className="bg-surface-page rounded-[10px] px-3 py-3 flex items-center gap-3">
                     <button
                       aria-label="Play recording"
@@ -2305,50 +2661,54 @@ function LeadDrillDown({ contact, onClose }: { contact: OutreachContact; onClose
                       always-visible vertical scrollbar so the user
                       knows there's more content even on a stock
                       trackpad (which hides scrollbars by default).
-                      The chevron in the header toggles collapse. */}
-                  {!collapsedTranscripts.has(call.id) && (
-                    <div
-                      className="mt-2 bg-white border border-border-subtle rounded-[10px] px-4 py-3.5 space-y-1.5 max-h-[360px] overflow-y-scroll"
-                      style={{ scrollbarWidth: "thin", scrollbarGutter: "stable" }}
-                    >
-                      {call.transcript.map((line, i) => {
-                        const isAgent = line.speaker === "Agent";
-                        const prev = i > 0 ? call.transcript[i - 1] : null;
-                        const showLabel = !prev || prev.speaker !== line.speaker;
-                        const wrapperGap = showLabel && i > 0 ? "mt-2.5" : "";
-                        return (
-                          <div
-                            key={i}
-                            className={`flex flex-col ${isAgent ? "items-start" : "items-end"} ${wrapperGap}`}
-                          >
-                            {showLabel && (
-                              <div
-                                className={`text-[10.5px] font-medium mb-0.5 px-0.5 ${
-                                  isAgent ? "text-[#15803D]" : "text-[#2563EB]"
-                                }`}
-                              >
-                                {line.speaker}
-                              </div>
-                            )}
+                      Lives inside the same expanded block as the
+                      player + variables — one chevron toggles all
+                      three so the timeline stays compact when
+                      collapsed. */}
+                  <div
+                    className="mt-2 bg-white border border-border-subtle rounded-[10px] px-4 py-3.5 space-y-1.5 max-h-[360px] overflow-y-scroll"
+                    style={{ scrollbarWidth: "thin", scrollbarGutter: "stable" }}
+                  >
+                    {call.transcript.map((line, i) => {
+                      const isAgent = line.speaker === "Agent";
+                      const prev = i > 0 ? call.transcript[i - 1] : null;
+                      const showLabel = !prev || prev.speaker !== line.speaker;
+                      const wrapperGap = showLabel && i > 0 ? "mt-2.5" : "";
+                      return (
+                        <div
+                          key={i}
+                          className={`flex flex-col ${isAgent ? "items-start" : "items-end"} ${wrapperGap}`}
+                        >
+                          {showLabel && (
                             <div
-                              className={`max-w-[85%] px-3 py-2 text-[12.5px] leading-relaxed rounded-[10px] ${
-                                isAgent
-                                  ? "bg-[#F0FDF4] text-text-primary rounded-tl-[3px]"
-                                  : "bg-[#EFF6FF] text-text-primary rounded-tr-[3px]"
+                              className={`text-[10.5px] font-medium mb-0.5 px-0.5 ${
+                                isAgent ? "text-[#15803D]" : "text-[#2563EB]"
                               }`}
                             >
-                              {line.text}
+                              {line.speaker}
                             </div>
+                          )}
+                          <div
+                            className={`max-w-[85%] px-3 py-2 text-[12.5px] leading-relaxed rounded-[10px] ${
+                              isAgent
+                                ? "bg-[#F0FDF4] text-text-primary rounded-tl-[3px]"
+                                : "bg-[#EFF6FF] text-text-primary rounded-tr-[3px]"
+                            }`}
+                          >
+                            {line.text}
                           </div>
-                        );
-                      })}
-                    </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  </>
                   )}
                 </div>
-              ))}
-              {calls.length === 0 && (
+                );
+              })}
+              {activityItems.length === 0 && (
                 <div className="text-center py-12 text-[13px] text-text-tertiary">
-                  No call logs yet.
+                  No activity yet.
                 </div>
               )}
             </div>
@@ -2454,10 +2814,28 @@ export default function OutreachDetailPage() {
   // The detail object the rest of the page reads from. Synthesised from
   // the listing entry — call counts, talktime, spend, sources, dial
   // attempts all belong to this specific outreach.
+  // Drafts created via the speedrun /outreach/create flow live in a
+  // persisted store rather than the static list. Look there first and
+  // hydrate a meaningful OutreachDetail by overlaying the seed on a
+  // baseline outreach. Fall back to the static lookup for everything else.
+  const draftSeed = useOutreachDraftStore((s) => s.drafts[outreachId]);
   const detail = useMemo<OutreachDetail | null>(
-    () => outreachDetailForId(outreachId),
-    [outreachId]
+    () => (draftSeed ? hydrateDraftDetail(draftSeed) : outreachDetailForId(outreachId)),
+    [outreachId, draftSeed],
   );
+
+  // Just-created flag from the create flow — gates the audience nudge
+  // modal. Stays set until the user dismisses (we router.replace to
+  // strip the query param then).
+  const searchParams = useSearchParams();
+  const justCreated = searchParams?.get("just_created") === "1";
+  const [audienceNudgeOpen, setAudienceNudgeOpen] = useState(false);
+  useEffect(() => {
+    if (justCreated && detail && detail.totalContacts === 0) {
+      const t = setTimeout(() => setAudienceNudgeOpen(true), 200);
+      return () => clearTimeout(t);
+    }
+  }, [justCreated, detail]);
 
   // Per-outreach contact list — drives the table, the funnel counts, and
   // the duplicate validation in Add Leads. Computed once per id change.
@@ -2486,6 +2864,13 @@ export default function OutreachDetailPage() {
   // out of the box.
   const [rangePreset, setRangePreset] = useState<string>("7");
   const [addLeadsOpen, setAddLeadsOpen] = useState(false);
+  // Which scheduling mode the AddLeadsModal opens in. The nudge modal's
+  // two CTAs ("Add audiences now" vs "Schedule for later") both open the
+  // same AddLeadsModal — they only differ by which startMode is pre-
+  // selected. Persisting it as page-level state means subsequent opens
+  // (e.g. from the Add Leads button later on) remember the user's last
+  // pick rather than resetting.
+  const [addLeadsStartMode, setAddLeadsStartMode] = useState<"immediate" | "schedule">("immediate");
   // Lead drill-down — opened when a row in the contacts table is clicked.
   // Holds the contact whose detail drawer is currently visible (or null).
   const [drillContact, setDrillContact] = useState<OutreachContact | null>(null);
@@ -2752,12 +3137,11 @@ export default function OutreachDetailPage() {
   // on a "(filtered)" qualifier so they don't accidentally export less than
   // they expected.
   const activeTabLabel = FILTER_TABS.find(t => t.id === activeFilter)?.label ?? "All";
+  // Short label — just "Export (N)" with an optional "(filtered)" qualifier
+  // when extra criteria are active. The tab itself already names the
+  // segment being exported (Follow-up / Qualified / etc.) so repeating
+  // the noun on the button was redundant.
   const hasExtraFilter = popoverFilterCount > 0 || search.trim().length > 0;
-  // Compact form — the row count alone tells the user how many rows
-  // the CSV will carry; the active tab is already shown above the
-  // table so we don't need to restate "qualified leads" / etc in the
-  // button. A trailing "· filtered" surfaces when extra filters
-  // narrow the export below the tab count.
   const exportLabel = `Export (${filtered.length.toLocaleString()})${hasExtraFilter ? " · filtered" : ""}`;
 
   const handleExportContacts = () => {
@@ -3087,18 +3471,12 @@ export default function OutreachDetailPage() {
                       selected={nextActions}
                       onToggle={(v) => toggleInList(nextActions, setNextActions, v)}
                     />
-                    <ChipGroup
-                      label="Lead Type"
-                      options={LEAD_TYPE_OPTS}
-                      selected={leadTypes}
-                      onToggle={(v) => toggleInList(leadTypes, setLeadTypes, v)}
-                    />
-                    <ChipGroup
-                      label="Verified"
-                      options={VERIFIED_OPTS}
-                      selected={verifiedFilter === "" ? [] : [verifiedFilter]}
-                      onToggle={(v) => { setVerifiedFilter(verifiedFilter === v ? "" : v); setPage(1); }}
-                    />
+                    {/* Lead Type and Verified filters dropped — the
+                        outreach view already filters down to contacts
+                        belonging to one outreach, so the verification
+                        provenance + lead-type chips weren't pulling
+                        their weight here. Leaves Next Action and
+                        Send to CRM as the qualification-style chips. */}
                     <ChipGroup
                       label="Send to CRM"
                       options={SENT_TO_CRM_OPTS}
@@ -3418,11 +3796,64 @@ export default function OutreachDetailPage() {
         </div>
       </div>
 
+      {/* Audience nudge — shown after the speedrun create flow lands
+          here. Both CTAs open the SAME AddLeadsModal so the audience-
+          add experience is identical; they only differ by which
+          scheduling default the modal opens in (Launch now vs Schedule
+          for later). This keeps the two paths visually consistent and
+          uploadable in parallel even when calls won't start yet. */}
+      <AudienceNudgeModal
+        open={audienceNudgeOpen}
+        agentName={d.voiceAgent}
+        outreachName={d.name}
+        onAddNow={() => {
+          setAudienceNudgeOpen(false);
+          // Strip the just_created flag so a refresh doesn't re-open it.
+          router.replace(`/outreach/${outreachId}`);
+          setAddLeadsStartMode("immediate");
+          setAddLeadsOpen(true);
+        }}
+        onAddLater={() => {
+          setAudienceNudgeOpen(false);
+          router.replace(`/outreach/${outreachId}`);
+          setAddLeadsStartMode("schedule");
+          setAddLeadsOpen(true);
+        }}
+      />
+
       {/* Add Leads Modal */}
       {addLeadsOpen && (
         <AddLeadsModal
           onClose={() => setAddLeadsOpen(false)}
           existingContacts={contactsForOutreach}
+          defaultStartMode={addLeadsStartMode}
+          onCommit={({ totalNew, startMode, scheduledFor, sourceNames }) => {
+            // Drafts only — established outreaches are read-only from
+            // the static dataset for this demo, so we only patch the
+            // draft store when one exists for this id. The hydrateDraftDetail
+            // overlay turns these fields into the funnel/counters/badge
+            // the user sees.
+            if (!draftSeed) return;
+            const patch: Partial<OutreachDraftSeed> = {
+              totalContacts: (draftSeed.totalContacts ?? 0) + totalNew,
+              status: startMode === "schedule" ? "scheduled" : "in_progress",
+              startMode,
+              scheduledFor: scheduledFor ?? undefined,
+              sources: [
+                ...(draftSeed.sources ?? []),
+                ...sourceNames.map((name, i) => ({
+                  id: `src-${Date.now()}-${i}`,
+                  name,
+                  uploadedAt: new Date().toISOString(),
+                  // Equally distribute the just-added leads across the
+                  // uploaded files — close enough for the demo, and the
+                  // total at the top of the page stays accurate.
+                  leads: Math.round(totalNew / Math.max(1, sourceNames.length)),
+                })),
+              ],
+            };
+            useOutreachDraftStore.getState().patchDraft(draftSeed.id, patch);
+          }}
         />
       )}
 
@@ -3747,12 +4178,6 @@ function LeadCoverageBar({
         </div>
       </div>
       <div className="flex-1 min-w-0">
-        {/* Labels deliberately spell out "first-time dialing" — the
-            previous "Called / Remaining" pair was ambiguous (does
-            "Called" mean answered? connected? at-least-once dialed?).
-            "Dialled at least once" is unambiguous and the inverse
-            phrasing on Remaining ("Awaiting first dial") keeps the
-            two halves parallel in tense. */}
         <div className="flex items-center justify-between mb-1.5 text-[11.5px] flex-wrap gap-y-1">
           <span className="inline-flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-text-primary" />
