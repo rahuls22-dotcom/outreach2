@@ -90,11 +90,21 @@ export type CanvasFile =
   | "dashboard"
   | "assets"
   | "analysis"
+  // Watch review · the 2-day write-up Spot produces when a watcher trips
+  // (Flow 3). Opened only from its artifact card in chat — never listed in
+  // the file picker. Rendered as a light markdown doc in the canvas.
+  | "watch-review"
   // Live-execution canvas · diagnostic flows only. When the user puts a
   // plan live (the *-live step), the right panel swaps from plan.md to
   // this cowork-style progress checklist that ticks the plan's moves off
   // one by one. Driven by DiagnosticWorkflow.executionMoves in the store.
-  | "execution";
+  | "execution"
+  // Deliverables canvas · launch flow only. Opens automatically the moment
+  // the launch-building checklist finishes — the full asset pack Spot just
+  // produced (creatives by persona, landing pages, lead forms, campaign
+  // tree, Pre-Sales Agent). Rendered by LaunchReviewStep. Never listed in
+  // the file picker; only opened from the build-complete message.
+  | "deliverables";
 
 export const STEP_ORDER: WorkflowStep[] = [
   "deep-research",
@@ -267,6 +277,15 @@ export type LaunchWorkflow = {
    *  tool-call is still running); flips to true after the ~1.4s
    *  delay so the drawer slides up. Drives the entrance animation. */
   productSetupModalOpen?: boolean;
+  /** Build checklist · seeded when launch-building begins and ticked off
+   *  by startLaunchBuild on a timer. The 5 tasks Spot runs end-to-end
+   *  (creatives + forms + pages → lock campaign → verify CRM → Pre-Sales
+   *  Agent → prep go-live). Undefined before the build starts. Rendered
+   *  inline in chat via the exec-checklist part. */
+  executionMoves?: ExecutionMove[];
+  /** True once every build task has finished — flips the checklist to its
+   *  "Build complete" state and opens the deliverables canvas. */
+  executionDone?: boolean;
 };
 
 /**
@@ -411,6 +430,40 @@ export function executionMovesFor(
   );
   moves.push({ label: "Arm the watchers · queue dashboard pings", status: "pending" });
   return moves;
+}
+
+/**
+ * The 5 tasks Spot runs end-to-end at the launch-building step. Rendered
+ * as a ticking todo in the chat (exec-checklist part) and driven by
+ * startLaunchBuild on a timer — each crosses out as Spot finishes it.
+ * Matches the 5-task narration in STEP_TOOL_CALL["launch-building"].
+ */
+export function launchBuildMoves(): ExecutionMove[] {
+  return [
+    "Build creatives, lead forms + landing pages",
+    "Lock the campaign structure (campaigns → ad sets → ads)",
+    "Verify CRM integrations + lead routing",
+    "Spin up the Pre-Sales Agent (Voice + WhatsApp)",
+    "Prep every campaign to go live",
+  ].map((label): ExecutionMove => ({ label, status: "pending" }));
+}
+
+/**
+ * The publish-to-Meta tasks Spot runs at the launch-deploy step. Rendered
+ * inline in chat as a ticking todo (exec-checklist part) and driven by
+ * startLaunchDeploy on a timer — same in-chat treatment as the build step,
+ * NOT a full-screen takeover.
+ */
+export function launchDeployMoves(): ExecutionMove[] {
+  return [
+    "Publish the creatives + reels to Meta",
+    "Push the ad sets across both campaigns",
+    "Deploy the landing pages + lead forms",
+    "Activate the Meta pixel + Conversions API",
+    "Wire the WhatsApp inbox + Pre-Sales Agent",
+    "Verify tracking — fire test events",
+    "Arm the watchers · CPL · sentiment · frequency",
+  ].map((label): ExecutionMove => ({ label, status: "pending" }));
 }
 
 /**
@@ -1105,15 +1158,15 @@ export const STEP_TOOL_CALL: Partial<Record<WorkflowStep, StepToolCall>> = {
   // creative angles + targeting + approach + a target CPQL from the
   // project's price band.
   "launch-strategy": {
-    agent: "spot.strategy",
+    agent: "Drafting the campaign strategy",
     detail:
-      "personas.draft · angles.brief · targeting.scope · cpql.target — composing the campaign strategy…",
+      "key personas · creative angles · targeting · a target CPQL from the price band",
     delayMs: 7000,
   },
   "launch-plan": {
-    agent: "spot.plan",
+    agent: "Expanding the strategy into a plan",
     detail:
-      "creatives.brief · forms.template · campaign.architecture · adset.settings — expanding the strategy into a plan…",
+      "creatives · lead forms · campaign architecture · ad-set settings",
     delayMs: 9000,
   },
   // Building step — Spot runs 5 tasks end-to-end: build creatives +
@@ -1122,22 +1175,22 @@ export const STEP_TOOL_CALL: Partial<Record<WorkflowStep, StepToolCall>> = {
   // total, matching the task durations rendered in
   // LaunchBuildingTaskLoader.
   "launch-building": {
-    agent: "build.execute",
+    agent: "Building your campaign",
     detail:
-      "Task 1/5 · creatives + forms + landing pages → 2/5 · campaign plan → 3/5 · CRM integrations → 4/5 · Pre-Sales Agent → 5/5 · prep campaigns.",
+      "1/5 creatives + forms + landing pages → 2/5 campaign plan → 3/5 CRM integrations → 4/5 Pre-Sales Agent → 5/5 prep campaigns",
     delayMs: 19500,
   },
   // Review step lands quickly — Spot just compiles assets for review.
   "launch-review": {
-    agent: "build.complete",
-    detail: "compiling preview · creatives, landing pages, lead forms, campaign tree…",
+    agent: "Compiling the preview",
+    detail: "creatives · landing pages · lead forms · campaign tree",
     delayMs: 1600,
   },
   // Deploy step · pushes everything live to Meta + Google + WhatsApp.
   "launch-deploy": {
-    agent: "deploy.execute",
+    agent: "Publishing everything live",
     detail:
-      "ads.publish · pages.deploy · forms.publish · pixels.activate · tracking.verify…",
+      "ads · landing pages · lead forms · pixels · tracking",
     delayMs: 10000,
   },
   // Legacy steps below kept so any old in-flight workflow still narrates.
@@ -1177,8 +1230,8 @@ export const STEP_TOOL_CALL: Partial<Record<WorkflowStep, StepToolCall>> = {
     delayMs: 3200,
   },
   done: {
-    agent: "deploy.push",
-    detail: "pushing to Meta + WhatsApp ad accounts…",
+    agent: "Pushing live",
+    detail: "to your Meta + WhatsApp ad accounts",
     delayMs: 4800,
   },
 };
@@ -1235,9 +1288,9 @@ export function stepIntroMessage(
           },
           {
             type: "step-cta",
-            label: "Deploy agent · run this plan",
+            label: "Execute plan",
             helper:
-              "5 tasks · ~20 seconds end-to-end · once this plan is executed it's done — talk to me again for a fresh one.",
+              "5 tasks · ~20 seconds · I'll run them autonomously, end-to-end. Once it's done, talk to me again for a fresh one.",
             refineHint: "or tell me what to change before I start",
           },
         ],
@@ -1247,14 +1300,9 @@ export function stepIntroMessage(
         role: "spot",
         parts: [
           {
-            type: "headline",
-            text: `On it — running 5 tasks for ${w.productName}.`,
-            verdict: "info",
-          },
-          {
             type: "text",
             text:
-              "Executing the plan — building creatives + forms + landing pages → locking the campaign structure → verifying CRM integrations → spinning up the Pre-Sales Agent (Voice + WhatsApp) → launching campaigns. You can watch on the right or step away — I'll ping you when everything is live.",
+              "Executing the plan end-to-end. I'll cross each task off below as I finish it — step away if you like, I'll surface everything I built the moment it's done.",
           },
         ],
       };
@@ -1270,7 +1318,7 @@ export function stepIntroMessage(
           {
             type: "text",
             text:
-              "All assets built. Right pane has the full preview — creatives, landing pages, lead forms, campaign tree, voice agent. Approve to deploy live to Meta + WhatsApp.",
+              "Take your time in the right pane — creatives, landing pages, lead forms, campaign tree, Pre-Sales Agent. When you're happy, approve and I'll push everything live to Meta + WhatsApp.",
           },
           {
             type: "step-cta",
@@ -1285,9 +1333,14 @@ export function stepIntroMessage(
         role: "spot",
         parts: [
           {
+            type: "headline",
+            text: `Pushing ${w.productName} live to Meta + WhatsApp.`,
+            verdict: "ok",
+          },
+          {
             type: "text",
             text:
-              "Deploying to Meta + WhatsApp now. ~14s end-to-end. Feel free to step away — I'll surface the final summary the moment it's live.",
+              "Publishing everything now. I'll cross each step off below as it goes live, then drop the final summary right here.",
           },
         ],
       };

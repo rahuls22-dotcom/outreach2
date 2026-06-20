@@ -17,7 +17,7 @@
 // shouldn't have to scroll to find the place to type, and the page
 // below the fold is for "what's already on Spot's desk".
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Package,
   Paperclip,
@@ -32,18 +32,21 @@ import {
   X,
   ArrowLeft,
   Square,
+  Inbox as InboxIcon,
 } from "lucide-react";
 import { SpotMark } from "@/components/spot/spot-mark";
 import { SpotLoader } from "@/components/spot/spot-loader";
-import { MessageBubble, TypingDots, AgentWorkingBlock } from "@/components/spot/spot-message";
+import { MessageBubble, TypingDots } from "@/components/spot/spot-message";
 import { useSpotStore } from "@/lib/spot/store";
 import { generateReply } from "@/lib/spot/replies";
 import { useCurrentUser, useCurrentWorkspaceLabel } from "@/lib/workspace-store";
 import { useDemoMode } from "@/lib/demo-mode";
 import { projectsList } from "@/lib/campaign-data";
 import { SPOT_SESSIONS, type SpotSession } from "@/lib/spot/mock-history";
+import { SPOT_INBOX } from "@/lib/spot/inbox-data";
+import { InboxPanel } from "@/components/spot/inbox-panel";
 import type { SpotMessage, SpotScope } from "@/lib/spot/types";
-import { SpotCanvasPanel, ChatHeaderFilePicker } from "@/components/spot/workflow/workflow-pane";
+import { SpotCanvasPanel, ChatHeaderFilePicker, ThankYouScreen } from "@/components/spot/workflow/workflow-pane";
 import { PRODUCTS, diagnoseProduct } from "@/lib/products-data";
 import { campaignsForProduct } from "@/lib/campaigns-edtech-rollup";
 import {
@@ -100,6 +103,66 @@ function composerPlaceholderFor(workflow: SpotWorkflow | null): string | undefin
   return undefined;
 }
 
+// ─── DAY DIVIDERS (inside the chat thread) ──────────────────────────
+// Messaging-style date separators between message groups. A fresh
+// session starts "Today"; resumed/older sessions show the day for the
+// last 3 days, then fall back to a date. Messages carry an optional
+// `at` epoch; live (unstamped) messages default to now → one "Today".
+function startOfDay(t: number): number {
+  const d = new Date(t);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+function dayKey(at: number): string {
+  const d = new Date(at);
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+
+function dayDividerLabel(at: number, now: number): string {
+  const days = Math.round((startOfDay(now) - startOfDay(at)) / 86_400_000);
+  if (days <= 0) return "Today";
+  if (days === 1) return "Yesterday";
+  if (days <= 3)
+    return new Date(at).toLocaleDateString(undefined, { weekday: "long" });
+  return new Date(at).toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "short",
+  });
+}
+
+function DayDivider({ label }: { label: string }) {
+  return (
+    <div className="flex items-center gap-3 my-5 select-none" aria-hidden>
+      <div className="flex-1 h-px bg-border-subtle" />
+      <span className="text-[11px] font-medium text-text-tertiary whitespace-nowrap">
+        {label}
+      </span>
+      <div className="flex-1 h-px bg-border-subtle" />
+    </div>
+  );
+}
+
+// Interleave day dividers between messages, grouping by calendar day.
+function renderThreadWithDividers(
+  thread: SpotMessage[],
+  renderMessage: (m: SpotMessage, i: number) => ReactNode,
+): ReactNode[] {
+  const now = Date.now();
+  const out: ReactNode[] = [];
+  let lastKey: string | null = null;
+  thread.forEach((m, i) => {
+    const at = m.at ?? now;
+    const key = dayKey(at);
+    if (key !== lastKey) {
+      out.push(<DayDivider key={`day-${key}-${i}`} label={dayDividerLabel(at, now)} />);
+      lastKey = key;
+    }
+    out.push(renderMessage(m, i));
+  });
+  return out;
+}
+
 export default function SpotPage() {
   const user = useCurrentUser();
   const workspaceLabel = useCurrentWorkspaceLabel();
@@ -112,6 +175,7 @@ export default function SpotPage() {
   const workflow = useSpotStore((s) => s.workflow);
   const panelFile = useSpotStore((s) => s.panelFile);
   const closeCanvas = useSpotStore((s) => s.closeCanvas);
+  const openCanvasFile = useSpotStore((s) => s.openCanvasFile);
   const isNarrow = useIsNarrow();
   const panelOpen = panelFile !== null;
   const viewHomeOverride = useSpotStore((s) => s.viewHomeOverride);
@@ -125,6 +189,16 @@ export default function SpotPage() {
   const [scopeOpen, setScopeOpen] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const threadScrollRef = useRef<HTMLDivElement>(null);
+
+  // Inbox · home-page notification feed. Local state so reads persist
+  // for the session; unread count drives the button dot.
+  const [inboxOpen, setInboxOpen] = useState(false);
+  const [inbox, setInbox] = useState(SPOT_INBOX);
+  const inboxUnread = inbox.filter((n) => !n.read).length;
+  const openInboxItem = (id: string) =>
+    setInbox((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
+  const markAllInboxRead = () =>
+    setInbox((prev) => prev.map((n) => ({ ...n, read: true })));
 
   // Clean entry only: when the user lands on /spot with NO active workflow,
   // reset stale panel + scope state. Crucially, do NOT close the panel when we
@@ -164,6 +238,26 @@ export default function SpotPage() {
       threadScrollRef.current.scrollTop = threadScrollRef.current.scrollHeight;
     }
   }, [thread.length, pending]);
+
+  // Open a freshly-created artifact in the canvas by default. Whenever a new
+  // message carrying an artifact part lands at the tail of the thread, surface
+  // it in the right pane. Tracked by thread index so closing the canvas (or
+  // opening a different file) is never undone, and a re-render can't re-open it.
+  const lastOpenedArtifactIdx = useRef(-1);
+  useEffect(() => {
+    for (let i = thread.length - 1; i > lastOpenedArtifactIdx.current; i--) {
+      const m = thread[i];
+      if (m.role !== "spot") continue;
+      const art = m.parts.find((p) => p.type === "artifact");
+      if (art && art.type === "artifact") {
+        lastOpenedArtifactIdx.current = i;
+        openCanvasFile(art.file);
+        break;
+      }
+    }
+    // openCanvasFile is a stable store action.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [thread]);
 
   // Auto-grow textarea
   useEffect(() => {
@@ -309,20 +403,25 @@ export default function SpotPage() {
   // "Working… · tools" block only belongs to real tool work — during the
   // thinking beats every flow shows the same quiet pulsing trail, so the
   // chain of thought reads identically across analyst-review and diagnostics.
-  const isToolWorking =
-    isAgentRunning &&
-    thread.some(
-      (m) =>
-        m.role === "spot" &&
-        m.parts.some(
-          (p) =>
-            p.type === "tool-call" &&
-            p.status === "running" &&
-            !p.id.startsWith("think-"),
-        ),
-    );
-
   if (workflow && !viewHomeOverride) {
+    // Step 7 · "Deploy" runs INLINE in chat now — the publish ticks off as an
+    // exec-checklist in the thread (startLaunchDeploy), then Spot posts the
+    // "live" summary right there. No full-screen takeover. See store.ts.
+    // Step 8 · "Done" — a full-screen celebratory takeover ([Product] is live)
+    // replaces the chat+canvas split once the launch deploys.
+    if (workflow.kind === "launch-campaign" && workflow.step === "done") {
+      return (
+        <div
+          className="h-screen relative overflow-hidden"
+          style={{ background: "#0A0A09" }}
+        >
+          <ThankYouScreen
+            productName={workflow.productName}
+            productId={workflow.productId ?? null}
+          />
+        </div>
+      );
+    }
     const PANEL_W = panelW;
     return (
       <div
@@ -386,7 +485,7 @@ export default function SpotPage() {
 
           <div ref={threadScrollRef} className="flex-1 overflow-y-auto scroll px-4 py-4">
             <div className="max-w-[760px] mx-auto w-full">
-              {thread.map((m, i) => (
+              {renderThreadWithDividers(thread, (m, i) => (
                 <MessageBubble
                   key={i}
                   message={m}
@@ -399,24 +498,12 @@ export default function SpotPage() {
                 />
               ))}
               {pending && <TypingDots />}
-              {/* The verbose "Working… · tools" trace belongs ONLY to
-                  launch-campaign, where the deep-research / launch-building
-                  tool work is meant to read as a full agentic trace. Every
-                  other flow (the diagnostics: scale / optimize / test-angles,
-                  plus analyst-review) shows the QUIET pulsing trail while a
-                  tool runs; the running tool-call itself still renders as the
-                  collapsible ChainOfThought header inside the message (e.g.
-                  "spot.plan · folding your picks…"), so the user keeps the
-                  step label without the old gear block. */}
-              {isToolWorking && workflow.kind === "launch-campaign" ? (
-                <AgentWorkingBlock
-                  working
-                  workflowKind={workflow.kind}
-                  workflowStep={workflow.step}
-                />
-              ) : isAgentRunning ? (
-                <AgentTrailIndicator working />
-              ) : null}
+              {/* One trace, everywhere: while a tool runs, the running
+                  tool-call renders as the collapsible ChainOfThought header
+                  inside its message, and a QUIET pulsing Spot trail sits below
+                  it. The old verbose "Working… · N tools" gear block is gone —
+                  it duplicated the chain of thought and read as legacy chrome. */}
+              {isAgentRunning ? <AgentTrailIndicator working /> : null}
 
               {workflow.kind === "launch-campaign" &&
                 workflow.step === "product-setup" &&
@@ -452,6 +539,20 @@ export default function SpotPage() {
               <div className="px-3">
                 <div className="max-w-[760px] mx-auto w-full">
                   <ClarifyDock workflow={workflow} />
+                </div>
+              </div>
+            )}
+          {/* Kickoff dock — the launch flow's "how do you want to start?"
+              choice, anchored to the composer (not floating inline). Shows
+              once the kickoff summary has fully landed (intake tool-call done
+              + text streamed) and before either option is picked. */}
+          {workflow.kind === "launch-campaign" &&
+            workflow.step === "kickoff" &&
+            !isAgentRunning &&
+            lastStreamDone && (
+              <div className="px-3">
+                <div className="max-w-[760px] mx-auto w-full">
+                  <KickoffDock />
                 </div>
               </div>
             )}
@@ -573,7 +674,7 @@ export default function SpotPage() {
             the primary surface, not a narrow strip. */}
         <div ref={threadScrollRef} className="flex-1 overflow-y-auto scroll">
           <div className="max-w-[1040px] mx-auto w-full px-6 py-8">
-            {thread.map((m, i) => (
+            {renderThreadWithDividers(thread, (m, i) => (
               <MessageBubble key={i} message={m} animate={i === thread.length - 1} />
             ))}
             {pending && <TypingDots />}
@@ -606,6 +707,35 @@ export default function SpotPage() {
   // ─── EMPTY STATE ─────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-[var(--chat-bg)]">
+      {/* Inbox · fixed top-right. Dot + count surfaces everything Spot
+          wants the user to see — messages, recommendations, files, run
+          updates. Opens the notification side panel. */}
+      <div className="fixed top-3 right-4 z-30">
+        <button
+          type="button"
+          onClick={() => setInboxOpen(true)}
+          title="Inbox"
+          aria-label={inboxUnread > 0 ? `Inbox · ${inboxUnread} unread` : "Inbox"}
+          className="relative inline-flex items-center justify-center h-9 w-9 rounded-button bg-[var(--spot-card,#fff)] border border-[var(--spot-card-border,#E8E8E5)] text-text-secondary hover:text-text-primary hover:bg-surface-secondary transition-colors"
+          style={{ boxShadow: "var(--spot-shadow)" }}
+        >
+          <InboxIcon size={16} strokeWidth={1.9} />
+          {inboxUnread > 0 && (
+            <span className="absolute -top-1.5 -right-1.5 inline-flex items-center justify-center min-w-[17px] h-[17px] px-1 rounded-full bg-[#E5484D] text-white text-[10px] font-semibold leading-none ring-2 ring-[var(--chat-bg)]">
+              {inboxUnread > 9 ? "9+" : inboxUnread}
+            </span>
+          )}
+        </button>
+      </div>
+
+      <InboxPanel
+        open={inboxOpen}
+        onClose={() => setInboxOpen(false)}
+        notifs={inbox}
+        onOpenItem={openInboxItem}
+        onMarkAllRead={markAllInboxRead}
+      />
+
       {/* Top half: hero + composer + chips — narrow centered column so
           the welcome moment feels intimate and Claude-like.
           Pushed down with pt-32 (vs the old pt-14) so the hero sits in
@@ -907,6 +1037,103 @@ function ClarifyDock({ workflow }: { workflow: DiagnosticWorkflow }) {
 }
 
 /**
+ * KickoffDock — the launch flow's "how do you want to start?" choice,
+ * docked to the composer (anchored, NOT floating inline in the thread) so it
+ * gets the same anchored treatment as the diagnostic ClarifyDock. Two options:
+ * import existing campaigns, or launch new. Picking one echoes the label as a
+ * user bubble and fires the matching store action.
+ */
+const KICKOFF_OPTIONS = [
+  {
+    label: "Launch new campaigns",
+    hint: "Draft a fresh execution plan with Spot",
+    action: "launch-new" as const,
+    recommended: true,
+  },
+  {
+    label: "Import existing campaigns",
+    hint: "Pull campaigns from a connected ad account",
+    action: "import-campaigns" as const,
+    recommended: false,
+  },
+];
+
+function KickoffDock() {
+  const advanceWorkflow = useSpotStore((s) => s.advanceWorkflow);
+  const startImportCampaigns = useSpotStore((s) => s.startImportCampaigns);
+  const appendMessage = useSpotStore((s) => s.appendMessage);
+  const markClicked = useSpotStore((s) => s.markCtaClicked);
+  const closePanel = useSpotStore((s) => s.closePanel);
+  // Hide once either option has been chosen (mirrors ChoicePart's guard).
+  const answered = useSpotStore((s) =>
+    KICKOFF_OPTIONS.some((o) => s.clickedCtas.has(o.label)),
+  );
+  if (answered) return null;
+
+  const choose = (o: (typeof KICKOFF_OPTIONS)[number]) => {
+    appendMessage({ role: "user", text: o.label });
+    markClicked(o.label);
+    if (o.action === "launch-new") advanceWorkflow();
+    else startImportCampaigns();
+  };
+
+  return (
+    <DockShell total={1} onClose={closePanel}>
+      <div className="text-[15px] font-semibold text-text-primary leading-snug">
+        Memory&apos;s ready — how do you want to start?
+      </div>
+      <div className="text-[12.5px] text-text-tertiary mt-1 leading-snug">
+        Pick one and I&apos;ll take it from there.
+      </div>
+      <div className="mt-3 space-y-1.5">
+        {KICKOFF_OPTIONS.map((o) => (
+          <button
+            key={o.label}
+            type="button"
+            onClick={() => choose(o)}
+            className="group w-full flex items-center gap-3 px-3 py-2.5 text-left rounded-[10px] transition-colors hover:bg-[var(--spot-tint)]"
+            style={{ border: "1px solid transparent" }}
+          >
+            <span
+              className="flex-shrink-0 flex items-center justify-center w-[20px] h-[20px] rounded-full transition-colors group-hover:border-[#1A1A1A]"
+              style={{ border: "1.5px solid var(--spot-stroke)" }}
+            >
+              <span
+                className="w-[8px] h-[8px] rounded-full opacity-0 transition-opacity group-hover:opacity-100"
+                style={{ background: "#1A1A1A" }}
+              />
+            </span>
+            <span className="flex-1 min-w-0">
+              <span className="flex items-center gap-2">
+                <span className="text-[14px] leading-snug font-medium text-text-secondary group-hover:text-text-primary group-hover:font-semibold">
+                  {o.label}
+                </span>
+                {o.recommended && (
+                  <span
+                    className="flex-shrink-0 inline-flex items-center h-[17px] px-1.5 rounded-full text-[9.5px] font-medium uppercase tracking-wide text-text-tertiary"
+                    style={{ background: "var(--spot-tint)", border: "1px solid var(--spot-stroke)" }}
+                  >
+                    Recommended
+                  </span>
+                )}
+              </span>
+              <span className="block text-[12px] text-text-tertiary mt-0.5 leading-snug">
+                {o.hint}
+              </span>
+            </span>
+            <ArrowRight
+              size={14}
+              strokeWidth={2}
+              className="flex-shrink-0 text-text-tertiary opacity-0 transition-all duration-200 group-hover:opacity-100 group-hover:translate-x-0.5"
+            />
+          </button>
+        ))}
+      </div>
+    </DockShell>
+  );
+}
+
+/**
  * ProductSetupQuestionCard — Claude-style inline question card that
  * lives inside the chat thread. Three sequential questions, one per
  * page (1 of 3 → 2 of 3 → 3 of 3): name, URL, files.
@@ -923,14 +1150,20 @@ function ProductSetupQuestionCard({
   onSubmit,
   onClose,
 }: {
-  onSubmit: (data: { name: string; url?: string; files?: string[] }) => void;
+  onSubmit: (data: {
+    name: string;
+    url?: string;
+    files?: string[];
+    dailyBudget?: number;
+  }) => void;
   onClose: () => void;
 }) {
-  const TOTAL = 3;
+  const TOTAL = 4;
   const [step, setStep] = useState(0);
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
   const [fileNames, setFileNames] = useState<string[]>([]);
+  const [budget, setBudget] = useState("");
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -939,9 +1172,15 @@ function ProductSetupQuestionCard({
     setFileNames((prev) => [...prev, ...names]);
   };
 
+  // Daily budget in ₹ — digits only, parsed from the raw input.
+  const budgetValue = parseInt(budget.replace(/[^\d]/g, ""), 10);
+  const budgetOk = Number.isFinite(budgetValue) && budgetValue > 0;
+
   const canSubmit = name.trim().length > 0;
   const isLast = step === TOTAL - 1;
-  const canSkipThis = step !== 0; // name is required
+  // Name (0) and daily budget (3) are required — only URL (1) and files (2)
+  // can be skipped.
+  const canSkipThis = step === 1 || step === 2;
 
   /** Mirror this step's user answer into the chat thread before
    *  advancing — so the left panel reflects the user's response
@@ -952,20 +1191,15 @@ function ProductSetupQuestionCard({
   };
 
   const finish = () => {
-    if (!canSubmit) return;
-    // Last step is "files" — mirror what they dropped (or "Skipped" if
-    // they hit the Skip button, handled in handleSkip below).
-    if (fileNames.length > 0) {
-      const head = fileNames.slice(0, 3).join(", ");
-      const more = fileNames.length > 3 ? ` +${fileNames.length - 3} more` : "";
-      appendUserMessage(`📎 ${head}${more}`);
-    } else {
-      appendUserMessage("No files for now.");
-    }
+    if (!canSubmit || !budgetOk) return;
+    // Last step is "daily budget" — mirror the figure into the thread, then
+    // submit everything (name + url + files captured in earlier steps).
+    appendUserMessage(`₹${budgetValue.toLocaleString("en-IN")} / day`);
     onSubmit({
       name: name.trim(),
       url: url.trim() || undefined,
       files: fileNames.length > 0 ? fileNames : undefined,
+      dailyBudget: budgetValue,
     });
   };
 
@@ -983,8 +1217,18 @@ function ProductSetupQuestionCard({
         appendUserMessage("Skipped — no URL yet.");
       }
       setStep(2);
+    } else if (step === 2) {
+      // Q3 — files. Optional. Mirror what they dropped, then advance to budget.
+      if (fileNames.length > 0) {
+        const head = fileNames.slice(0, 3).join(", ");
+        const more = fileNames.length > 3 ? ` +${fileNames.length - 3} more` : "";
+        appendUserMessage(`📎 ${head}${more}`);
+      } else {
+        appendUserMessage("No files for now.");
+      }
+      setStep(3);
     } else {
-      // Q3 — files. finish() handles mirroring + submit.
+      // Q4 — daily budget. Required. finish() mirrors + submits.
       finish();
     }
   };
@@ -995,12 +1239,8 @@ function ProductSetupQuestionCard({
       setStep(2);
     } else if (step === 2) {
       appendUserMessage("Skipped — no files for now.");
-      // Still submit so deep research kicks off.
-      onSubmit({
-        name: name.trim(),
-        url: url.trim() || undefined,
-        files: undefined,
-      });
+      // Files are optional, but budget is still required — advance, don't submit.
+      setStep(3);
     }
   };
 
@@ -1011,17 +1251,22 @@ function ProductSetupQuestionCard({
       ? "What should I call this project?"
       : step === 1
         ? "Got a brand URL I can crawl?"
-        : "Any files I should learn from?";
+        : step === 2
+          ? "Any files I should learn from?"
+          : "What's your daily ad budget?";
 
   const subtitle =
     step === 0
       ? "I'll use this name across memory, plans, and campaigns."
       : step === 1
         ? "Pricing, curriculum, positioning — I'll pull whatever I can find."
-        : "Brochures, decks, PDFs — drop anything that explains the project.";
+        : step === 2
+          ? "Brochures, decks, PDFs — drop anything that explains the project."
+          : "I'll size the campaign plan, ad sets, and lead targets around this.";
 
-  // Disable Continue when on Q1 with no name typed.
-  const continueDisabled = step === 0 && !canSubmit;
+  // Disable Continue on Q1 with no name, or on Q4 (budget) with no valid figure.
+  const continueDisabled =
+    (step === 0 && !canSubmit) || (step === 3 && !budgetOk);
 
   return (
     <div className="mt-4 mb-1">
@@ -1179,6 +1424,47 @@ function ProductSetupQuestionCard({
                   ))}
                 </div>
               )}
+            </div>
+          )}
+          {step === 3 && (
+            <div>
+              <div className="relative">
+                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[14.5px] text-text-tertiary pointer-events-none">
+                  ₹
+                </span>
+                <input
+                  autoFocus
+                  key="q-budget"
+                  type="text"
+                  inputMode="numeric"
+                  value={budget}
+                  onChange={(e) => setBudget(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && budgetOk) goNext();
+                  }}
+                  placeholder="5,000"
+                  className="w-full rounded-input pl-8 pr-16 py-3 text-[14.5px] bg-white border border-border text-text-primary placeholder:text-text-tertiary outline-none focus:border-text-primary"
+                />
+                <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[12.5px] text-text-tertiary pointer-events-none">
+                  / day
+                </span>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {[3000, 5000, 10000, 25000].map((amt) => (
+                  <button
+                    key={amt}
+                    type="button"
+                    onClick={() => setBudget(String(amt))}
+                    className={`text-[12px] px-2.5 py-1 rounded-button border transition-colors ${
+                      budgetValue === amt
+                        ? "border-text-primary bg-surface-secondary text-text-primary"
+                        : "border-border-subtle text-text-secondary hover:border-border-hover"
+                    }`}
+                  >
+                    ₹{amt.toLocaleString("en-IN")}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
         </div>
