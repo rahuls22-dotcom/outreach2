@@ -5,6 +5,8 @@ import type { GuidedKind, GuidedPayload, SpotMessage, SpotPart, SpotScope } from
 import {
   EMPTY_APPROVALS,
   executionMovesFor,
+  launchBuildMoves,
+  launchDeployMoves,
   nextStepFor,
   stepIntroMessage,
   STEP_TOOL_CALL,
@@ -21,7 +23,8 @@ import {
 import { PRODUCTS } from "../products-data";
 import { analystReportFor, importedReviewFor } from "./analyst-data";
 import { campaignsForAccount } from "./import-campaigns-data";
-import { planMarkdownFor } from "./extended-flows";
+import { planMarkdownFor, watchHandoffMessage, firstNudgeMessage } from "./extended-flows";
+import { buildLaunchPlanMd, buildLaunchStrategyMd } from "./memory-files";
 
 type PanelState = {
   open: boolean;
@@ -75,6 +78,8 @@ type PanelState = {
     name: string;
     url?: string;
     files?: string[];
+    /** Daily ad spend in ₹ — sizes the campaign plan + lead targets. */
+    dailyBudget?: number;
   }) => void;
   /** Spot doesn't recognise the product — fake-research it in real-time. */
   startDeepResearch: (productName: string, attachedFiles?: string[]) => void;
@@ -117,6 +122,12 @@ type PanelState = {
    *  done), flipping executionDone when all are complete. Drives the
    *  LiveExecution canvas. Called when the *-live step begins. */
   startLiveExecution: () => void;
+  /** Seed + tick the launch-building checklist (the 5 build tasks) on a
+   *  timer. When the last task finishes, flips the thinking tool-call (by
+   *  id) to done, appends Spot's build-complete message, and opens the
+   *  deliverables canvas. Called the moment launch-building begins. */
+  startLaunchBuild: (callId: string) => void;
+  startLaunchDeploy: (callId: string) => void;
   /** Begin the import-campaigns sub-flow (after memory setup). Opens the
    *  ad-account picker on the canvas. */
   startImportCampaigns: () => void;
@@ -550,30 +561,16 @@ export const useSpotStore = create<PanelState>((set) => ({
                 ? `Got it. Memory's **${Math.round(product.readiness * 100)}% complete** — ${product.personas.length} personas linked, ${product.memory.length} entries on file.`
                 : `Here's what I have on file.`,
             },
-            {
-              type: "choice",
-              prompt: "Memory's ready — how do you want to start?",
-              options: [
-                {
-                  label: "Import existing campaigns",
-                  helper: "Pull campaigns from a connected ad account",
-                  action: "import-campaigns",
-                  icon: "download",
-                  variant: "secondary",
-                },
-                {
-                  label: "Launch new campaigns",
-                  helper: "Draft a fresh execution plan with Spot",
-                  action: "launch-new",
-                  icon: "rocket",
-                  variant: "primary",
-                },
-              ],
-            },
+            // The "how do you want to start?" choice is NOT inline in the
+            // thread — it's docked to the composer (KickoffDock in page.tsx),
+            // the same anchored treatment the diagnostic clarify questions get.
           ],
         };
         return {
           workflow: nextWorkflow,
+          // Surface the memory in the canvas by default (same as the deep-research
+          // kickoff) — deterministic at the source, not effect-dependent.
+          panelFile: "memory",
           thread: [
             ...updatedThread,
             artifactCardMessage("memory", "Project details", "Memory Spot has on file."),
@@ -679,10 +676,18 @@ export const useSpotStore = create<PanelState>((set) => ({
       files: files ?? [],
     };
 
+    // Daily ad spend → a 14-day planning window (amountInr is the total over
+    // `days`, matching how PlanFileView's allocator reads budget).
+    const daily = data.dailyBudget && data.dailyBudget > 0 ? data.dailyBudget : null;
+    const budget: WorkflowBudget | null = daily
+      ? { amountInr: daily * 14, days: 14 }
+      : wf.budget;
+
     const nextWorkflow: LaunchWorkflow = {
       ...wf,
       productName: trimmedName,
       productSetupAnswers: answers,
+      budget,
       productSetupStage: "ready",
       productSetupModalOpen: false,
     };
@@ -846,15 +851,65 @@ export const useSpotStore = create<PanelState>((set) => ({
   // delay synthesise the memory and advance to kickoff. From the
   // user's POV it feels like Spot just learned about the product.
   startDeepResearch: (productName, attachedFiles = []) => {
-    // Single phase: the Deep Research Agent crawls, parses, AND writes
-    // the memory itself. No separate "Memory Builder" tool-call —
-    // it's the same agent doing the work end-to-end. After ~8s the
-    // memory artifact card appears in the thread.
+    // The Deep Research Agent crawls, parses, and writes the memory itself —
+    // but its sub-agents are surfaced IN THE CHAT as a chain-of-thought trace,
+    // not a full-screen canvas. MessageBubble coalesces the adjacent tool-call
+    // parts below into one collapsible "Thinking" block; each step ticks
+    // running → done over the 14s window. The `detail` is the result that
+    // lands when a step completes (blank while it's still running).
     const researchCallId = `tc-research-${Date.now()}`;
     const hasFiles = attachedFiles.length > 0;
-    // Append (not replace) the thread so any prior turn — the user's
-    // form submission, intake tool-call, or "launch a campaign for X"
-    // prompt — stays visible above the research narration.
+    const introText = hasFiles
+      ? `On it — dispatching the Deep Research Agent. Crawling the URL, parsing your ${attachedFiles.length} file${attachedFiles.length === 1 ? "" : "s"}, searching the open web, then writing everything to product memory.`
+      : `On it — dispatching the Deep Research Agent. Crawling the URL, searching the open web for category signals, then writing everything to product memory.`;
+
+    // Sub-agents, in order. Durations sum to ~14s (the docs step is dropped
+    // when nothing was uploaded). Mirrors MEMORY_BUILD_AGENTS in workflow-pane.
+    const steps: { agent: string; detail: string; dur: number }[] = [
+      { agent: "Crawling the brand site", detail: "about · curriculum · pricing · 47 product entities", dur: 2400 },
+      { agent: "Searching the open web for category signals", detail: "12 review sites · 8 forum threads · ₹420 CPL median", dur: 2200 },
+      ...(hasFiles
+        ? [{ agent: `Reading your ${attachedFiles.length} uploaded file${attachedFiles.length === 1 ? "" : "s"}`, detail: "brochure · 14 pages · 22 positioning phrases", dur: 1800 }]
+        : []),
+      { agent: "Matching against the Revspot audience graph", detail: "5 cross-product personas · overlap with 2 products", dur: 2100 },
+      { agent: "Synthesizing findings into a brief", detail: "tagline · 4 USPs · 3 personas · 3 pricing tiers", dur: 2800 },
+      { agent: "Writing brief · personas · pricing · USPs to memory", detail: "committed to project-details.md", dur: 2700 },
+    ];
+
+    // Parts of the research message at a given progress index: steps before
+    // `current` are done (with their result detail), `current` is running
+    // (no detail yet), later steps aren't shown yet.
+    const buildParts = (current: number): SpotPart[] => [
+      { type: "text", text: introText },
+      ...steps.slice(0, current + 1).map((st, idx) => ({
+        type: "tool-call" as const,
+        id: `${researchCallId}-${idx}`,
+        agent: st.agent,
+        detail: idx < current ? st.detail : undefined,
+        status: (idx < current ? "done" : "running") as "running" | "done",
+      })),
+    ];
+
+    // Rewrite just the research message's parts in place (located by id prefix).
+    const setResearchParts = (parts: SpotPart[]) =>
+      set((s) => ({
+        thread: s.thread.map((m) =>
+          m.role === "spot" &&
+          m.parts.some((p) => p.type === "tool-call" && p.id.startsWith(researchCallId))
+            ? { ...m, parts }
+            : m,
+        ),
+      }));
+
+    // Carry the daily budget captured during product-setup forward — this
+    // rebuilds the workflow object, so without this the figure the user
+    // just entered would be silently dropped.
+    const prevWf = useSpotStore.getState().workflow;
+    const carriedBudget =
+      prevWf?.kind === "launch-campaign" ? prevWf.budget : null;
+    // Append (not replace) the thread so any prior turn — the user's form
+    // submission, intake tool-call, or "launch a campaign for X" prompt —
+    // stays visible above the research narration.
     set((s) => ({
       open: true,
       maximized: false,
@@ -866,7 +921,7 @@ export const useSpotStore = create<PanelState>((set) => ({
         step: "deep-research",
         productId: null,
         productName,
-        budget: null,
+        budget: carriedBudget,
         approvals: { ...EMPTY_APPROVALS },
         startedAt: Date.now(),
         researchedMemory: null,
@@ -877,28 +932,18 @@ export const useSpotStore = create<PanelState>((set) => ({
       },
       thread: [
         ...s.thread,
-        {
-          role: "spot",
-          parts: [
-            {
-              type: "text",
-              text: hasFiles
-                ? `On it — dispatching the Deep Research Agent. Crawling the URL, parsing your ${attachedFiles.length} file${attachedFiles.length === 1 ? "" : "s"}, searching the open web, then writing everything to product memory.`
-                : `On it — dispatching the Deep Research Agent. Crawling the URL, searching the open web for category signals, then writing everything to product memory.`,
-            },
-            {
-              type: "tool-call",
-              id: researchCallId,
-              agent: "Deep Research Agent",
-              detail: hasFiles
-                ? `Parsing ${attachedFiles.length} attachment${attachedFiles.length === 1 ? "" : "s"} · brand site · category signals · audience overlap.`
-                : "Crawling brand site · category signals · audience overlap.",
-              status: "running",
-            },
-          ],
-        },
+        { role: "spot", parts: buildParts(0) },
       ],
     }));
+
+    // Tick each sub-agent running → done in sequence, so the in-chat
+    // chain-of-thought advances node by node. The final step's flip-to-done
+    // happens in the 14000ms block below (alongside the kickoff reveal).
+    let elapsed = 0;
+    for (let i = 1; i < steps.length; i++) {
+      elapsed += steps[i - 1].dur;
+      setTimeout(() => setResearchParts(buildParts(i)), elapsed);
+    }
 
     // ── Research done · flip to kickoff, reveal memory, ship CTA ──
     // After ~8s, flip the deep-research tool-call to done, transition
@@ -909,52 +954,53 @@ export const useSpotStore = create<PanelState>((set) => ({
       set((s) => {
         if (!s.workflow || s.workflow.kind !== "launch-campaign") return {};
         const researched: import("./workflow").ResearchedMemory = {
-          tagline: `${productName} — fresh research from Spot. Memory pre-filled; edit any field in chat.`,
+          tagline: `Two-year JEE Mains + Advanced program for Class 11 students — live doubt-clearing, weekly all-India mocks, and IIT-alum mentors. Memory pre-filled from research; edit any field in chat.`,
           brief: [
-            { icon: "📅", label: "Duration", value: "2 years · cohort-led" },
+            { icon: "📅", label: "Duration", value: "2 years · Class 11 + 12" },
             { icon: "👥", label: "Cohort size", value: "Capped at 60 · live classes" },
-            { icon: "📚", label: "Curriculum", value: "Category-standard · benchmarked against top 3 incumbents" },
-            { icon: "👨‍🏫", label: "Mentors", value: "Senior alumni · 1:1 monthly review" },
-            { icon: "🎯", label: "Outcome", value: "Entrance-exam preparation track" },
+            { icon: "📚", label: "Curriculum", value: "Physics · Chemistry · Math (NCERT + advanced)" },
+            { icon: "👨‍🏫", label: "Mentors", value: "12 IIT-alum mentors · 1:1 monthly review" },
+            { icon: "📝", label: "Mocks", value: "Weekly all-India · ranked against 1.2L+ aspirants" },
+            { icon: "🎞️", label: "Access", value: "Recordings + library for 24 months" },
+            { icon: "🎯", label: "Outcome", value: "JEE Mains + Advanced preparation" },
           ],
           personas: [
             {
-              name: "Working professional · Aspiring fluent speaker",
-              meta: "25-34 · tier-1/2 cities · LinkedIn-active",
-              pain: "Stalled career growth from English gap",
+              name: "The Aspiring Engineer Parent",
+              meta: "36-48 · Hyderabad, Pune, Bangalore, NCR, Kota · kid in Class 9-12",
+              pain: "Offline coaching eats 3-4 hrs of commute; hard to verify if it's working week-on-week",
             },
             {
-              name: "College student · Interview prep",
-              meta: "18-24 · semi-urban · YouTube-heavy",
-              pain: "Campus placement interviews",
+              name: "The Self-Studier",
+              meta: "16-19 · tier-2/3 India · pays via parent's UPI",
+              pain: "No quality coaching locally; doubt resolution is the biggest gap when self-studying",
             },
             {
-              name: "Parent · Buying for child",
-              meta: "32-45 · tier-2/3 cities · WhatsApp + Facebook",
-              pain: "Child's school confidence",
+              name: "The Coaching Hopper",
+              meta: "16-18 · Kota, Hyderabad, Pune, Delhi · ₹1.2L-2.5L/yr offline now",
+              pain: "Class strength of 200+ means no personal attention; commute eats study hours",
             },
           ],
           usps: [
-            "Strongest category signal: live cohort + mentor-led delivery beats pure-recorded on retention.",
-            "Pricing band sits in the median tier — room to test premium / lite variants once we have data.",
-            "Closest competitor's positioning is rank-led; an outcomes-led counter-position should win on trust.",
-            "60-student cap and named-mentor framing test well against generic 'best coaching' positioning.",
+            "Live cohort classes capped at 60 — every doubt answered in-class.",
+            "Weekly all-India mocks ranked against 1.2L+ JEE aspirants.",
+            "Personal study planner reviewed by an IIT-alum mentor.",
+            "Recordings available for 24 months — revise anytime, no time pressure.",
           ],
           avoid: [
-            "Don't promise specific outcomes (ranks, jobs, admits) — likely flagged by legal.",
-            "Skip celebrity-endorsement framing unless explicitly cleared.",
-            "Avoid name-checking competitors (Allen, Aakash, FIITJEE) — reads as insecure.",
+            "Don't promise specific ranks or guarantees — flagged by legal.",
+            "Avoid name-checking competitors (FIITJEE / Allen / Aakash) — reads as insecure.",
+            "No 'best in India' superlatives.",
           ],
           pricing: [
-            { name: "2-year cohort", cost: "₹62,000", cadence: "one-shot", badge: "Suggested · median band" },
-            { name: "2-year · EMI", cost: "₹5,600", cadence: "/month · 12 months" },
-            { name: "1-year intensive", cost: "₹36,000", cadence: "one-shot" },
+            { name: "2-year cohort", cost: "₹65,000", cadence: "one-shot", badge: "Most picked" },
+            { name: "2-year · EMI", cost: "₹5,950", cadence: "/month · 12 months" },
+            { name: "1-year intensive", cost: "₹38,000", cadence: "one-shot" },
           ],
           offers: [
-            { label: "Early-bird · 10% off", meta: "first 14 days" },
+            { label: "Early-bird · 12% off", meta: "till May 31" },
             { label: "Sibling discount · 8%", meta: "stackable" },
-            { label: "14-day money-back", meta: "no questions" },
-            { label: "Refer-a-friend · ₹3K credit", meta: "post-enrol" },
+            { label: "100% refund · first 14 days", meta: "no questions" },
           ],
           sources: [
             ...(attachedFiles.length > 0
@@ -975,58 +1021,40 @@ export const useSpotStore = create<PanelState>((set) => ({
           researchedMemory: researched,
           kickoffReady: true,
         };
-        // Flip the Deep Research tool-call to done + append the kickoff
-        // intro with the step-cta. Single agent does the whole arc.
+        // Settle every research sub-agent to done (with its result detail) +
+        // append the kickoff intro with the step-cta. The chain-of-thought
+        // collapses to its quiet one-line summary once nothing's running.
+        const settledParts = buildParts(steps.length);
         const updatedThread = s.thread.map((m) => {
-          if (m.role !== "spot") return m;
-          return {
-            ...m,
-            parts: m.parts.map((p) =>
-              p.type === "tool-call" && p.id === researchCallId
-                ? { ...p, status: "done" as const }
-                : p,
-            ),
-          };
+          if (
+            m.role !== "spot" ||
+            !m.parts.some(
+              (p) => p.type === "tool-call" && p.id.startsWith(researchCallId),
+            )
+          )
+            return m;
+          return { ...m, parts: settledParts };
         });
         const kickoff: SpotMessage = {
           role: "spot",
           parts: [
             {
-              type: "headline",
-              text: `${productName} · memory built.`,
-              verdict: "ok",
-            },
-            {
               type: "text",
               text: `I've drafted what I'd lead with and what to avoid. From here you can pull in your existing campaigns to analyse them, or have me draft a fresh execution plan.`,
             },
-            {
-              type: "choice",
-              prompt: "Memory's ready — how do you want to start?",
-              options: [
-                {
-                  label: "Import existing campaigns",
-                  helper: "Pull campaigns from a connected ad account",
-                  action: "import-campaigns",
-                  icon: "download",
-                  variant: "secondary",
-                },
-                {
-                  label: "Launch new campaigns",
-                  helper: "Draft a fresh execution plan with Spot",
-                  action: "launch-new",
-                  icon: "rocket",
-                  variant: "primary",
-                },
-              ],
-            },
+            // Choice is docked to the composer (KickoffDock), not inline.
           ],
         };
         return {
           workflow: nextWorkflow,
+          // Open the freshly-built memory in the canvas by default. Set here at
+          // the source so it's deterministic — the page-level auto-open effect is
+          // a fallback, but the research → kickoff transition must never depend on
+          // effect timing or a remount to surface the artifact.
+          panelFile: "memory",
           thread: [
             ...updatedThread,
-            artifactCardMessage("memory", "Project details", `Memory built for ${productName}.`),
+            artifactCardMessage("memory", "Project details", "Brief · personas · pricing · USPs"),
             kickoff,
           ],
         };
@@ -1274,6 +1302,93 @@ export const useSpotStore = create<PanelState>((set) => ({
         return { ...s.workflow, step: upcoming, planApproved, ready };
       })();
 
+      // ── launch-building · the build experience ───────────────────
+      // Instead of a single opaque spinner, render: the headline + a
+      // ticking 5-task todo list (exec-checklist part), with the "thinking"
+      // tool-call narration BELOW it. startLaunchBuild crosses each task
+      // off on a timer; when all 5 finish it flips the thinking call to
+      // done, posts the build-complete message, and opens the deliverables
+      // canvas (all the assets Spot produced). No forced auto-advance —
+      // the user reviews the deliverables, then approves to deploy.
+      if (upcoming === "launch-building" && nextWorkflow.kind === "launch-campaign") {
+        const moves = launchBuildMoves();
+        const buildWorkflow: SpotWorkflow = {
+          ...nextWorkflow,
+          executionMoves: moves,
+          executionDone: false,
+        };
+        const intro = stepIntroMessage(upcoming, buildWorkflow);
+        const introParts: SpotPart[] =
+          intro && intro.role === "spot" ? [...intro.parts] : [];
+        // Headline + text, then the live build checklist directly under it.
+        const checklistMsg: SpotMessage = {
+          role: "spot",
+          parts: [...introParts, { type: "exec-checklist" }],
+        };
+        // "Thinking" narration sits BELOW the checklist.
+        const thinkingMsg: SpotMessage = {
+          role: "spot",
+          parts: [
+            {
+              type: "tool-call",
+              id: callId,
+              agent: tc?.agent ?? "Building your campaign",
+              detail: tc?.detail ?? "",
+              status: "running",
+            },
+          ],
+        };
+        // Kick off the ticker on the next tick (after this set commits).
+        setTimeout(() => {
+          useSpotStore.getState().startLaunchBuild(callId);
+        }, 0);
+        return {
+          workflow: buildWorkflow,
+          thread: [...s.thread, ...appended, checklistMsg, thinkingMsg],
+        };
+      }
+
+      // ── launch-deploy · publish-to-Meta, IN CHAT ─────────────────
+      // Same inline treatment as launch-building — render the deploy
+      // checklist as a ticking todo in the thread (exec-checklist part)
+      // with the "publishing" narration below it. No full-screen
+      // takeover: the publish runs in chat and Spot posts the "live"
+      // summary right here when it finishes. startLaunchDeploy drives it.
+      if (upcoming === "launch-deploy" && nextWorkflow.kind === "launch-campaign") {
+        const moves = launchDeployMoves();
+        const deployWorkflow: SpotWorkflow = {
+          ...nextWorkflow,
+          executionMoves: moves,
+          executionDone: false,
+        };
+        const intro = stepIntroMessage(upcoming, deployWorkflow);
+        const introParts: SpotPart[] =
+          intro && intro.role === "spot" ? [...intro.parts] : [];
+        const checklistMsg: SpotMessage = {
+          role: "spot",
+          parts: [...introParts, { type: "exec-checklist" }],
+        };
+        const thinkingMsg: SpotMessage = {
+          role: "spot",
+          parts: [
+            {
+              type: "tool-call",
+              id: callId,
+              agent: tc?.agent ?? "Publishing everything live",
+              detail: tc?.detail ?? "",
+              status: "running",
+            },
+          ],
+        };
+        setTimeout(() => {
+          useSpotStore.getState().startLaunchDeploy(callId);
+        }, 0);
+        return {
+          workflow: deployWorkflow,
+          thread: [...s.thread, ...appended, checklistMsg, thinkingMsg],
+        };
+      }
+
       if (tc) {
         appended.push({
           role: "spot",
@@ -1316,34 +1431,55 @@ export const useSpotStore = create<PanelState>((set) => ({
             // just resolved (spot.plan · "folding your picks into the
             // execution plan…") was the create-the-document CoT; the card is
             // the saved result, downloadable as plan.md and click-to-open.
-            const planSteps = ["scale-plan", "opt-plan", "ang-plan"];
+            // Diagnostic plan steps AND the launch flow's launch-plan step
+            // all close on a written execution plan — surface it as a card
+            // (above the CTA) and force the canvas to the plan so the user
+            // SEES the plan they're about to execute without an extra click.
+            const planSteps = ["scale-plan", "opt-plan", "ang-plan", "launch-plan"];
             const isPlanStep = planSteps.includes(upcoming);
-            // The plan.md document must match the plan the canvas renders
-            // for THIS diagnostic flow (scale / optimize / test-angles) —
-            // not the generic launch build. Build it from the same
-            // WorkflowPlan the PlanStep canvas reads.
-            const planMd =
-              isPlanStep &&
-              (s2.workflow.kind === "scale" ||
-                s2.workflow.kind === "optimize" ||
-                s2.workflow.kind === "test-angles")
+            // The launch flow's launch-strategy step closes on a written
+            // strategy.md — same treatment as the plan steps: surface it as a
+            // card (above the CTA) and force the canvas to the strategy so the
+            // user SEES the strategy they're approving without an extra click.
+            const isStrategyStep =
+              upcoming === "launch-strategy" &&
+              s2.workflow.kind === "launch-campaign";
+            // The plan.md document must match the plan the canvas renders.
+            // Diagnostic flows read their per-kind WorkflowPlan; the launch
+            // flow reads the shared launch-plan markdown (same as PlanFileView).
+            const planMd = !isPlanStep
+              ? undefined
+              : s2.workflow.kind === "scale" ||
+                  s2.workflow.kind === "optimize" ||
+                  s2.workflow.kind === "test-angles"
                 ? planMarkdownFor(s2.workflow.kind, s2.workflow.productName)
-                : undefined;
-            const planCard: SpotMessage | null = isPlanStep
+                : s2.workflow.kind === "launch-campaign"
+                  ? buildLaunchPlanMd(s2.workflow.productName)
+                  : undefined;
+            // A single card per card-step — plan card for plan steps, strategy
+            // card for the strategy step.
+            const stepCard: SpotMessage | null = isPlanStep
               ? artifactCardMessage(
                   "plan",
                   "Execution plan",
                   "Full plan · Markdown",
                   planMd,
                 )
-              : null;
-            // Plan steps: the intro message bundles [text, step-cta]. The
-            // user wants the Execution plan card to sit ABOVE the "Put the
-            // plan live" CTA, so split the intro — text first, then the
-            // plan card, then the step-cta — to land the chat order
-            // [intro text] → [Execution plan card] → [Put the plan live CTA].
+              : isStrategyStep
+                ? artifactCardMessage(
+                    "strategy",
+                    "Campaign strategy",
+                    "Personas · angles · targeting · CPQL",
+                    buildLaunchStrategyMd(s2.workflow.productName),
+                  )
+                : null;
+            const isCardStep = isPlanStep || isStrategyStep;
+            // Card steps: the intro message bundles [text, step-cta]. The
+            // user wants the artifact card to sit ABOVE the CTA, so split the
+            // intro — text first, then the card, then the step-cta — to land
+            // the chat order [intro text] → [card] → [CTA].
             let finalThread: SpotMessage[];
-            if (isPlanStep && intro && intro.role === "spot" && planCard) {
+            if (isCardStep && intro && intro.role === "spot" && stepCard) {
               const textParts = intro.parts.filter((p) => p.type !== "step-cta");
               const ctaParts = intro.parts.filter((p) => p.type === "step-cta");
               const introText: SpotMessage[] = textParts.length
@@ -1355,13 +1491,13 @@ export const useSpotStore = create<PanelState>((set) => ({
               finalThread = [
                 ...updatedThread,
                 ...introText,
-                planCard,
+                stepCard,
                 ...introCta,
               ];
             } else {
               finalThread = intro
-                ? [...updatedThread, intro, ...(planCard ? [planCard] : [])]
-                : [...updatedThread, ...(planCard ? [planCard] : [])];
+                ? [...updatedThread, intro, ...(stepCard ? [stepCard] : [])]
+                : [...updatedThread, ...(stepCard ? [stepCard] : [])];
             }
             // Diagnostic plan/live steps gate canvas reveal on `ready`.
             // When the tool-call resolves we flip ready=true so the
@@ -1370,12 +1506,15 @@ export const useSpotStore = create<PanelState>((set) => ({
               s2.workflow.kind !== "launch-campaign"
                 ? { ...s2.workflow, ready: true }
                 : s2.workflow;
-            // When the plan card is created, force the right panel to open
-            // the plan REGARDLESS of what file was open — the user wants to
-            // see the plan they're about to approve without an extra click.
+            // When the card is created, force the right panel to open the
+            // matching file REGARDLESS of what was open — the user wants to
+            // see the strategy/plan they're about to approve without an extra
+            // click.
             const panelPatch: Partial<PanelState> = isPlanStep
               ? { panelFile: "plan" }
-              : {};
+              : isStrategyStep
+                ? { panelFile: "strategy" }
+                : {};
             return { thread: finalThread, workflow, ...panelPatch };
           });
 
@@ -1394,6 +1533,11 @@ export const useSpotStore = create<PanelState>((set) => ({
               }
             }, 600);
           }
+
+          // launch-deploy no longer routes through this generic tool-call
+          // path — it returns early above with an inline exec-checklist
+          // (startLaunchDeploy) that ticks in chat and posts the "live"
+          // summary there. No full-screen takeover, no forced advance.
 
           // Diagnostic *-live step: once the deploy.push tool-call resolves
           // and the live intro has landed, swap the right panel from plan.md
@@ -1440,9 +1584,13 @@ export const useSpotStore = create<PanelState>((set) => ({
     });
 
     // Tick the moves off one at a time: mark running, then done, on an
-    // interval, so the user watches the plan execute live. ~1.4s per move.
-    const perMoveMs = 1400;
-    const runDelayMs = 450;
+    // interval, so the user watches the plan execute live. Deliberately
+    // unhurried (~2.8s per move) — the work should feel like it's actually
+    // happening, not snapping done.
+    const perMoveMs = 2800;
+    const runDelayMs = 700;
+    const kind = wf.kind;
+    const productName = wf.productName;
     moves.forEach((_, i) => {
       // running
       setTimeout(() => {
@@ -1472,6 +1620,223 @@ export const useSpotStore = create<PanelState>((set) => ({
         });
       }, perMoveMs * (i + 1));
     });
+
+    // After the last move lands, the plan is done and the product goes
+    // under watch (Flow 3, Phase A). Play that hand-off out IN THE CHAT:
+    //   beat 1 — "watching now" confirmation (right after the checklist).
+    //   beat 2 — the first 🔔 watcher nudge: a read + a question for the
+    //            user. The question is a fresh chat message; the ticked-off
+    //            tasks stay above it. Spot never acts off its own nudge.
+    const allDoneAt = perMoveMs * moves.length;
+    // Guard each append: only fire if the user is still on this same live
+    // execution (no navigation / reset / re-drive in the meantime).
+    const stillLive = (w: SpotWorkflow | null): w is DiagnosticWorkflow =>
+      isDiag(w) && w.kind === kind && Boolean(w.executionDone);
+    setTimeout(() => {
+      const st = useSpotStore.getState();
+      if (!stillLive(st.workflow)) return;
+      useSpotStore.setState((s) => ({
+        thread: [...s.thread, watchHandoffMessage(kind, productName)],
+      }));
+    }, allDoneAt + 1400);
+    setTimeout(() => {
+      const st = useSpotStore.getState();
+      if (!stillLive(st.workflow)) return;
+      // The watcher trips: append Spot's read + the report card, and pop the
+      // watch-review.md write-up open in the side panel at the same time.
+      useSpotStore.setState((s) => ({
+        thread: [...s.thread, firstNudgeMessage(kind, productName)],
+        panelFile: "watch-review",
+      }));
+    }, allDoneAt + 6200);
+  },
+
+  startLaunchBuild: (callId) => {
+    const isLaunch = (w: SpotWorkflow | null): w is LaunchWorkflow =>
+      !!w && w.kind === "launch-campaign";
+    const wf = useSpotStore.getState().workflow;
+    if (!isLaunch(wf)) return;
+    const productName = wf.productName;
+    const moves = wf.executionMoves ?? launchBuildMoves();
+    // Make sure the checklist is seeded (idempotent if advanceWorkflow
+    // already set it).
+    set((st) =>
+      isLaunch(st.workflow)
+        ? {
+            workflow: {
+              ...st.workflow,
+              executionMoves: moves,
+              executionDone: false,
+            },
+          }
+        : {},
+    );
+
+    // Tick each task: running, then done. ~3.6s per task ≈ 18s end-to-end,
+    // matching the build narration. Deliberately unhurried so the work
+    // reads as actually happening.
+    const perMoveMs = 3600;
+    const runDelayMs = 700;
+    moves.forEach((_, i) => {
+      // running
+      setTimeout(() => {
+        useSpotStore.setState((st) => {
+          if (!isLaunch(st.workflow) || !st.workflow.executionMoves) return {};
+          const next = st.workflow.executionMoves.map((m, j) =>
+            j === i ? { ...m, status: "running" as const } : m,
+          );
+          return { workflow: { ...st.workflow, executionMoves: next } };
+        });
+      }, perMoveMs * i + runDelayMs);
+      // done
+      setTimeout(() => {
+        useSpotStore.setState((st) => {
+          if (!isLaunch(st.workflow) || !st.workflow.executionMoves) return {};
+          const next = st.workflow.executionMoves.map((m, j) =>
+            j === i ? { ...m, status: "done" as const } : m,
+          );
+          const allDone = next.every((m) => m.status === "done");
+          return {
+            workflow: { ...st.workflow, executionMoves: next, executionDone: allDone },
+          };
+        });
+      }, perMoveMs * (i + 1));
+    });
+
+    // Once the last task crosses off: flip the thinking tool-call to done,
+    // post Spot's build-complete message (with the review-and-deploy CTA),
+    // and open the deliverables canvas — the full asset pack Spot produced.
+    setTimeout(() => {
+      const st = useSpotStore.getState();
+      if (!isLaunch(st.workflow) || !st.workflow.executionDone) return;
+      const completeMsg: SpotMessage = {
+        role: "spot",
+        parts: [
+          {
+            type: "headline",
+            text: `Done — all 5 tasks complete for ${productName}.`,
+            verdict: "ok",
+          },
+          {
+            type: "text",
+            text:
+              "Everything's built: creatives per persona, lead forms, landing pages, the full campaign structure, CRM wiring, and the Pre-Sales Agent (Voice + WhatsApp). Opening the deliverables on the right for your review now.",
+          },
+        ],
+      };
+      useSpotStore.setState((s) => {
+        const updatedThread = s.thread.map((m) => {
+          if (m.role !== "spot") return m;
+          return {
+            ...m,
+            parts: m.parts.map((p) =>
+              p.type === "tool-call" && p.id === callId
+                ? { ...p, status: "done" as const }
+                : p,
+            ),
+          };
+        });
+        return {
+          thread: [...updatedThread, completeMsg],
+          panelFile: "deliverables",
+        };
+      });
+      // Auto-flow into the single review + deploy gate (launch-review).
+      // The build-complete message above is informational only — it no
+      // longer carries a deploy CTA, so the user is asked to "deploy live"
+      // exactly once, at the launch-review gate.
+      setTimeout(() => {
+        const s2 = useSpotStore.getState();
+        if (isLaunch(s2.workflow) && s2.workflow.step === "launch-building") {
+          s2.advanceWorkflow(undefined, "launch-review");
+        }
+      }, 700);
+    }, perMoveMs * moves.length + 400);
+  },
+
+  startLaunchDeploy: (callId) => {
+    const isLaunch = (w: SpotWorkflow | null): w is LaunchWorkflow =>
+      !!w && w.kind === "launch-campaign";
+    const wf = useSpotStore.getState().workflow;
+    if (!isLaunch(wf)) return;
+    const productName = wf.productName;
+    const moves = wf.executionMoves ?? launchDeployMoves();
+    set((st) =>
+      isLaunch(st.workflow)
+        ? {
+            workflow: {
+              ...st.workflow,
+              executionMoves: moves,
+              executionDone: false,
+            },
+          }
+        : {},
+    );
+
+    // Deploy ticks faster than the build — this is publishing, not
+    // authoring. ~1.3s per task × 7 ≈ 9s end-to-end.
+    const perMoveMs = 1300;
+    const runDelayMs = 500;
+    moves.forEach((_, i) => {
+      setTimeout(() => {
+        useSpotStore.setState((st) => {
+          if (!isLaunch(st.workflow) || !st.workflow.executionMoves) return {};
+          const next = st.workflow.executionMoves.map((m, j) =>
+            j === i ? { ...m, status: "running" as const } : m,
+          );
+          return { workflow: { ...st.workflow, executionMoves: next } };
+        });
+      }, perMoveMs * i + runDelayMs);
+      setTimeout(() => {
+        useSpotStore.setState((st) => {
+          if (!isLaunch(st.workflow) || !st.workflow.executionMoves) return {};
+          const next = st.workflow.executionMoves.map((m, j) =>
+            j === i ? { ...m, status: "done" as const } : m,
+          );
+          const allDone = next.every((m) => m.status === "done");
+          return {
+            workflow: { ...st.workflow, executionMoves: next, executionDone: allDone },
+          };
+        });
+      }, perMoveMs * (i + 1));
+    });
+
+    // Last task crosses off: flip the "publishing" tool-call to done and
+    // post the "live" summary IN CHAT. No takeover, no forced advance —
+    // the flow ends right here in the thread.
+    setTimeout(() => {
+      const st = useSpotStore.getState();
+      if (!isLaunch(st.workflow) || !st.workflow.executionDone) return;
+      const liveMsg: SpotMessage = {
+        role: "spot",
+        parts: [
+          {
+            type: "headline",
+            text: `${productName} is live.`,
+            verdict: "ok",
+          },
+          {
+            type: "text",
+            text:
+              "Everything's published to Meta + WhatsApp — both campaigns, every ad set, the landing pages, lead forms, the Meta pixel + Conversions API, and the Pre-Sales Agent (Voice + WhatsApp). The watchers are armed on CPL, sentiment, and frequency. I'll report back here the moment the first data lands.",
+          },
+        ],
+      };
+      useSpotStore.setState((s) => {
+        const updatedThread = s.thread.map((m) => {
+          if (m.role !== "spot") return m;
+          return {
+            ...m,
+            parts: m.parts.map((p) =>
+              p.type === "tool-call" && p.id === callId
+                ? { ...p, status: "done" as const }
+                : p,
+            ),
+          };
+        });
+        return { thread: [...updatedThread, liveMsg] };
+      });
+    }, perMoveMs * moves.length + 400);
   },
 
   startImportCampaigns: () =>

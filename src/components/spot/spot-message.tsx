@@ -11,7 +11,7 @@ import { RichText } from "./rich-text";
 import type { SpotFinding, SpotKpi, SpotMessage, SpotPart, Verdict, GuidedKind, SpotChoiceOption, SpotChoiceIcon } from "@/lib/spot/types";
 import { useSpotStore } from "@/lib/spot/store";
 import { hasStreamed, markStreamed } from "@/lib/spot/streamed-text";
-import type { LaunchWorkflow, CanvasFile } from "@/lib/spot/workflow";
+import type { LaunchWorkflow, CanvasFile, DiagnosticWorkflow, ExecutionMove } from "@/lib/spot/workflow";
 import { fileMeta } from "@/components/spot/workflow/workflow-pane";
 import {
   IMPORT_AD_ACCOUNTS,
@@ -500,55 +500,80 @@ function ChoicePart({ prompt, options }: { prompt?: string; options: SpotChoiceO
     }
   };
 
+  // Rendered as a QUESTION — same single-select pattern as the diagnostic
+  // ClarifyDock (flat card, question header, radio-style option rows). Spot
+  // tells the user these are the options and to pick one to proceed; clicking
+  // a row fires that option's action immediately (no separate confirm).
   return (
     <div className="mb-2.5">
-      {prompt && (
-        <div className="text-[14px] font-medium text-text-secondary mb-2">{prompt}</div>
-      )}
-      <div className="space-y-2">
-        {options.map((o) => {
-          const Icon = o.icon ? CHOICE_ICON[o.icon] : ArrowRight;
-          const primary = o.variant === "primary";
-          return (
-            <button
-              key={o.label}
-              type="button"
-              onClick={() => choose(o)}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-[12px] border text-left transition-colors group"
-              style={{
-                // Primary is carried by the dark border + dark icon tile;
-                // no gold wash (neutral palette).
-                background: "#FFFFFF",
-                borderColor: primary ? "#1A1A1A" : "var(--border)",
-              }}
-            >
-              <span
-                className="inline-flex items-center justify-center w-8 h-8 rounded-[9px] flex-shrink-0"
-                style={{
-                  background: primary ? "#1A1A1A" : "var(--surface-secondary)",
-                  color: primary ? "#FAFAF8" : "var(--text-secondary)",
-                }}
+      <div
+        className="rounded-[14px] px-4 pt-3 pb-3.5"
+        style={{
+          background: "var(--bg-card)",
+          border: "1px solid var(--border-subtle)",
+          boxShadow: "var(--spot-shadow)",
+        }}
+      >
+        <div className="flex items-center gap-2 mb-2.5">
+          <SpotMark size={13} />
+          <span className="text-[11px] font-medium uppercase tracking-wider text-text-tertiary">
+            Pick one to continue
+          </span>
+        </div>
+
+        <div className="text-[15px] font-semibold text-text-primary leading-snug">
+          {prompt ?? "How do you want to start?"}
+        </div>
+        <div className="text-[12.5px] text-text-tertiary mt-1 leading-snug">
+          These are your options — pick one and I'll take it from there.
+        </div>
+
+        <div className="mt-3 space-y-1.5">
+          {options.map((o) => {
+            const recommended = o.variant === "primary";
+            return (
+              <button
+                key={o.label}
+                type="button"
+                onClick={() => choose(o)}
+                className="group w-full flex items-center gap-3 px-3 py-2.5 text-left rounded-[10px] transition-colors hover:bg-[var(--spot-tint)]"
+                style={{ border: "1px solid transparent" }}
               >
-                <Icon size={15} strokeWidth={2} />
-              </span>
-              <span className="flex-1 min-w-0">
-                <span className="block text-[14px] font-semibold text-text-primary leading-tight">
-                  {o.label}
+                <span
+                  className="flex-shrink-0 flex items-center justify-center w-[20px] h-[20px] rounded-full transition-colors group-hover:border-[#1A1A1A]"
+                  style={{ border: "1.5px solid var(--spot-stroke)" }}
+                >
+                  <span className="w-[8px] h-[8px] rounded-full opacity-0 transition-opacity group-hover:opacity-100" style={{ background: "#1A1A1A" }} />
                 </span>
-                {o.helper && (
-                  <span className="block text-[12px] text-text-tertiary leading-snug mt-0.5">
-                    {o.helper}
+                <span className="flex-1 min-w-0">
+                  <span className="flex items-center gap-2">
+                    <span className="text-[14px] leading-snug font-medium text-text-secondary group-hover:text-text-primary group-hover:font-semibold">
+                      {o.label}
+                    </span>
+                    {recommended && (
+                      <span
+                        className="flex-shrink-0 inline-flex items-center h-[17px] px-1.5 rounded-full text-[9.5px] font-medium uppercase tracking-wide text-text-tertiary"
+                        style={{ background: "var(--spot-tint)", border: "1px solid var(--spot-stroke)" }}
+                      >
+                        Recommended
+                      </span>
+                    )}
                   </span>
-                )}
-              </span>
-              <ArrowRight
-                size={14}
-                strokeWidth={2}
-                className="text-text-tertiary group-hover:text-text-primary flex-shrink-0 transition-colors"
-              />
-            </button>
-          );
-        })}
+                  {o.helper && (
+                    <span className="block text-[12px] text-text-tertiary mt-0.5 leading-snug">
+                      {o.helper}
+                    </span>
+                  )}
+                </span>
+                <ArrowRight
+                  size={14}
+                  strokeWidth={2}
+                  className="flex-shrink-0 text-text-tertiary opacity-0 transition-all duration-200 group-hover:opacity-100 group-hover:translate-x-0.5"
+                />
+              </button>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
@@ -969,6 +994,12 @@ function StreamingText({ text, onDone }: { text: string; onDone?: () => void }) 
         onDone?.();
       }
     }, 42);
+    // Only clear the timer on teardown. Do NOT mark the text streamed here:
+    // React StrictMode (and the canvas-open/close render-site swap) tears the
+    // effect down and remounts it, so marking on teardown would flag the text
+    // as already-streamed before it ever animated, and it would then render
+    // whole on remount. The exec checklist reveals on its own (it's ungated in
+    // SpotMessageBody), so it does not depend on this onDone firing.
     return () => clearInterval(id);
     // onDone is a stable callback from the parent; tokens drives the run.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1567,6 +1598,172 @@ function DecisionPart({ title, items, chip }: { title: string; items?: string[];
   );
 }
 
+/* ─── Inline execution checklist ──────────────────────────────────
+ * The live "Spot is doing the work" todo, rendered IN the chat thread
+ * instead of as a right-canvas artifact. Reads the active diagnostic
+ * workflow's executionMoves/executionDone off the store (driven by
+ * startLiveExecution) and ticks each move pending → running → done in
+ * place. One warm-gold accent while live, calm green when done. No
+ * action lives here — when a move needs the user's call, Spot appends a
+ * fresh question below this card. Mirrors the visual language of the old
+ * LiveExecution panel, sized for the chat column. */
+const EXEC_ACCENT = "#C9A227";
+const EXEC_ACCENT_INK = "#8A6D1F";
+
+function isDiagWorkflow(w: unknown): w is DiagnosticWorkflow {
+  const k = (w as { kind?: string } | null)?.kind;
+  return k === "scale" || k === "optimize" || k === "test-angles";
+}
+
+/** Both diagnostic *-live and the launch-building step drive a ticking
+ *  checklist off `executionMoves` / `executionDone`. This narrows either
+ *  so ExecChecklistPart can render both. */
+function hasExecMoves(
+  w: unknown,
+): w is { kind: string; executionMoves?: ExecutionMove[]; executionDone?: boolean } {
+  const k = (w as { kind?: string } | null)?.kind;
+  return (
+    k === "scale" ||
+    k === "optimize" ||
+    k === "test-angles" ||
+    k === "launch-campaign"
+  );
+}
+
+function ExecChecklistPart() {
+  // Subscribe to the live execution slice on the active workflow, so the
+  // card re-renders as the store ticks moves off.
+  const moves = useSpotStore((s) =>
+    hasExecMoves(s.workflow) ? s.workflow.executionMoves : undefined,
+  );
+  const allDone = useSpotStore((s) =>
+    hasExecMoves(s.workflow) ? Boolean(s.workflow.executionDone) : false,
+  );
+  // Launch flow reads as "Building your campaign / Build complete" instead
+  // of the diagnostic "Executing the plan / Plan executed". The launch-deploy
+  // step reuses this same inline card but is publishing, not authoring —
+  // so it reads "Publishing to Meta / Now live".
+  const isLaunch = useSpotStore((s) => s.workflow?.kind === "launch-campaign");
+  const isDeploy = useSpotStore(
+    (s) => s.workflow?.kind === "launch-campaign" && s.workflow?.step === "launch-deploy",
+  );
+  const list = moves ?? [];
+  const total = list.length;
+  const doneCount = list.filter((m) => m.status === "done").length;
+  const pct = total ? (doneCount / total) * 100 : 0;
+
+  if (total === 0) return null;
+
+  return (
+    <div className="bg-white border border-border rounded-card p-4 mb-2.5">
+      <style>{`
+        @keyframes execChatDot { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:.45; transform:scale(.78); } }
+        @keyframes execChatRing { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:.5; transform:scale(.86); } }
+        .exec-chat-dot { width:6px; height:6px; border-radius:9999px; animation:execChatDot 1.8s cubic-bezier(.4,0,.6,1) infinite; }
+        .exec-chat-ring { width:13px; height:13px; border-radius:9999px; border:1.5px solid; box-sizing:border-box; animation:execChatRing 1.6s cubic-bezier(.4,0,.6,1) infinite; }
+        @media (prefers-reduced-motion: reduce) { .exec-chat-dot, .exec-chat-ring { animation:none; } }
+      `}</style>
+
+      {/* Header — what's running + a single live/done status. */}
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <span className="text-[10.5px] uppercase tracking-wider text-text-tertiary font-semibold">
+          {isDeploy
+            ? allDone
+              ? "Now live"
+              : "Publishing to Meta + WhatsApp"
+            : isLaunch
+              ? allDone
+                ? "Build complete"
+                : "Building your campaign"
+              : allDone
+                ? "Plan executed"
+                : "Executing the plan"}
+        </span>
+        {allDone ? (
+          <span
+            className="inline-flex items-center gap-1.5 h-[20px] pl-1.5 pr-2.5 rounded-full text-[10.5px] font-medium flex-shrink-0"
+            style={{ background: "var(--ok-bg)", color: "var(--ok-fg)" }}
+          >
+            <Check size={11} strokeWidth={2.6} />
+            Done
+          </span>
+        ) : (
+          <span
+            className="inline-flex items-center gap-1.5 h-[20px] px-2.5 rounded-full text-[10.5px] font-medium flex-shrink-0"
+            style={{
+              background: "var(--spot-tint)",
+              color: EXEC_ACCENT_INK,
+              boxShadow: "inset 0 0 0 1px var(--spot-stroke)",
+            }}
+          >
+            <span className="exec-chat-dot" style={{ background: EXEC_ACCENT }} />
+            Live
+          </span>
+        )}
+      </div>
+
+      {/* One slim progress bar carries the pace. */}
+      <div
+        className="h-[3px] rounded-full overflow-hidden mb-4"
+        style={{ background: "var(--spot-tint)", boxShadow: "inset 0 0 0 1px var(--spot-stroke)" }}
+      >
+        <div
+          className="h-full rounded-full transition-[width] duration-700"
+          style={{
+            width: `${pct}%`,
+            background: allDone ? "var(--ok-fg)" : EXEC_ACCENT,
+            transitionTimingFunction: "cubic-bezier(0.22, 1, 0.36, 1)",
+          }}
+        />
+      </div>
+
+      {/* Moves ticking off. */}
+      <ul className="space-y-2.5">
+        {list.map((move, i) => (
+          <ExecMoveRow key={i} move={move} />
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function ExecMoveRow({ move }: { move: ExecutionMove }) {
+  const isDone = move.status === "done";
+  const isRunning = move.status === "running";
+  return (
+    <li className="flex items-start gap-2.5 text-[13px] leading-snug">
+      <span className="mt-[1px] w-[15px] h-[15px] flex items-center justify-center flex-shrink-0">
+        {isDone ? (
+          <span
+            className="inline-flex items-center justify-center w-[15px] h-[15px] rounded-full"
+            style={{ background: "var(--spot-tint)", boxShadow: "inset 0 0 0 1px var(--spot-stroke)" }}
+          >
+            <Check size={10} strokeWidth={2.8} style={{ color: EXEC_ACCENT_INK }} />
+          </span>
+        ) : isRunning ? (
+          <span className="exec-chat-ring" style={{ borderColor: EXEC_ACCENT }} />
+        ) : (
+          <span
+            className="w-[11px] h-[11px] rounded-full"
+            style={{ boxShadow: "inset 0 0 0 1.5px var(--spot-stroke)" }}
+          />
+        )}
+      </span>
+      <span
+        className="flex-1 transition-colors duration-500"
+        style={{
+          color: isDone ? "var(--text-3)" : isRunning ? "var(--text-1)" : "var(--text-2)",
+          fontWeight: isRunning ? 500 : 400,
+          textDecorationLine: isDone ? "line-through" : "none",
+          textDecorationColor: "var(--spot-stroke)",
+        }}
+      >
+        {move.label}
+      </span>
+    </li>
+  );
+}
+
 function PartRenderer({ part, onTextDone }: { part: SpotPart; onTextDone?: () => void }) {
   switch (part.type) {
     case "headline":
@@ -1579,6 +1776,8 @@ function PartRenderer({ part, onTextDone }: { part: SpotPart; onTextDone?: () =>
       return <HandoffPart kind={part.kind} label={part.label} reason={part.reason} />;
     case "step-cta":
       return <StepCtaPart label={part.label} helper={part.helper} refineHint={part.refineHint} />;
+    case "exec-checklist":
+      return <ExecChecklistPart />;
     case "decision":
       return <DecisionPart title={part.title} items={part.items} chip={part.chip} />;
     case "artifact":
@@ -1701,11 +1900,20 @@ function SpotMessageBody({
     if (parts[i].type === "text") lastTextIdx = i;
   }
   const gates = lastTextIdx >= 0;
-  const [streamDone, setStreamDone] = useState(!gates);
+  // If the gating text has already streamed once (this session or a prior one,
+  // via localStorage), the gate must START open. Otherwise StreamingText's child
+  // effect fires onDone → setStreamDone(true) DURING mount, then this parent's
+  // reset effect runs AFTER (child effects precede parent effects) and clobbers
+  // it back to false — and since the deps never change again, the gate stays
+  // shut forever and trailing parts (the kickoff choice) never render.
+  const lastTextDone =
+    gates &&
+    hasStreamed((parts[lastTextIdx] as Extract<SpotPart, { type: "text" }>).text);
+  const [streamDone, setStreamDone] = useState(!gates || lastTextDone);
   // Reset the gate if the message identity changes (new parts streaming in).
   useEffect(() => {
-    setStreamDone(!gates);
-  }, [gates, lastTextIdx]);
+    setStreamDone(!gates || lastTextDone);
+  }, [gates, lastTextIdx, lastTextDone]);
   // Surface stream completion to the parent. Fires immediately for messages
   // with no streaming text (streamDone starts true), and once the typewriter
   // lands for messages that gate. Kept in an effect so the callback never runs
@@ -1728,8 +1936,18 @@ function SpotMessageBody({
       }
       nodes.push(<ChainOfThought key={`cot-${start}`} steps={group} />);
     } else {
-      // Hold back parts that follow the streaming answer until it lands.
-      if (gates && i > lastTextIdx && !streamDone) {
+      // Hold back parts that follow the streaming answer until it lands —
+      // EXCEPT the exec checklist, which is a live structural card, not
+      // reveal-after-speech content. Gating it behind streamDone was fragile
+      // (a remount mid-stream could leave streamDone stuck false, so the
+      // checklist never appeared — "tasks not coming"). It reads better
+      // appearing immediately and ticking while Spot's intro still types.
+      if (
+        gates &&
+        i > lastTextIdx &&
+        !streamDone &&
+        parts[i].type !== "exec-checklist"
+      ) {
         i++;
         continue;
       }

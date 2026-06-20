@@ -32,10 +32,14 @@ import {
   ShieldCheck,
   ArrowUpRight,
   ChevronRight,
+  ChevronLeft,
+  X,
+  Maximize2,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import type { Variants } from "framer-motion";
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { useSpotStore } from "@/lib/spot/store";
 import { SpotMark } from "@/components/spot/spot-mark";
 import { SpotLoader, SpotFullscreen } from "@/components/spot/spot-loader";
@@ -631,43 +635,9 @@ export type CreativePersonaGroup = {
 
 export const CREATIVES_BY_PERSONA: CreativePersonaGroup[] = [
   {
-    persona: "Working professional · Aspiring fluent speaker",
-    sub: "25-34 · tier-1/2 cities · career-focused",
-    pain: "Stalled career growth from English gap",
-    swatch: "#1F5BE0",
-    channels: [
-      { label: "Meta · Feed" },
-      { label: "Instagram" },
-      { label: "Reels" },
-    ],
-    channelRationale:
-      "Feed captures intent during work-day scrolls. Instagram + Reels reach them off-hours with short, proof-driven creative.",
-    creatives: [
-      { id: "wp1", hook: "Master English for career success", format: "Reel", src: "/assets/creatives/professional-01.png", hue: 215 },
-      { id: "wp2", hook: "Boost the confidence your role deserves", format: "Static", src: "/assets/creatives/professional-02.png", hue: 200 },
-    ],
-  },
-  {
-    persona: "College student · Interview prep",
-    sub: "18-24 · semi-urban · mobile-first",
-    pain: "Campus placement interviews",
-    swatch: "#15803D",
-    channels: [
-      { label: "Instagram Reels" },
-      { label: "Meta · Feed" },
-      { label: "Stories" },
-    ],
-    channelRationale:
-      "Reels is where they spend scroll-time — short-form story ads on placement-prep angles. Feed + Stories retarget the warm ones.",
-    creatives: [
-      { id: "cs1", hook: "Excel in campus interviews", format: "Reel", src: "/assets/creatives/student-03.png", hue: 200 },
-      { id: "cs2", hook: "Placement prep made easy", format: "Static", src: "/assets/creatives/student-04.png", hue: 215 },
-    ],
-  },
-  {
-    persona: "Parent · Buying for child",
-    sub: "32-45 · tier-2/3 cities · WhatsApp + Facebook",
-    pain: "Child's school confidence",
+    persona: "The Aspiring Engineer Parent",
+    sub: "36-48 · Hyderabad · Pune · Bangalore · Kota · kid in Class 9-12",
+    pain: "Long commutes, and no way to verify real progress",
     swatch: "#B45309",
     channels: [
       { label: "Meta · Facebook" },
@@ -675,12 +645,47 @@ export const CREATIVES_BY_PERSONA: CreativePersonaGroup[] = [
       { label: "WhatsApp" },
     ],
     channelRationale:
-      "Facebook is their primary feed; Instagram adds reach. WhatsApp click-to-chat turns interest into a conversation with the Pre-Sales Agent.",
+      "Facebook is their primary feed; Instagram adds reach. WhatsApp click-to-chat opens a demo-class conversation with the Pre-Sales Agent.",
     creatives: [
-      { id: "pa1", hook: "Help your child speak with confidence", format: "Static", src: "/assets/creatives/parent-01.png", hue: 340 },
-      { id: "pa2", hook: "Trusted by 12,000+ parents", format: "Carousel", src: "/assets/creatives/parent-02.png", hue: 320 },
-      { id: "pa3", hook: "School-confidence in 8 weeks", format: "Static", src: "/assets/creatives/parent-03.png", hue: 300 },
-      { id: "pa4", hook: "Real-life parent confessions", format: "Reel", src: "/assets/creatives/parent-04.png", hue: 320 },
+      { id: "aep1", hook: "Watch your kid solve a JEE problem this week", format: "Reel", src: "/assets/creatives/parent-04.png", hue: 340 },
+      { id: "aep2", hook: "IIT-alum mentors · class size capped at 60", format: "Static", src: "/assets/creatives/parent-01.png", hue: 320 },
+      { id: "aep3", hook: "Parent dashboard — see weekly mock rankings", format: "Carousel", src: "/assets/creatives/parent-02.png", hue: 300 },
+      { id: "aep4", hook: "1:1 monthly review · know exactly where they stand", format: "Static", src: "/assets/creatives/parent-03.png", hue: 320 },
+    ],
+  },
+  {
+    persona: "The Self-Studier",
+    sub: "16-19 · tier-2/3 towns · mobile-first · parent pays via UPI",
+    pain: "No quality local coaching, slow doubt resolution",
+    swatch: "#15803D",
+    channels: [
+      { label: "Instagram Reels" },
+      { label: "Meta · Feed" },
+      { label: "Stories" },
+    ],
+    channelRationale:
+      "Reels is where they spend scroll-time — short-form proof on doubt-clearing speed. Feed + Stories retarget the warm ones.",
+    creatives: [
+      { id: "ss1", hook: "Doubt-clearing in 15 minutes · live", format: "Reel", src: "/assets/creatives/student-03.png", hue: 200 },
+      { id: "ss2", hook: "Rank against 1.2L+ JEE aspirants", format: "Static", src: "/assets/creatives/student-01.png", hue: 215 },
+      { id: "ss3", hook: "Recordings stay live for 24 months", format: "Static", src: "/assets/creatives/student-02.png", hue: 205 },
+    ],
+  },
+  {
+    persona: "The Coaching Hopper",
+    sub: "16-18 · Kota · Hyderabad · Delhi · ₹1.2L-2.5L/yr offline now",
+    pain: "200+ per class, and hours lost commuting",
+    swatch: "#1F5BE0",
+    channels: [
+      { label: "Meta · Feed" },
+      { label: "Instagram" },
+      { label: "Reels" },
+    ],
+    channelRationale:
+      "Feed captures switching intent during study breaks. Reels carries the mentor-access proof that offline batches can't match.",
+    creatives: [
+      { id: "ch1", hook: "Switching from offline coaching mid-year? Here's how", format: "Static", src: "/assets/creatives/professional-01.png", hue: 215 },
+      { id: "ch2", hook: "Mentor 1:1 every fortnight — actually heard", format: "Carousel", src: "/assets/creatives/professional-02.png", hue: 200 },
     ],
   },
 ];
@@ -688,6 +693,14 @@ export const CREATIVES_BY_PERSONA: CreativePersonaGroup[] = [
 const TOTAL_CREATIVES_COUNT = CREATIVES_BY_PERSONA.reduce(
   (s, g) => s + g.creatives.length,
   0,
+);
+
+/** Every creative flattened with its persona context, in display order, so
+ *  the lightbox can page across the whole set regardless of which persona
+ *  group a tile was clicked from. */
+type GalleryCreative = ReviewCreative & { persona: string; swatch: string };
+const ALL_CREATIVES: GalleryCreative[] = CREATIVES_BY_PERSONA.flatMap((g) =>
+  g.creatives.map((c) => ({ ...c, persona: g.persona, swatch: g.swatch })),
 );
 
 /** Detailed campaign plan rendered at the end of the launch-review
@@ -716,54 +729,54 @@ type CampaignRow = {
 
 const CAMPAIGN_PLAN: CampaignRow[] = [
   {
-    id: "camp-wp",
-    name: "Working Pro · Career fluency",
-    persona: "Working professional",
-    swatch: "#1F5BE0",
-    objective: "Lead gen (demo booking)",
-    platform: "Meta · Feed · Reels · Stories",
-    dailyBudget: 600,
-    targetCpl: 380,
-    expectedLeadsPerDay: 16,
-    goal: "Book 200 demos · 14 days",
-    adSets: [
-      { id: "wp-as1", name: "Meta · Revspot Audience", audience: "Matched high-intent professionals", ads: 4 },
-      { id: "wp-as2", name: "Meta · 1% lookalike", audience: "Custom Audience · 1% LAL", ads: 4 },
-      { id: "wp-as3", name: "Meta · retargeting", audience: "30-day site visitors + form opens", ads: 3 },
-    ],
-  },
-  {
-    id: "camp-cs",
-    name: "College Student · Placement edge",
-    persona: "College student",
-    swatch: "#15803D",
-    objective: "Lead gen (mock + free class)",
-    platform: "Meta · Reels · Feed · Stories",
-    dailyBudget: 500,
-    targetCpl: 240,
-    expectedLeadsPerDay: 21,
-    goal: "Book 290 free classes · 14 days",
-    adSets: [
-      { id: "cs-as1", name: "Meta · Reels · interest stack", audience: "18-24 · semi-urban · test-prep viewers", ads: 4 },
-      { id: "cs-as2", name: "Meta · 1% lookalike", audience: "Campus interest stack", ads: 4 },
-      { id: "cs-as3", name: "Meta · retargeting", audience: "75% video viewers + form opens", ads: 3 },
-    ],
-  },
-  {
-    id: "camp-pa",
-    name: "Parent · Child confidence",
-    persona: "Parent · Buying for child",
+    id: "camp-aep",
+    name: "Engineer Parent · Demo booking",
+    persona: "The Aspiring Engineer Parent",
     swatch: "#B45309",
-    objective: "Lead gen (WhatsApp conversation)",
+    objective: "Lead gen (demo-class booking)",
     platform: "Meta · Feed · WhatsApp",
     dailyBudget: 700,
-    targetCpl: 310,
-    expectedLeadsPerDay: 22,
-    goal: "Open 310 parent chats · 14 days",
+    targetCpl: 420,
+    expectedLeadsPerDay: 16,
+    goal: "Book 220 demo classes · 14 days",
     adSets: [
-      { id: "pa-as1", name: "Facebook feed · child-confidence hooks", audience: "32-45 · parents · tier-2/3", ads: 4 },
-      { id: "pa-as2", name: "Meta CTW (Click-to-WhatsApp)", audience: "Lookalike · prior demo bookers", ads: 4 },
-      { id: "pa-as3", name: "Meta · retargeting · engagers", audience: "Page + WhatsApp engagers", ads: 3 },
+      { id: "aep-as1", name: "Facebook feed · IIT-mentor hooks", audience: "36-48 · parents · Hyderabad · Pune · Bangalore", ads: 4 },
+      { id: "aep-as2", name: "Meta CTW (Click-to-WhatsApp)", audience: "Lookalike · prior demo bookers", ads: 4 },
+      { id: "aep-as3", name: "Meta · retargeting · engagers", audience: "Page + WhatsApp + dashboard viewers", ads: 3 },
+    ],
+  },
+  {
+    id: "camp-ss",
+    name: "Self-Studier · Free mock",
+    persona: "The Self-Studier",
+    swatch: "#15803D",
+    objective: "Lead gen (free mock + trial class)",
+    platform: "Meta · Reels · Feed · Stories",
+    dailyBudget: 600,
+    targetCpl: 240,
+    expectedLeadsPerDay: 24,
+    goal: "Open 320 free mocks · 14 days",
+    adSets: [
+      { id: "ss-as1", name: "Meta · Reels · doubt-clearing proof", audience: "16-19 · tier-2/3 towns · JEE prep viewers", ads: 4 },
+      { id: "ss-as2", name: "Meta · 1% lookalike", audience: "Free-mock takers · interest stack", ads: 4 },
+      { id: "ss-as3", name: "Meta · retargeting", audience: "75% video viewers + form opens", ads: 3 },
+    ],
+  },
+  {
+    id: "camp-ch",
+    name: "Coaching Hopper · 1:1 call",
+    persona: "The Coaching Hopper",
+    swatch: "#1F5BE0",
+    objective: "Lead gen (1:1 switch-call)",
+    platform: "Meta · Feed · Reels · Stories",
+    dailyBudget: 500,
+    targetCpl: 380,
+    expectedLeadsPerDay: 13,
+    goal: "Book 170 switch-calls · 14 days",
+    adSets: [
+      { id: "ch-as1", name: "Meta · Feed · mid-year switch hooks", audience: "16-18 · Kota · Hyderabad · Delhi · offline-coaching now", ads: 4 },
+      { id: "ch-as2", name: "Meta · 1% lookalike", audience: "Mentor-access interest stack", ads: 4 },
+      { id: "ch-as3", name: "Meta · retargeting", audience: "Reel viewers + call-page opens", ads: 3 },
     ],
   },
 ];
@@ -787,14 +800,26 @@ const BLENDED_TARGET_CPL = Math.round(
 );
 
 const PROPOSED_PAGES_REVIEW = [
-  { id: "lp1", title: "Speak-with-confidence landing · Working professional", persona: "Working professional", sections: 6 },
-  { id: "lp2", title: "Interview-prep landing · College student", persona: "College student", sections: 5 },
-  { id: "lp3", title: "Parent-led demo booking · Parent", persona: "Parent · Buying for child", sections: 5 },
+  { id: "lp1", title: "Demo-class booking landing · Engineer Parent", persona: "The Aspiring Engineer Parent", sections: 6 },
+  { id: "lp2", title: "Free-mock opt-in landing · Self-Studier", persona: "The Self-Studier", sections: 5 },
+  { id: "lp3", title: "Mid-year switch · 1:1 call landing · Coaching Hopper", persona: "The Coaching Hopper", sections: 5 },
 ];
 
 const SAMPLE_FORMS_COUNT = 2;
 
 export function LaunchReviewStep({ workflow }: { workflow: LaunchWorkflow }) {
+  // Lightbox: index into ALL_CREATIVES, or null when closed. Paging wraps the
+  // whole set so the user can flick through every creative from one open view.
+  const [lightbox, setLightbox] = useState<number | null>(null);
+  const closeLightbox = useCallback(() => setLightbox(null), []);
+  const stepLightbox = useCallback(
+    (dir: 1 | -1) =>
+      setLightbox((i) =>
+        i === null ? i : (i + dir + ALL_CREATIVES.length) % ALL_CREATIVES.length,
+      ),
+    [],
+  );
+
   return (
     <motion.div
       className="px-5 py-6 max-w-[820px] mx-auto"
@@ -824,72 +849,56 @@ export function LaunchReviewStep({ workflow }: { workflow: LaunchWorkflow }) {
         </div>
       </motion.div>
 
-      <motion.div variants={canvasReveal} className="mb-4">
+      <motion.div variants={canvasReveal} className="mb-6">
         <ReviewSectionHeader
           icon={ImageIcon}
           title="Generated creatives"
           count={`${TOTAL_CREATIVES_COUNT} angles · grouped by persona`}
-          subtitle="Each angle resized into 4 formats. QA Agent reviewed every variant."
+          subtitle="Each angle resized into 4 formats. QA Agent reviewed every variant. Click any creative to view it full-size."
         />
-        <div className="space-y-4">
+        <div className="space-y-5">
           {CREATIVES_BY_PERSONA.map((group) => (
             <div key={group.persona}>
               {/* Persona group header · swatch + name + sub-line + count */}
-              <div className="flex items-center gap-2 mb-1 px-0.5">
+              <div className="flex items-center gap-2 mb-1.5 px-0.5">
                 <span
-                  className="inline-flex w-2 h-2 rounded-full flex-shrink-0"
+                  className="inline-flex w-2.5 h-2.5 rounded-full flex-shrink-0"
                   style={{ background: group.swatch }}
                 />
-                <span className="text-[11.5px] font-semibold text-text-primary">
+                <span className="text-[12.5px] font-semibold text-text-primary">
                   {group.persona}
                 </span>
-                <span className="text-[10.5px] text-text-tertiary">
+                <span className="text-[10.5px] text-text-tertiary truncate">
                   · {group.sub}
                 </span>
-                <span className="text-[10.5px] text-text-tertiary ml-auto tabular">
+                <span
+                  className="ml-auto inline-flex items-center h-5 px-2 rounded-full text-[10px] font-semibold tabular flex-shrink-0"
+                  style={{ background: `${group.swatch}12`, color: group.swatch }}
+                >
                   {group.creatives.length} angle{group.creatives.length === 1 ? "" : "s"}
                 </span>
               </div>
-              {/* Pain row */}
-              <div className="text-[10.5px] text-text-tertiary mb-1.5 px-0.5">
-                <span className="uppercase tracking-wider font-semibold text-[#B45309] mr-1.5">
-                  Pain
-                </span>
+              {/* Pain + channels metadata */}
+              <div className="text-[11px] text-text-tertiary mb-2 px-0.5 leading-relaxed">
+                <span className="font-semibold text-text-secondary">Pain · </span>
                 {group.pain}
+                <span className="mx-1.5 text-text-tertiary/50">|</span>
+                <span className="font-semibold text-text-secondary">Channels · </span>
+                {group.channels.map((ch) => ch.label).join(" · ")}
               </div>
-              {/* Channels row · which media surfaces Spot will target */}
-              <div className="flex items-center gap-1.5 flex-wrap mb-1 px-0.5">
-                <span className="text-[10px] uppercase tracking-wider text-text-tertiary font-semibold">
-                  Channels
-                </span>
-                {group.channels.map((ch) => (
-                  <span
-                    key={ch.label}
-                    className="inline-flex items-center gap-1 h-5 px-1.5 rounded-full text-[10.5px] font-medium"
-                    style={{
-                      background: `${group.swatch}14`,
-                      color: group.swatch,
-                      border: `1px solid ${group.swatch}33`,
-                    }}
-                  >
-                    {ch.label}
-                  </span>
-                ))}
-              </div>
-              {/* Channel rationale */}
-              <div className="text-[10.5px] text-text-tertiary leading-relaxed mb-2 px-0.5">
-                {group.channelRationale}
-              </div>
-              {/* Creative grid for this persona */}
-              <div className="grid grid-cols-4 gap-2.5">
+              {/* Creative gallery for this persona · larger, clickable tiles */}
+              <div className="grid grid-cols-3 gap-3">
                 {group.creatives.map((c) => {
+                  const galleryIndex = ALL_CREATIVES.findIndex((g) => g.id === c.id);
                   return (
-                    <div
+                    <button
+                      type="button"
                       key={c.id}
-                      className="bg-white border border-border rounded-card overflow-hidden"
+                      onClick={() => setLightbox(galleryIndex)}
+                      className="group text-left bg-white border border-border rounded-card overflow-hidden transition-shadow hover:shadow-[0_4px_16px_rgba(0,0,0,0.08)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#15803D]/40"
                     >
                       <div
-                        className="relative aspect-square w-full"
+                        className="relative aspect-[4/5] w-full"
                         style={
                           c.src
                             ? { background: "#0A0A09" }
@@ -906,7 +915,14 @@ export function LaunchReviewStep({ workflow }: { workflow: LaunchWorkflow }) {
                             className="absolute inset-0 w-full h-full object-cover"
                           />
                         )}
-                        <div className="absolute top-2 right-2 text-[9.5px] font-medium text-text-secondary bg-white/85 px-1.5 rounded-sm">
+                        {/* Hover scrim + expand affordance */}
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition-colors flex items-center justify-center">
+                          <span className="opacity-0 group-hover:opacity-100 transition-opacity inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full bg-white/95 text-[11px] font-medium text-text-primary shadow-sm">
+                            <Maximize2 size={11} strokeWidth={2} />
+                            View
+                          </span>
+                        </div>
+                        <div className="absolute top-2 right-2 text-[9.5px] font-medium text-text-secondary bg-white/85 px-1.5 py-0.5 rounded-sm">
                           {c.format}
                         </div>
                         <div className="absolute bottom-2 left-2 inline-flex items-center gap-1 text-[9.5px] font-medium bg-white/90 px-1.5 py-0.5 rounded-sm">
@@ -914,12 +930,12 @@ export function LaunchReviewStep({ workflow }: { workflow: LaunchWorkflow }) {
                           <span>QA passed</span>
                         </div>
                       </div>
-                      <div className="p-2.5">
-                        <div className="text-[11.5px] font-medium text-text-primary leading-snug line-clamp-2 min-h-[2.6em]">
+                      <div className="px-3 py-2.5">
+                        <div className="text-[12px] font-medium text-text-primary leading-snug line-clamp-2 min-h-[2.7em]">
                           {c.hook}
                         </div>
                       </div>
-                    </div>
+                    </button>
                   );
                 })}
               </div>
@@ -927,6 +943,12 @@ export function LaunchReviewStep({ workflow }: { workflow: LaunchWorkflow }) {
           ))}
         </div>
       </motion.div>
+
+      <CreativeLightbox
+        index={lightbox}
+        onClose={closeLightbox}
+        onStep={stepLightbox}
+      />
 
       <motion.div variants={canvasReveal} className="mb-4">
         <ReviewSectionHeader
@@ -1102,6 +1124,149 @@ export function LaunchReviewStep({ workflow }: { workflow: LaunchWorkflow }) {
         </div>
       </motion.div>
     </motion.div>
+  );
+}
+
+/**
+ * Full-screen creative viewer. `index` is a pointer into ALL_CREATIVES (null =
+ * closed). Backdrop click, Esc, and the X all close; ← / → page through the
+ * whole set. Caption carries persona / hook / format + the QA stamp.
+ */
+function CreativeLightbox({
+  index,
+  onClose,
+  onStep,
+}: {
+  index: number | null;
+  onClose: () => void;
+  onStep: (dir: 1 | -1) => void;
+}) {
+  useEffect(() => {
+    if (index === null) return;
+    // Capture phase + stopPropagation so the lightbox swallows Esc before the
+    // canvas panel's own Esc-to-close handler sees it — closing the image
+    // viewer shouldn't also collapse the whole deliverables canvas.
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        onClose();
+      } else if (e.key === "ArrowRight") onStep(1);
+      else if (e.key === "ArrowLeft") onStep(-1);
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [index, onClose, onStep]);
+
+  const c = index === null ? null : ALL_CREATIVES[index];
+
+  if (c === null || index === null) return null;
+  if (typeof document === "undefined") return null;
+
+  // Portal to <body> so the overlay escapes the canvas panel's transformed
+  // ancestor (framer-motion) — otherwise `fixed` is contained to the panel
+  // and the side nav stays visible. z-[100] sits above the nav + panels.
+  return createPortal(
+    <motion.div
+      className="fixed inset-0 z-[100] flex flex-col bg-black/80 backdrop-blur-sm"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.18 }}
+      onClick={onClose}
+    >
+          {/* Top bar · counter + close */}
+          <div className="flex items-center justify-between px-5 h-14 flex-shrink-0">
+            <span className="text-[12px] font-medium text-white/70 tabular">
+              {index + 1} / {ALL_CREATIVES.length}
+            </span>
+            <button
+              type="button"
+              onClick={onClose}
+              className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+              aria-label="Close"
+            >
+              <X size={18} strokeWidth={2} />
+            </button>
+          </div>
+
+          {/* Stage · prev arrow · image · next arrow */}
+          <div className="flex-1 flex items-center justify-center gap-3 px-4 min-h-0">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onStep(-1);
+              }}
+              className="hidden sm:inline-flex items-center justify-center w-11 h-11 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors flex-shrink-0"
+              aria-label="Previous"
+            >
+              <ChevronLeft size={22} strokeWidth={2} />
+            </button>
+
+            <motion.div
+              key={c.id}
+              className="relative flex items-center justify-center max-h-full"
+              initial={{ opacity: 0, scale: 0.97 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {c.src ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={c.src}
+                  alt={c.hook}
+                  className="max-h-[70vh] max-w-[min(90vw,520px)] w-auto object-contain rounded-lg shadow-2xl"
+                />
+              ) : (
+                <div
+                  className="w-[420px] max-w-[88vw] aspect-square rounded-lg shadow-2xl"
+                  style={{
+                    background: `linear-gradient(135deg, hsl(${c.hue} 60% 90%), hsl(${c.hue} 50% 70%))`,
+                  }}
+                />
+              )}
+            </motion.div>
+
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onStep(1);
+              }}
+              className="hidden sm:inline-flex items-center justify-center w-11 h-11 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors flex-shrink-0"
+              aria-label="Next"
+            >
+              <ChevronRight size={22} strokeWidth={2} />
+            </button>
+          </div>
+
+          {/* Caption bar */}
+          <div
+            className="flex-shrink-0 px-5 py-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="max-w-[560px] mx-auto">
+              <div className="flex items-center gap-2 mb-1.5">
+                <span
+                  className="inline-flex w-2 h-2 rounded-full flex-shrink-0"
+                  style={{ background: c.swatch }}
+                />
+                <span className="text-[11px] font-semibold text-white/80">
+                  {c.persona}
+                </span>
+                <span className="text-[10.5px] text-white/50">· {c.format}</span>
+                <span className="ml-auto inline-flex items-center gap-1 text-[10.5px] font-medium text-[#86EFAC]">
+                  <CheckCircle2 size={11} strokeWidth={2} />
+                  QA passed
+                </span>
+              </div>
+              <div className="text-[14px] font-medium text-white leading-snug">
+                {c.hook}
+              </div>
+            </div>
+          </div>
+    </motion.div>,
+    document.body,
   );
 }
 
