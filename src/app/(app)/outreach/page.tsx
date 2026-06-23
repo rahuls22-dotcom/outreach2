@@ -278,14 +278,18 @@ function PerformanceFunnel({
   leads: number; dialed: number; connected: number; interacted: number; qualified: number;
 }) {
   const pct = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 100) : 0);
+  // Funnel starts at Dialed (Leads count moves to the header chip — see
+  // detail page for the same treatment). The header used to carry "X%
+  // overall" which duplicated the % already on the Qualified row; the
+  // total-leads number is more useful at-a-glance and was otherwise
+  // missing now that the Leads bar row is gone.
   const stages = [
-    { key: "leads",      label: "Leads",      value: leads,      rate: null as number | null },
-    { key: "dialed",     label: "Dialed",     value: dialed,     rate: pct(dialed, leads) },
+    { key: "dialed",     label: "Dialed",     value: dialed,     rate: null as number | null },
     { key: "connected",  label: "Connected",  value: connected,  rate: pct(connected, dialed) },
     { key: "interacted", label: "Interacted", value: interacted, rate: pct(interacted, connected) },
-    { key: "qualified",  label: "Qualified",  value: qualified,  rate: pct(qualified, leads) },
+    { key: "qualified",  label: "Qualified",  value: qualified,  rate: pct(qualified, dialed) },
   ];
-  const topValue = Math.max(leads, 1);
+  const topValue = Math.max(dialed, 1);
 
   return (
     <div className="bg-white border border-border rounded-card px-4 py-3.5 min-h-[140px] flex flex-col">
@@ -294,7 +298,7 @@ function PerformanceFunnel({
           Performance funnel
         </span>
         <span className="text-[10.5px] text-text-tertiary tabular-nums">
-          {pct(qualified, leads)}% overall
+          {leads.toLocaleString()} total leads
         </span>
       </div>
       <div className="flex-1 flex flex-col justify-center space-y-1">
@@ -308,7 +312,10 @@ function PerformanceFunnel({
                   className="h-full rounded-full"
                   style={{
                     width: `${Math.max(w, 1.5).toFixed(2)}%`,
-                    backgroundColor: "rgba(15, 23, 42, 0.78)",
+                    // Solid near-black — paired with the detail-page
+                    // ChartRow so the funnel reads identically on both
+                    // pages.
+                    backgroundColor: "#111827",
                   }}
                 />
               </div>
@@ -549,7 +556,7 @@ function OutreachRow({
           much horizontal weight — it pairs naturally with the outreach
           name (which agent is calling this list?) so we treat it as the
           row's subtitle instead of a sortable axis. */}
-      <td className="px-4 py-3 max-w-[280px]">
+      <td className="px-3 py-2.5 max-w-[280px]">
         <div className="text-[13px] font-medium text-text-primary truncate">{o.name}</div>
         <div className="mt-0.5 inline-flex items-center gap-1 text-[11.5px] text-text-tertiary">
           <Bot size={11} strokeWidth={1.5} />
@@ -558,14 +565,14 @@ function OutreachRow({
       </td>
       {/* Status moves up to column 2 — it's the first thing a user wants
           to know after seeing the name (is this still running?). */}
-      <td className="px-3 py-3">
+      <td className="px-3 py-2.5">
         <StatusPill status={o.status} />
       </td>
       {/* Leads — top of the funnel, no rate beside it (it IS the
           baseline that everything else divides by). Same weight/size
           as the other funnel numbers so the column reads as one
           consistent visual ladder. */}
-      <td className="px-3 py-3 text-right tabular-nums whitespace-nowrap">
+      <td className="px-3 py-2.5 text-right tabular-nums whitespace-nowrap">
         <span className="text-[15px] font-medium text-text-primary">{o.totalContacts.toLocaleString()}</span>
       </td>
       {/* Funnel stages — number + "% of leads" rendered inline on a
@@ -575,15 +582,15 @@ function OutreachRow({
           plain numbers. Rates are all vs. the top of the funnel
           (Leads), not stage-over-stage — each column reads "how
           many of my leads made it this far?". */}
-      <td className="px-3 py-3 text-right tabular-nums whitespace-nowrap">
+      <td className="px-3 py-2.5 text-right tabular-nums whitespace-nowrap">
         <span className="text-[15px] font-medium text-text-primary">{o.called.toLocaleString()}</span>
         <span className="text-[10.5px] text-text-tertiary ml-2">{pct(o.called, o.totalContacts)}%</span>
       </td>
-      <td className="px-3 py-3 text-right tabular-nums whitespace-nowrap">
+      <td className="px-3 py-2.5 text-right tabular-nums whitespace-nowrap">
         <span className="text-[15px] font-medium text-text-primary">{o.connected.toLocaleString()}</span>
         <span className="text-[10.5px] text-text-tertiary ml-2">{pct(o.connected, o.totalContacts)}%</span>
       </td>
-      <td className="px-3 py-3 text-right tabular-nums whitespace-nowrap">
+      <td className="px-3 py-2.5 text-right tabular-nums whitespace-nowrap">
         <span className="text-[15px] font-medium text-text-primary">{o.interacted.toLocaleString()}</span>
         <span className="text-[10.5px] text-text-tertiary ml-2">{pct(o.interacted, o.totalContacts)}%</span>
       </td>
@@ -592,7 +599,7 @@ function OutreachRow({
           numbers so nothing reads as accidentally bold; the column
           itself (rightmost stage) and the % chip do the work of
           calling attention to the outcome. */}
-      <td className="px-3 py-3 text-right tabular-nums whitespace-nowrap">
+      <td className="px-3 py-2.5 text-right tabular-nums whitespace-nowrap">
         <span className="text-[15px] font-medium text-text-primary">{o.qualified.toLocaleString()}</span>
         <span className="text-[10.5px] text-text-tertiary ml-2">{qualRate}%</span>
       </td>
@@ -601,15 +608,15 @@ function OutreachRow({
           single "lifespan" pair. Extra left padding on Created on gives
           the right-aligned numbers (Qual %) breathing room before the
           left-aligned date text starts. */}
-      <td className="pl-6 pr-3 py-3 text-[12.5px] text-text-secondary tabular-nums whitespace-nowrap">
+      <td className="px-3 py-2.5 text-[12.5px] text-text-secondary tabular-nums whitespace-nowrap">
         {new Date(o.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
       </td>
-      <td className="px-4 py-3 text-[12.5px] text-text-secondary tabular-nums whitespace-nowrap">
+      <td className="px-3 py-2.5 text-[12.5px] text-text-secondary tabular-nums whitespace-nowrap">
         {new Date(o.updatedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
       </td>
       {/* Edit — hover-revealed pencil, stop propagation so it opens the
           drawer instead of navigating to the detail page. */}
-      <td className="w-10 px-2 py-3 text-center">
+      <td className="w-10 px-2 py-2.5 text-center">
         <button
           type="button"
           onClick={(e) => {
@@ -1067,7 +1074,7 @@ function PopulatedOutreach({
       {/* Header */}
       <motion.div variants={fadeUp} className="flex items-start justify-between mb-6">
         <div>
-          <div className="text-meta text-text-secondary mb-1">Lead Generation</div>
+          <div className="text-meta text-text-secondary mb-1">Launch</div>
           <h1 className="text-page-title text-text-primary">Outreach</h1>
         </div>
         <div className="flex items-center gap-3">
@@ -1121,35 +1128,33 @@ function PopulatedOutreach({
 
       {/* Status tabs — same segmented control pattern as /campaigns. Sits
           above the list so the user can narrow by lifecycle status in one
-          click without opening a popover. Tab order puts the live states
-          first (Running → Paused → Completed) so the user can scan their
-          active work without their eye getting caught by Draft, which is
-          a pre-launch parking lot and lives at the far end of the strip. */}
+          click without opening a popover. Draft was retired from the user-
+          facing lifecycle (outreaches now launch on create), so the filter
+          shows only the three live states. */}
       <motion.div variants={fadeUp} className="flex items-center mb-3">
-        <div className="inline-flex items-center gap-0.5 bg-surface-secondary rounded-input p-0.5">
-          {(["all", "in_progress", "paused", "completed", "draft"] as const).map((s) => {
+        {/* Tab strip matches the Leads (enquiries) page exactly: smaller
+            font, tighter padding, no inline counts. The status counts
+            still drive empty-state copy via statusCounts; the user
+            doesn't need them on every tab pill. */}
+        <div className="flex items-center gap-0.5 bg-surface-secondary rounded-input p-0.5">
+          {(["all", "in_progress", "paused", "completed"] as const).map((s) => {
             const label =
               s === "all" ? "All" :
-              s === "draft" ? "Draft" :
               s === "in_progress" ? "Running" :
               s === "paused" ? "Paused" :
               "Completed";
-            const count = statusCounts[s];
             const isActive = statusTab === s;
             return (
               <button
                 key={s}
                 onClick={() => setStatusTab(s)}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium rounded-[6px] transition-colors duration-150 ${
+                className={`px-2.5 py-1 text-[11px] font-medium rounded-[5px] transition-colors duration-150 ${
                   isActive
                     ? "bg-white text-text-primary shadow-sm"
                     : "text-text-secondary hover:text-text-primary"
                 }`}
               >
                 {label}
-                <span className={`tabular-nums ${isActive ? "text-text-tertiary" : "text-text-tertiary"}`}>
-                  {count}
-                </span>
               </button>
             );
           })}
@@ -1171,13 +1176,16 @@ function PopulatedOutreach({
         </div>
       ) : (
         <motion.div variants={fadeUp} className="bg-white border border-border rounded-card overflow-hidden">
-          <table className="w-full table-auto">
-            <thead className="bg-surface-page/60 border-b border-border-subtle">
-              <tr>
-                <th className="px-4 py-3 text-[11px] font-medium text-text-tertiary uppercase tracking-[0.5px] text-left">
+          {/* Table chrome matches the Leads (enquiries) page exactly:
+              no tinted thead background, tighter header padding +
+              10px header font, uniform px-3 py-2.5 cells. */}
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-border-subtle">
+                <th className="px-3 py-2.5 text-[10px] font-medium text-text-tertiary uppercase tracking-[0.5px] text-left whitespace-nowrap">
                   Outreach
                 </th>
-                <th className="px-3 py-3 text-[11px] font-medium text-text-tertiary uppercase tracking-[0.5px] text-left">
+                <th className="px-3 py-2.5 text-[10px] font-medium text-text-tertiary uppercase tracking-[0.5px] text-left whitespace-nowrap">
                   Status
                 </th>
                 {/* Funnel columns — Leads is the top of the funnel,
@@ -1186,28 +1194,28 @@ function PopulatedOutreach({
                     absolute number and the stage's conversion rate vs
                     the top, so the user can scan the funnel shape per
                     outreach without opening the detail page. */}
-                <th className="px-3 py-3 text-[11px] font-medium text-text-tertiary uppercase tracking-[0.5px] text-right">
+                <th className="px-3 py-2.5 text-[10px] font-medium text-text-tertiary uppercase tracking-[0.5px] text-right whitespace-nowrap">
                   Leads
                 </th>
-                <th className="px-3 py-3 text-[11px] font-medium text-text-tertiary uppercase tracking-[0.5px] text-right">
+                <th className="px-3 py-2.5 text-[10px] font-medium text-text-tertiary uppercase tracking-[0.5px] text-right whitespace-nowrap">
                   Dialed
                 </th>
-                <th className="px-3 py-3 text-[11px] font-medium text-text-tertiary uppercase tracking-[0.5px] text-right">
+                <th className="px-3 py-2.5 text-[10px] font-medium text-text-tertiary uppercase tracking-[0.5px] text-right whitespace-nowrap">
                   Connected
                 </th>
-                <th className="px-3 py-3 text-[11px] font-medium text-text-tertiary uppercase tracking-[0.5px] text-right">
+                <th className="px-3 py-2.5 text-[10px] font-medium text-text-tertiary uppercase tracking-[0.5px] text-right whitespace-nowrap">
                   Interacted
                 </th>
-                <th className="px-3 py-3 text-[11px] font-medium text-text-tertiary uppercase tracking-[0.5px] text-right">
+                <th className="px-3 py-2.5 text-[10px] font-medium text-text-tertiary uppercase tracking-[0.5px] text-right whitespace-nowrap">
                   Qualified
                 </th>
-                <th className="pl-6 pr-3 py-3 text-[11px] font-medium text-text-tertiary uppercase tracking-[0.5px] text-left">
+                <th className="px-3 py-2.5 text-[10px] font-medium text-text-tertiary uppercase tracking-[0.5px] text-left whitespace-nowrap">
                   Created on
                 </th>
-                <th className="px-4 py-3 text-[11px] font-medium text-text-tertiary uppercase tracking-[0.5px] text-left">
+                <th className="px-3 py-2.5 text-[10px] font-medium text-text-tertiary uppercase tracking-[0.5px] text-left whitespace-nowrap">
                   Updated on
                 </th>
-                <th className="w-10 px-2 py-3" />
+                <th className="w-10 px-2 py-2.5" />
               </tr>
             </thead>
             <tbody>

@@ -63,6 +63,11 @@ export interface OutreachAddedSource {
     duplicate: number;
     missingName: number;
   };
+  // ISO string set when the user chooses "Schedule for later" in the
+  // Start-calling modal. Source still moves to dialState=dialing so it
+  // exits the Pending panel; the scheduled time is just additional
+  // metadata UI can surface elsewhere if needed.
+  scheduledFor?: string;
 }
 
 export interface OutreachDraftSeed {
@@ -107,6 +112,7 @@ type OutreachDraftStore = {
     outreachId: string,
     sourceId: string,
     state: OutreachAddedSource["dialState"],
+    extra?: { scheduledFor?: string },
   ) => void;
   removeAddedSource: (outreachId: string, sourceId: string) => void;
   // Instant source insertion — for manual lead entry (synchronous, no
@@ -121,6 +127,11 @@ type OutreachDraftStore = {
 // Demo-grade processing speed: ~1,000 rows/sec. A 10k CSV completes
 // in 10s, a 50k CSV in 50s.
 const ROWS_PER_SECOND = 1000;
+// Floor so even a 5-row file shows a visible 0→100% animation instead
+// of jumping straight to "done" before the first tick fires. The bar
+// is the only feedback the user gets that work is happening; cutting
+// it off doesn't save them any time, it just looks broken.
+const MIN_PROCESSING_SEC = 2.5;
 
 // Deterministic valid / invalid split based on the source id. Same
 // file always reports the same split across renders. Range 92–97%
@@ -223,9 +234,14 @@ export const useOutreachDraftStore = create<OutreachDraftStore>()(
           const next = list.map((src) => {
             if (src.dialState !== "processing" || !src.startedAt) return src;
             const elapsedSec = (now - new Date(src.startedAt).getTime()) / 1000;
-            const parsedRows = Math.min(src.leads, Math.floor(elapsedSec * ROWS_PER_SECOND));
-            const progress = src.leads > 0
-              ? Math.min(100, Math.round((parsedRows / src.leads) * 100))
+            // Effective duration = max(rows / speed, floor). For a 5-row
+            // file the row-based duration is 5ms which jumps past 100%
+            // before the first tick; the floor keeps the bar visibly
+            // climbing for at least MIN_PROCESSING_SEC seconds.
+            const naturalDurationSec = src.leads / ROWS_PER_SECOND;
+            const effectiveDurationSec = Math.max(naturalDurationSec, MIN_PROCESSING_SEC);
+            const progress = effectiveDurationSec > 0
+              ? Math.min(100, Math.round((elapsedSec / effectiveDurationSec) * 100))
               : 100;
             if (progress >= 100) {
               didFlip = true;
@@ -267,12 +283,14 @@ export const useOutreachDraftStore = create<OutreachDraftStore>()(
             drafts: nextDrafts,
           };
         }),
-      setSourceDialState: (outreachId, sourceId, state) =>
+      setSourceDialState: (outreachId, sourceId, state, extra) =>
         set((s) => {
           const list = s.addedSources[outreachId];
           if (!list) return s;
           const next = list.map((src) =>
-            src.id === sourceId ? { ...src, dialState: state } : src,
+            src.id === sourceId
+              ? { ...src, dialState: state, ...(extra?.scheduledFor !== undefined ? { scheduledFor: extra.scheduledFor } : {}) }
+              : src,
           );
           return { addedSources: { ...s.addedSources, [outreachId]: next } };
         }),

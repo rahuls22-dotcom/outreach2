@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import type { Variants } from "framer-motion";
 import {
   ArrowLeft,
@@ -27,6 +27,7 @@ import {
   Database,
   Download,
   Clock,
+  Calendar,
   IndianRupee,
   Code2,
   FileText,
@@ -189,12 +190,23 @@ function StatusActionButton({
 
   return (
     <>
+      {/* Launch keeps a labelled CTA — first-launch is a deliberate, hero
+          action and the user expects a prominent button. Pause / Resume /
+          Reactivate are routine ongoing toggles, so they collapse to icon-
+          only square buttons with tooltips. Cuts a chunk of chrome out of
+          the header for the dominant running/paused states. */}
       <button
         onClick={() => setConfirmOpen(true)}
-        className={`inline-flex items-center gap-1.5 h-9 px-3 text-[12px] font-medium border rounded-button transition-colors ${a.btn}`}
+        title={a.label}
+        aria-label={a.label}
+        className={
+          status === "draft"
+            ? `inline-flex items-center gap-1.5 h-9 px-3 text-[12px] font-medium border rounded-button transition-colors ${a.btn}`
+            : `inline-flex items-center justify-center w-9 h-9 border rounded-button transition-colors ${a.btn}`
+        }
       >
         <Icon size={13} strokeWidth={2} fill="currentColor" />
-        {a.label}
+        {status === "draft" && a.label}
       </button>
 
       {/* Confirmation modal — every status flip goes through this prompt
@@ -392,45 +404,9 @@ function ProfileTab({ contact }: { contact: OutreachContact }) {
         </div>
       </div>
 
-      <div>
-        <h3 className="text-[11px] font-medium text-text-tertiary uppercase tracking-[0.5px] mb-3">
-          Intelligence
-        </h3>
-
-        <div className="bg-surface-page rounded-[8px] p-4 mb-3">
-          <h4 className="text-[12px] font-medium text-text-primary mb-2.5">Profile Intelligence</h4>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <div className="text-[11px] text-text-tertiary">Gender</div>
-              <div className="text-[13px] text-text-primary mt-0.5">
-                {intel.gender === "M" ? "Male" : intel.gender === "F" ? "Female" : "Not Available"}
-              </div>
-            </div>
-            <div>
-              <div className="text-[11px] text-text-tertiary">Languages</div>
-              <div className="text-[13px] text-text-primary mt-0.5">
-                {intel.languages.length > 0 ? intel.languages.join(", ") : "Not Available"}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-surface-page rounded-[8px] p-4">
-          <h4 className="text-[12px] font-medium text-text-primary mb-2.5">Geographical Intelligence</h4>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <div className="text-[11px] text-text-tertiary">Location</div>
-              <div className="text-[13px] text-text-primary mt-0.5">{intel.location}</div>
-            </div>
-            <div>
-              <div className="text-[11px] text-text-tertiary">Location Type</div>
-              <div className="text-[13px] text-text-primary mt-0.5">
-                {locationTypeLabels[intel.locationType] || intel.locationType}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+      {/* Intelligence section (Profile + Geographical) lived here. Removed
+          at user direction — the data this surface needs is the contact
+          info above. Keep the rendering above, drop the cards below. */}
     </div>
   );
 }
@@ -538,28 +514,30 @@ function SourceFilter({
   // file's own short name when one is active. The trigger also surfaces the
   // lead count for the active scope so the user sees the size of their
   // dataset at a glance.
-  const triggerLabel = active ? active.name : "All uploads";
+  const triggerLabel = active ? active.name : "All sources";
   const triggerCount = active ? active.leads : totalLeads;
 
   return (
     <div className="relative">
+      {/* Source filter trigger — the "Source:" prefix and lead-count chip
+          were eating space without earning it. The file icon already
+          communicates "this filters by upload" and the dropdown shows the
+          full per-file counts, so the trigger reduces to: icon + truncated
+          name + chevron. Tighter padding too (h-8, px-2.5). */}
       <button
         onClick={() => setMenuOpen(!menuOpen)}
         aria-haspopup="listbox"
         aria-expanded={menuOpen}
-        className={`inline-flex items-center gap-1.5 h-9 px-3 text-[12.5px] font-medium rounded-button border transition-colors ${
+        title={`Source: ${triggerLabel} · ${triggerCount.toLocaleString("en-IN")}`}
+        className={`inline-flex items-center gap-1.5 h-8 px-2.5 text-[12px] font-medium rounded-button border transition-colors ${
           active === null
             ? "border-border bg-white text-text-secondary hover:bg-surface-page"
             : "border-accent/40 bg-accent/5 text-accent hover:bg-accent/10"
         }`}
       >
         <FileSpreadsheet size={13} strokeWidth={1.5} />
-        <span className="text-text-tertiary">Source:</span>
-        <span className="truncate max-w-[160px]">{triggerLabel}</span>
-        <span className="text-text-tertiary tabular-nums text-[10.5px]">
-          {triggerCount.toLocaleString("en-IN")}
-        </span>
-        <ChevronDown size={13} strokeWidth={1.5} className={`transition-transform ${menuOpen ? "rotate-180" : ""}`} />
+        <span className="truncate max-w-[140px]">{triggerLabel}</span>
+        <ChevronDown size={12} strokeWidth={1.5} className={`transition-transform ${menuOpen ? "rotate-180" : ""}`} />
       </button>
       {menuOpen && (
         <>
@@ -586,7 +564,7 @@ function SourceFilter({
                 </span>
                 <div className="flex-1 min-w-0">
                   <div className={`text-[12.5px] truncate ${activeSourceId === null ? "font-semibold text-text-primary" : "font-medium text-text-primary"}`}>
-                    All uploads
+                    All sources
                   </div>
                   <div className="text-[10.5px] text-text-tertiary tabular-nums">
                     {sources.length} {sources.length === 1 ? "file" : "files"} · {totalLeads.toLocaleString("en-IN")} leads
@@ -1656,7 +1634,17 @@ function formatRate(r: PlaybackRate): string {
 }
 
 function LeadDrillDown({ contact, onClose }: { contact: OutreachContact; onClose: () => void }) {
-  const [tab, setTab] = useState<"overview" | "profile" | "activity">("overview");
+  const [tab, setTab] = useState<"overview" | "activity">("overview");
+  // Toast for copy-to-clipboard confirmations. Matches the existing
+  // toast pattern (charcoal pill, framer-motion enter/exit) but anchors
+  // bottom-right so it doesn't fight the close button in the top-right
+  // of the drawer.
+  const [copyToast, setCopyToast] = useState<string | null>(null);
+  const copyToClipboard = (value: string, label: string) => {
+    if (typeof navigator !== "undefined") void navigator.clipboard?.writeText(value);
+    setCopyToast(`${label} copied to clipboard`);
+    setTimeout(() => setCopyToast(null), 2000);
+  };
   // Qualification used to be settable from this drawer ("Mark as
   // Qualified" CTA) but that misrepresented the workflow: qualification
   // isn't a manual decision the user makes on a lead — it's the
@@ -1778,7 +1766,6 @@ function LeadDrillDown({ contact, onClose }: { contact: OutreachContact; onClose
 
   const tabs: Array<{ key: typeof tab; label: string }> = [
     { key: "overview", label: "Overview" },
-    { key: "profile",  label: "Profile" },
     { key: "activity", label: "Activity" },
   ];
 
@@ -1819,11 +1806,34 @@ function LeadDrillDown({ contact, onClose }: { contact: OutreachContact; onClose
             <div className="flex-1 min-w-0 pr-8">
               <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-[20px] font-semibold text-text-primary leading-tight">{contact.name}</h2>
+                {/* Inline copy buttons on the two pieces of contact info
+                    the user reaches for most — surfaced here at the top
+                    of the drawer now that the Profile tab is gone. */}
+                <button
+                  type="button"
+                  onClick={() => copyToClipboard(contact.name, "Name")}
+                  className="p-1 rounded text-text-tertiary hover:text-text-primary hover:bg-surface-secondary transition-colors"
+                  title="Copy name"
+                  aria-label="Copy name"
+                >
+                  <Copy size={12} strokeWidth={1.5} />
+                </button>
                 <span className={`inline-flex items-center text-[11px] font-medium px-2 py-0.5 rounded-badge ${qBadge.cls}`}>
                   {qBadge.label}
                 </span>
               </div>
-              <div className="text-[13px] text-text-secondary mt-0.5 tabular-nums">{contact.phone}</div>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className="text-[13px] text-text-secondary tabular-nums">{contact.phone}</span>
+                <button
+                  type="button"
+                  onClick={() => copyToClipboard(contact.phone, "Phone")}
+                  className="p-1 rounded text-text-tertiary hover:text-text-primary hover:bg-surface-secondary transition-colors"
+                  title="Copy phone"
+                  aria-label="Copy phone"
+                >
+                  <Copy size={12} strokeWidth={1.5} />
+                </button>
+              </div>
               <div className="text-[11px] text-text-tertiary mt-1 flex items-center gap-1">
                 <Clock size={10} strokeWidth={1.5} />
                 Lead created {format(new Date(contact.createdAt), "dd MMM yyyy, HH:mm")}
@@ -2014,10 +2024,6 @@ function LeadDrillDown({ contact, onClose }: { contact: OutreachContact; onClose
             </div>
           )}
 
-          {tab === "profile" && (
-            <ProfileTab contact={contact} />
-          )}
-
           {tab === "activity" && (
             <div className="space-y-2">
               {activityItems.map((item, idx) => {
@@ -2175,6 +2181,25 @@ function LeadDrillDown({ contact, onClose }: { contact: OutreachContact; onClose
           )}
         </div>
       </div>
+
+      {/* Copy-to-clipboard toast. Anchored bottom-right to clear the
+          drawer's close button (top-right). Charcoal pill + framer-motion
+          slide-up matches the existing toast pattern from
+          components/dashboard/ai-recommendations.tsx. */}
+      <AnimatePresence>
+        {copyToast && (
+          <motion.div
+            key="copy-toast"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 12 }}
+            transition={{ duration: 0.2, ease: "easeOut" }}
+            className="fixed bottom-5 right-5 bg-charcoal text-white text-[13px] px-4 py-2.5 rounded-card shadow-lg z-[80]"
+          >
+            {copyToast}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </>
   );
 }
@@ -2278,6 +2303,197 @@ const VERIFIED_OPTS: { id: "yes" | "no"; label: string }[] = [
 // when sources exist) and inside the SourcesModal triggered by the
 // header button. Same component, same layout, same actions either way.
 
+// Start-calling modal — appears when the user clicks Start calling on
+// a queued source. Two paths: dial immediately, or schedule for a
+// later date + time. Mirrors the screenshots the user provided:
+// radio-style option cards, date input + 3-segment time picker for the
+// schedule branch, footer buttons that swap the primary action label
+// between "Start calling" and "Schedule" depending on selection.
+function StartCallingModal({
+  fileName,
+  onClose,
+  onStartNow,
+  onSchedule,
+}: {
+  fileName: string;
+  onClose: () => void;
+  onStartNow: () => void;
+  onSchedule: (iso: string) => void;
+}) {
+  const [mode, setMode] = useState<"now" | "schedule">("now");
+  // Default date = tomorrow (avoid suggesting a slot in the past) +
+  // 09:00 local — matches the screenshot defaults the user shared.
+  const tomorrow = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    return d;
+  }, []);
+  const toDateInput = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const [date, setDate] = useState<string>(toDateInput(tomorrow));
+  const [hour12, setHour12] = useState<string>("09");
+  const [minute, setMinute] = useState<string>("00");
+  const [meridiem, setMeridiem] = useState<"AM" | "PM">("AM");
+
+  const handlePrimary = () => {
+    if (mode === "now") {
+      onStartNow();
+      return;
+    }
+    // Build a local Date from the picker fields, then hand its ISO
+    // form to the parent. Hour conversion: 12 AM = 0, 12 PM = 12,
+    // otherwise add 12 when PM.
+    const [y, mo, da] = date.split("-").map(Number);
+    let h = parseInt(hour12, 10) % 12;
+    if (meridiem === "PM") h += 12;
+    const scheduled = new Date(y, (mo ?? 1) - 1, da ?? 1, h, parseInt(minute, 10) || 0, 0);
+    onSchedule(scheduled.toISOString());
+  };
+
+  // 12-hour clock + 5-minute granularity is the right resolution for
+  // scheduling a dial — minute-by-minute precision would be false
+  // precision (the system can't guarantee start-second accuracy).
+  const HOURS = Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, "0"));
+  const MINUTES = Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, "0"));
+
+  return (
+    <div
+      className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 px-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-[460px] bg-white rounded-card shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-label="Start calling"
+      >
+        <div className="flex items-start justify-between px-5 pt-5 pb-3">
+          <div className="min-w-0">
+            <h2 className="text-[16px] font-semibold text-text-primary leading-tight">Start calling</h2>
+            <p className="text-[12px] text-text-tertiary mt-0.5 truncate" title={fileName}>{fileName}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="p-1.5 rounded-button text-text-secondary hover:bg-surface-secondary transition-colors"
+          >
+            <X size={16} strokeWidth={1.5} />
+          </button>
+        </div>
+
+        <div className="px-5 pb-4 space-y-2.5">
+          <button
+            type="button"
+            onClick={() => setMode("now")}
+            className={`w-full text-left rounded-card border px-4 py-3 transition-colors flex items-center gap-3 ${
+              mode === "now"
+                ? "border-text-primary bg-surface-page"
+                : "border-border-subtle bg-white hover:border-border"
+            }`}
+          >
+            <Play size={14} strokeWidth={1.75} className="text-text-secondary shrink-0" />
+            <div>
+              <div className="text-[13px] font-medium text-text-primary leading-tight">Start now</div>
+              <div className="text-[11.5px] text-text-tertiary mt-0.5">Begin calling leads immediately</div>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setMode("schedule")}
+            className={`w-full text-left rounded-card border px-4 py-3 transition-colors flex items-center gap-3 ${
+              mode === "schedule"
+                ? "border-text-primary bg-surface-page"
+                : "border-border-subtle bg-white hover:border-border"
+            }`}
+          >
+            <Clock size={14} strokeWidth={1.75} className="text-text-secondary shrink-0" />
+            <div>
+              <div className="text-[13px] font-medium text-text-primary leading-tight">Schedule for later</div>
+              <div className="text-[11.5px] text-text-tertiary mt-0.5">Pick a date and time to start</div>
+            </div>
+          </button>
+
+          {mode === "schedule" && (
+            <div className="pt-3 space-y-3">
+              <div>
+                <label className="block text-[11px] font-medium text-text-tertiary uppercase tracking-[0.3px] mb-1.5">
+                  Date
+                </label>
+                <div className="relative">
+                  <Calendar
+                    size={13}
+                    strokeWidth={1.75}
+                    className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-tertiary pointer-events-none"
+                  />
+                  <input
+                    type="date"
+                    value={date}
+                    onChange={(e) => setDate(e.target.value)}
+                    className="w-full h-9 pl-8 pr-3 text-[13px] border border-border-subtle rounded-button bg-white text-text-primary focus:outline-none focus:border-text-primary"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-[11px] font-medium text-text-tertiary uppercase tracking-[0.3px] mb-1.5">
+                  Time <span className="text-text-tertiary normal-case font-normal">(business hours: 9 AM – 9 PM)</span>
+                </label>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={hour12}
+                    onChange={(e) => setHour12(e.target.value)}
+                    className="h-9 px-2 text-[13px] border border-border-subtle rounded-button bg-white text-text-primary focus:outline-none focus:border-text-primary tabular-nums"
+                  >
+                    {HOURS.map((h) => (
+                      <option key={h} value={h}>{h}</option>
+                    ))}
+                  </select>
+                  <span className="text-text-tertiary">:</span>
+                  <select
+                    value={minute}
+                    onChange={(e) => setMinute(e.target.value)}
+                    className="h-9 px-2 text-[13px] border border-border-subtle rounded-button bg-white text-text-primary focus:outline-none focus:border-text-primary tabular-nums"
+                  >
+                    {MINUTES.map((m) => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={meridiem}
+                    onChange={(e) => setMeridiem(e.target.value as "AM" | "PM")}
+                    className="h-9 px-2 text-[13px] border border-border-subtle rounded-button bg-white text-text-primary focus:outline-none focus:border-text-primary"
+                  >
+                    <option value="AM">AM</option>
+                    <option value="PM">PM</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="px-5 py-4 border-t border-border-subtle flex items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="h-9 px-4 text-[13px] font-medium text-text-secondary rounded-button hover:bg-surface-secondary transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handlePrimary}
+            className="h-9 px-4 text-[13px] font-medium text-white bg-accent rounded-button hover:bg-accent-hover transition-colors"
+          >
+            {mode === "now" ? "Start calling" : "Schedule"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SourceCard({
   outreachId,
   source,
@@ -2298,6 +2514,22 @@ function SourceCard({
   const invalid = source.invalidRows ?? 0;
   const hasInvalid = invalid > 0;
   const canCall = valid > 0;
+  // "Invalid number" folds two parser buckets together (no phone +
+  // malformed phone) since both surface to the user as "we couldn't
+  // dial this row's number". Duplicate + missing name each stay their
+  // own bucket — different remediations (dedupe vs fix the source).
+  // All three are surfaced so dup + invalid + missing-name sums to the
+  // headline "X skipped" count.
+  const dupCount = source.invalidBreakdown?.duplicate ?? 0;
+  const wrongPhoneCount =
+    (source.invalidBreakdown?.missingPhone ?? 0) +
+    (source.invalidBreakdown?.invalidFormat ?? 0);
+  const missingNameCount = source.invalidBreakdown?.missingName ?? 0;
+  const hasBreakdown = hasInvalid && (dupCount > 0 || wrongPhoneCount > 0 || missingNameCount > 0);
+
+  // Modal state for the Start-calling action. Mounted only when open so
+  // the cost is zero on the common-case render of the row.
+  const [startModalOpen, setStartModalOpen] = useState(false);
 
   const downloadCsv = () => {
     const safeName = source.name.replace(/\.csv$/i, "").replace(/[^a-z0-9\-_]/gi, "-");
@@ -2309,7 +2541,7 @@ function SourceCard({
       {/* Icon + filename — locked to a fixed width so every row's
           progress bar starts at the SAME x position. Shrink-only
           inside that fixed slot via truncate. */}
-      <div className="flex items-center gap-2.5 min-w-0 shrink-0 w-[280px]">
+      <div className="flex items-center gap-2.5 min-w-0 shrink-0 w-[220px]">
         <div className="w-9 h-9 rounded-[6px] bg-surface-page border border-border flex items-center justify-center shrink-0">
           <FileSpreadsheet size={15} strokeWidth={1.5} className="text-text-secondary" />
         </div>
@@ -2323,33 +2555,102 @@ function SourceCard({
         </div>
       </div>
 
-      {/* Middle column — progress bar fills, counts pinned in a
-          fixed-width right slot so the bar ALWAYS ends at the same x
-          position. Without the fixed slot, "1,189" vs "318" widths
-          would shift the bar end and the rows would look misaligned. */}
-      <div className="flex-1 min-w-0 flex items-center gap-3">
-        <div className="flex-1 h-[4px] rounded-full bg-surface-secondary overflow-hidden">
-          <div
-            className="h-full bg-text-primary transition-[width] duration-300 ease-out"
-            style={{ width: `${pct}%` }}
-          />
-        </div>
-        <div className="text-[11px] tabular-nums shrink-0 w-[220px] text-right">
-          {isProcessing ? (
-            <span className="text-text-tertiary">
-              Processing · <span className="font-medium text-text-primary">{pct}%</span>
-            </span>
-          ) : (
-            <span className="text-text-tertiary">
-              <span className="font-medium text-text-primary">{valid.toLocaleString("en-IN")}</span> valid rows
-              {hasInvalid && (
-                <>
-                  <span> · </span>
-                  <span className="font-medium text-text-primary">{invalid.toLocaleString("en-IN")}</span> invalid rows
-                </>
-              )}
-            </span>
-          )}
+      {/* Middle column — stacked so the row can carry a secondary
+          breakdown line below the primary meta/bar. Processing state:
+          progress bar (top) + "Processing N%" label (right). Queued
+          state: "X valid · Y invalid" (top) + invalid breakdown
+          (bottom, only when there's something to break down). */}
+      <div className="flex-1 min-w-0 flex flex-col gap-1">
+        <div className="flex items-center gap-3">
+          {/* Progress bar persists across processing AND queued states.
+              Climbs 0→100% during processing, then stays at 100% once
+              the row flips to queued — leaving a permanent "this CSV
+              is fully processed" indicator alongside the valid /
+              invalid counts. */}
+          <div className="flex-1 h-[4px] rounded-full bg-surface-secondary overflow-hidden">
+            <div
+              className="h-full transition-[width] duration-300 ease-out"
+              style={{
+                width: `${isProcessing ? pct : 100}%`,
+                // Black-on-the-leading-edge, grey-on-the-trailing-edge
+                // gradient.
+                backgroundImage: "linear-gradient(to right, #111827, #9CA3AF)",
+              }}
+            />
+          </div>
+          <div className="text-[11px] tabular-nums shrink-0 text-right">
+            {isProcessing ? (
+              <span className="text-text-tertiary">
+                Processing · <span className="font-medium text-text-primary">{pct}%</span>
+              </span>
+            ) : (
+              // Compact single-line summary: coloured dots anchor each
+              // count visually so the row stops reading as a paragraph.
+              // Dot colours match the gradient endpoints (#111827 →
+              // #9CA3AF) so the meta line, the bar, and the funnel bars
+              // share one palette. Breakdown lives behind the (i) tooltip
+              // on the invalid count — it's still accessible without
+              // costing a second visual line.
+              <span className="inline-flex items-center gap-2 justify-end text-text-secondary">
+                <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                  <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: "#111827" }} />
+                  <span className="font-medium text-text-primary">{valid.toLocaleString("en-IN")}</span>
+                  <span className="text-text-tertiary">valid</span>
+                </span>
+                {hasInvalid && (
+                  <>
+                    <span className="text-border">·</span>
+                    <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                      <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: "#9CA3AF" }} />
+                      <span className="font-medium text-text-primary">{invalid.toLocaleString("en-IN")}</span>
+                      <span className="text-text-tertiary">skipped</span>
+                      {hasBreakdown && (
+                        // Hover tooltip — mirrors the Spend-card pattern
+                        // (group-hover reveal, charcoal pill) so the
+                        // skipped breakdown shows up immediately instead
+                        // of waiting for the browser's native title delay.
+                        <span className="relative inline-flex group">
+                          <Info
+                            size={11}
+                            strokeWidth={1.75}
+                            className="text-text-tertiary hover:text-text-primary cursor-help"
+                            aria-label="Show skipped breakdown"
+                          />
+                          <span
+                            role="tooltip"
+                            // Positioned ABOVE the icon so the dropdown
+                            // escapes the panel/source-row clipping that
+                            // was hiding the body below the header. Also
+                            // dropped the "Skipped breakdown" title —
+                            // the count line(s) alone read more cleanly
+                            // when the context is already obvious from
+                            // hovering the (i) next to "skipped".
+                            className="absolute right-0 bottom-full mb-1.5 z-30 whitespace-nowrap rounded-[8px] bg-text-primary text-white text-[11.5px] leading-snug font-normal normal-case tracking-normal px-3 py-2 shadow-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none text-left"
+                          >
+                            {dupCount > 0 && (
+                              <span className="block tabular-nums">
+                                <span className="font-medium">{dupCount.toLocaleString("en-IN")}</span> duplicate {dupCount === 1 ? "row" : "rows"}
+                              </span>
+                            )}
+                            {wrongPhoneCount > 0 && (
+                              <span className="block tabular-nums">
+                                <span className="font-medium">{wrongPhoneCount.toLocaleString("en-IN")}</span> invalid {wrongPhoneCount === 1 ? "number" : "numbers"}
+                              </span>
+                            )}
+                            {missingNameCount > 0 && (
+                              <span className="block tabular-nums">
+                                <span className="font-medium">{missingNameCount.toLocaleString("en-IN")}</span> missing {missingNameCount === 1 ? "name" : "names"}
+                              </span>
+                            )}
+                          </span>
+                        </span>
+                      )}
+                    </span>
+                  </>
+                )}
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
@@ -2383,7 +2684,7 @@ function SourceCard({
             {canCall ? (
               <button
                 type="button"
-                onClick={() => setState(outreachId, source.id, "dialing")}
+                onClick={() => setStartModalOpen(true)}
                 className="inline-flex items-center gap-1.5 h-8 px-3 bg-accent text-white text-[12px] font-medium rounded-button hover:bg-accent-hover transition-colors"
               >
                 <Play size={11} strokeWidth={2} />
@@ -2423,6 +2724,27 @@ function SourceCard({
             analytics; paused was removed at user request — manage
             paused rows from the Sources button modal instead. */}
       </div>
+
+      {/* Start calling modal — intercepts the inline Start calling
+          click so the user can choose between "Start now" and
+          "Schedule for later" with a date + time picker. Either path
+          ends in setSourceDialState("dialing") so the row exits the
+          Pending panel; the scheduled timestamp is persisted on the
+          source for future surfaces. */}
+      {startModalOpen && (
+        <StartCallingModal
+          fileName={source.name}
+          onClose={() => setStartModalOpen(false)}
+          onStartNow={() => {
+            setState(outreachId, source.id, "dialing");
+            setStartModalOpen(false);
+          }}
+          onSchedule={(iso) => {
+            setState(outreachId, source.id, "dialing", { scheduledFor: iso });
+            setStartModalOpen(false);
+          }}
+        />
+      )}
     </li>
   );
 }
@@ -2446,8 +2768,10 @@ function SourcesPanel({
   );
   // Hooks must run unconditionally — keep collapse state above the
   // early return so the rules-of-hooks aren't violated when the panel
-  // empties out and re-fills.
-  const [collapsed, setCollapsed] = useState(false);
+  // empties out and re-fills. Default collapsed once we cross two rows,
+  // so multi-upload sessions don't stack a wall of progress lines on
+  // top of the KPI widgets already on this page.
+  const [collapsed, setCollapsed] = useState(pending.length > 1);
   if (pending.length === 0) return null;
   const processingCount = pending.filter((s) => s.dialState === "processing").length;
   const queuedCount = pending.filter((s) => s.dialState === "queued").length;
@@ -2975,7 +3299,7 @@ export default function OutreachDetailPage() {
 
   return (
     <motion.div initial="hidden" animate="show" variants={fadeUp} className="pb-12">
-      {/* Breadcrumb — Lead Generation › Outreaches › {name}. Mirrors the
+      {/* Breadcrumb — Launch › Outreaches › {name}. Mirrors the
           projects/campaigns/agents detail pages so the back-and-forth nav
           feels coherent across the app. Each segment is clickable so the
           user can hop directly to the right level instead of relying on
@@ -2988,7 +3312,7 @@ export default function OutreachDetailPage() {
         >
           <ArrowLeft size={13} />
         </button>
-        <span>Lead Generation</span>
+        <span>Launch</span>
         <span className="text-text-tertiary">›</span>
         <button
           type="button"
@@ -3016,6 +3340,10 @@ export default function OutreachDetailPage() {
               <Bot size={12} strokeWidth={1.5} className="text-text-tertiary" />
               {d.voiceAgent} outbound bot
             </span>
+            {/* First-dial info is no longer in the header for either
+                layout. v1 surfaces it as a thin progress strip above the
+                KPI row (FirstDialStrip below). v2 has the dedicated
+                FirstDialCoverageWidget on Metrics and hides it on Leads. */}
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -3054,11 +3382,11 @@ export default function OutreachDetailPage() {
           />
           <button
             onClick={() => setEditOpen(true)}
-            className="inline-flex items-center gap-1.5 h-9 px-4 text-[13px] font-medium rounded-button border border-border bg-white text-text-secondary hover:bg-surface-page hover:text-text-primary transition-colors duration-150"
+            className="inline-flex items-center justify-center w-9 h-9 rounded-button border border-border bg-white text-text-secondary hover:bg-surface-page hover:text-text-primary transition-colors duration-150"
             title="Edit outreach"
+            aria-label="Edit outreach"
           >
             <Pencil size={14} strokeWidth={1.5} />
-            Edit
           </button>
           <button
             onClick={() => setAddLeadsOpen(true)}
@@ -3129,55 +3457,87 @@ export default function OutreachDetailPage() {
         const avgMinPerCall = scaled.totalCalls > 0 ? scaled.talktimeMins / scaled.totalCalls : 0;
         const avgMins = Math.floor(avgMinPerCall);
         const avgSecs = Math.round((avgMinPerCall - avgMins) * 60);
+        // avgMins/avgSecs/cpql were used by the v2 layout's SimpleKpi
+        // tiles; only suppression here to avoid unused-var lint until
+        // they're either re-introduced or excised at next pass.
+        void avgMins; void avgSecs; void cpql;
         return (
-          <div className="grid grid-cols-4 gap-4 mb-4">
-            <TalktimeKpi
-              totalMinutes={scaled.talktimeMins}
-              totalCalls={scaled.totalCalls}
-              rangeLabel={rangeLabel}
-              delta={talktimeDelta}
-              comparisonLabel={comparisonLabel}
+          <>
+            <div className="grid grid-cols-4 gap-4 mb-4">
+              <TalktimeKpi
+                totalMinutes={scaled.talktimeMins}
+                totalCalls={scaled.totalCalls}
+                rangeLabel={rangeLabel}
+                delta={talktimeDelta}
+                comparisonLabel={comparisonLabel}
+              />
+              <SpendKpi
+                totalSpend={scaled.spend}
+                totalQualified={scaled.qualified}
+                totalMinutes={scaled.talktimeMins}
+                rangeLabel={rangeLabel}
+                delta={spendDelta}
+                comparisonLabel={comparisonLabel}
+              />
+              <PerformanceFunnelKpi
+                leads={scaled.leadsInWindow}
+                dialed={scaled.called}
+                connected={scaled.connected}
+                interacted={scaled.interacted}
+                qualified={scaled.qualified}
+                rangeLabel={rangeLabel}
+              />
+              <DialAttemptsWidget
+                attempts={scaled.dialAttempts}
+                rangeLabel={rangeLabel}
+              />
+            </div>
+            {/* First-dial coverage — compact slim variant of the
+                original LeadCoverageBar, now a single full-width line
+                under the KPI grid. Marked as a brainstorm-later spot. */}
+            <FirstDialLine
+              total={d.totalContacts}
+              called={d.called}
+              remaining={d.totalContacts - d.called}
+              dialsPerDay={Math.max(5, Math.round(d.called / Math.max(1, d.activityDays)))}
             />
-            <SpendKpi
-              totalSpend={scaled.spend}
-              totalQualified={scaled.qualified}
-              totalMinutes={scaled.talktimeMins}
-              rangeLabel={rangeLabel}
-              delta={spendDelta}
-              comparisonLabel={comparisonLabel}
-            />
-            <PerformanceFunnelKpi
-              leads={scaled.leadsInWindow}
-              dialed={scaled.called}
-              connected={scaled.connected}
-              interacted={scaled.interacted}
-              qualified={scaled.qualified}
-              rangeLabel={rangeLabel}
-            />
-            <DialAttemptsWidget
-              attempts={scaled.dialAttempts}
-              rangeLabel={rangeLabel}
-            />
-          </div>
+          </>
         );
       })()}
 
-      {/* 1. Lead coverage — lifetime audience progress. Doesn't scale with
-          the time range because "leads remaining" is a property of the
-          whole outreach, not a window. The pace estimate still uses
-          lifetime called ÷ activityDays so the ETA is meaningful. */}
-      <LeadCoverageBar
-        total={d.totalContacts}
-        called={d.called}
-        remaining={d.totalContacts - d.called}
-        dialsPerDay={Math.max(5, Math.round(d.called / Math.max(1, d.activityDays)))}
-      />
-
-      {/* Contacts Table */}
+      {/* Contacts Table — always rendered now that the v1/v2 layout
+          experiment has been retired. */}
       <div className="bg-white border border-border rounded-card overflow-hidden">
-        {/* Table header */}
-        <div className="px-5 py-4 border-b border-border-subtle flex items-center justify-between">
-          <h3 className="text-section-header text-text-primary">Leads</h3>
+        {/* Table header — tab strip + search/filter/export share one row.
+            The standalone "Leads" h3 was redundant with the outreach page
+            title and forced this section into two rows. Merging them
+            removes a row of chrome without losing any affordance. */}
+        <div className="px-5 py-3 border-b border-border-subtle flex items-center justify-between gap-3">
+          {/* Tab strip — pill style matching /enquiries Leads page. */}
+          <div className="inline-flex items-center gap-0.5 bg-surface-secondary rounded-input p-0.5">
+            {FILTER_TABS.map((tab) => {
+              const count = outcomeCounts[tab.id] ?? 0;
+              const isActive = activeFilter === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => handleFilterChange(tab.id)}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium rounded-[5px] whitespace-nowrap transition-colors duration-150 ${
+                    isActive
+                      ? "bg-white text-text-primary shadow-sm"
+                      : "text-text-secondary hover:text-text-primary"
+                  }`}
+                >
+                  {tab.label}
+                  {count > 0 && (
+                    <span className={`tabular-nums ${isActive ? "text-text-tertiary" : "text-text-tertiary"}`}>
+                      {count}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
           <div className="flex items-center gap-2 relative">
             <div className="relative max-w-[240px]">
               <Search size={14} strokeWidth={1.5} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
@@ -3192,34 +3552,34 @@ export default function OutreachDetailPage() {
             <button
               onClick={() => setFiltersOpen(o => !o)}
               aria-expanded={filtersOpen}
-              className={`inline-flex items-center gap-1.5 h-8 px-3 text-[12.5px] font-medium rounded-input border transition-colors ${
+              aria-label="Filters"
+              title={popoverFilterCount > 0 ? `Filters (${popoverFilterCount} active)` : "Filters"}
+              className={`relative inline-flex items-center justify-center w-8 h-8 rounded-input border transition-colors ${
                 popoverFilterCount > 0
                   ? "border-accent/40 bg-accent/5 text-accent hover:bg-accent/10"
                   : "border-border bg-white text-text-secondary hover:text-text-primary hover:bg-surface-page"
               }`}
             >
               <FilterIcon size={13} strokeWidth={1.5} />
-              Filters
               {popoverFilterCount > 0 && (
-                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-accent text-white">
+                <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] inline-flex items-center justify-center text-[9px] font-semibold px-1 rounded-full bg-accent text-white">
                   {popoverFilterCount}
                 </span>
               )}
             </button>
 
-            {/* Export — tab-aware. Label literally says what's in the file
-                ("Export 47 qualified contacts") so the user doesn't wonder
-                whether the active tab/filter narrows the export or not. */}
+            {/* Export — tab-aware. The full label ("Export 47 qualified
+                contacts") moves into the tooltip so the trigger reads as a
+                clean icon button alongside Filters. */}
             <button
               type="button"
               onClick={handleExportContacts}
               disabled={filtered.length === 0}
               title={exportLabel}
-              className="inline-flex items-center gap-1.5 h-8 px-3 text-[12.5px] font-medium rounded-input border border-border bg-white text-text-secondary hover:text-text-primary hover:bg-surface-page disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              aria-label={exportLabel}
+              className="inline-flex items-center justify-center w-8 h-8 rounded-input border border-border bg-white text-text-secondary hover:text-text-primary hover:bg-surface-page disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               <Download size={13} strokeWidth={1.5} />
-              <span className="hidden sm:inline">{exportLabel}</span>
-              <span className="sm:hidden">Export</span>
             </button>
 
             {filtersOpen && (
@@ -3414,36 +3774,6 @@ export default function OutreachDetailPage() {
                 </div>
               </>
             )}
-          </div>
-        </div>
-
-        {/* Tab strip — pill style matching /enquiries Leads page. Selected
-            tab gets white background + shadow; inactive tabs are flat text
-            on the grey surface-secondary track. */}
-        <div className="px-5 py-3 border-b border-border-subtle">
-          <div className="inline-flex items-center gap-0.5 bg-surface-secondary rounded-input p-0.5">
-            {FILTER_TABS.map((tab) => {
-              const count = outcomeCounts[tab.id] ?? 0;
-              const isActive = activeFilter === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => handleFilterChange(tab.id)}
-                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium rounded-[5px] whitespace-nowrap transition-colors duration-150 ${
-                    isActive
-                      ? "bg-white text-text-primary shadow-sm"
-                      : "text-text-secondary hover:text-text-primary"
-                  }`}
-                >
-                  {tab.label}
-                  {count > 0 && (
-                    <span className={`tabular-nums ${isActive ? "text-text-tertiary" : "text-text-tertiary"}`}>
-                      {count}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
           </div>
         </div>
 
@@ -3728,6 +4058,7 @@ function TalktimeKpi({
   rangeLabel,
   delta = 0,
   comparisonLabel,
+  compact = false,
 }: {
   totalMinutes: number;
   totalCalls: number;
@@ -3738,6 +4069,10 @@ function TalktimeKpi({
   // hover or look at the page-level filter to know what the percentage
   // is compared against.
   comparisonLabel?: string;
+  // v2 Metrics tab passes compact=true. Drops the Calls/Avg sub-stats
+  // (covered by the dedicated Total Calls tile) and bottom-aligns the
+  // headline number so it lines up with sibling tiles.
+  compact?: boolean;
 }) {
   const avgMinPerCall = totalCalls > 0 ? totalMinutes / totalCalls : 0;
   const avgMins = Math.floor(avgMinPerCall);
@@ -3757,27 +4092,31 @@ function TalktimeKpi({
         </span>
         <DetailTrendChip delta={delta} comparisonLabel={comparisonLabel} />
       </div>
-      <div className="flex items-baseline gap-1.5">
-        <span className="text-[20px] font-semibold text-text-primary leading-none tabular-nums">
-          {totalMinutes.toLocaleString()}
-        </span>
-        <span className="text-[11.5px] text-text-secondary leading-none">min</span>
+      <div className={compact ? "mt-auto" : ""}>
+        <div className="flex items-baseline gap-1.5">
+          <span className={`${compact ? "text-[28px]" : "text-[20px]"} font-semibold text-text-primary leading-none tabular-nums`}>
+            {totalMinutes.toLocaleString()}
+          </span>
+          <span className="text-[11.5px] text-text-secondary leading-none">min</span>
+        </div>
+        {comparisonLabel && delta !== 0 && (
+          <div className="text-[10px] text-text-tertiary mt-1 tabular-nums">
+            vs {comparisonLabel}
+          </div>
+        )}
       </div>
-      {comparisonLabel && delta !== 0 && (
-        <div className="text-[10px] text-text-tertiary mt-1 tabular-nums">
-          vs {comparisonLabel}
+      {!compact && (
+        <div className="mt-auto pt-2 space-y-1 text-[11.5px] tabular-nums">
+          <div className="flex items-center justify-between">
+            <span className="text-text-tertiary">Calls</span>
+            <span className="text-text-primary font-medium">{totalCalls.toLocaleString()}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-text-tertiary">Avg duration</span>
+            <span className="text-text-primary font-medium">{avg}</span>
+          </div>
         </div>
       )}
-      <div className="mt-auto pt-2 space-y-1 text-[11.5px] tabular-nums">
-        <div className="flex items-center justify-between">
-          <span className="text-text-tertiary">Calls</span>
-          <span className="text-text-primary font-medium">{totalCalls.toLocaleString()}</span>
-        </div>
-        <div className="flex items-center justify-between">
-          <span className="text-text-tertiary">Avg duration</span>
-          <span className="text-text-primary font-medium">{avg}</span>
-        </div>
-      </div>
     </div>
   );
 }
@@ -3789,6 +4128,7 @@ function SpendKpi({
   rangeLabel,
   delta = 0,
   comparisonLabel,
+  compact = false,
 }: {
   totalSpend: number;
   totalQualified: number;
@@ -3799,6 +4139,9 @@ function SpendKpi({
   // for rationale — every widget that shows a percentage delta now spells
   // out exactly which window the delta is computed against.
   comparisonLabel?: string;
+  // v2 Metrics tab passes compact=true so the sub-stats are dropped
+  // (covered by the Qualified tile) and the headline drops to bottom.
+  compact?: boolean;
 }) {
   const cpql = totalQualified > 0 ? Math.round(totalSpend / totalQualified) : 0;
   // Inverted tint — spend going up is bad (red), down is good (green).
@@ -3832,26 +4175,30 @@ function SpendKpi({
         {/* Spend rising is bad — invert so an up-arrow shows in red. */}
         <DetailTrendChip delta={delta} inverted comparisonLabel={comparisonLabel} />
       </div>
-      <div className="flex items-baseline gap-1.5">
-        <span className="text-[20px] font-semibold text-text-primary leading-none tabular-nums">
-          {formatINRDetail(totalSpend)}
-        </span>
+      <div className={compact ? "mt-auto" : ""}>
+        <div className="flex items-baseline gap-1.5">
+          <span className={`${compact ? "text-[28px]" : "text-[20px]"} font-semibold text-text-primary leading-none tabular-nums`}>
+            {formatINRDetail(totalSpend)}
+          </span>
+        </div>
+        {comparisonLabel && delta !== 0 && (
+          <div className="text-[10px] text-text-tertiary mt-1 tabular-nums">
+            vs {comparisonLabel}
+          </div>
+        )}
       </div>
-      {comparisonLabel && delta !== 0 && (
-        <div className="text-[10px] text-text-tertiary mt-1 tabular-nums">
-          vs {comparisonLabel}
+      {!compact && (
+        <div className="mt-auto pt-2 space-y-1 text-[11.5px] tabular-nums">
+          <div className="flex items-center justify-between">
+            <span className="text-text-tertiary">Qualified</span>
+            <span className="text-text-primary font-medium">{totalQualified.toLocaleString()}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-text-tertiary">CPQL</span>
+            <span className="text-text-primary font-medium">{totalQualified > 0 ? formatINRDetail(cpql) : "—"}</span>
+          </div>
         </div>
       )}
-      <div className="mt-auto pt-2 space-y-1 text-[11.5px] tabular-nums">
-        <div className="flex items-center justify-between">
-          <span className="text-text-tertiary">Qualified</span>
-          <span className="text-text-primary font-medium">{totalQualified.toLocaleString()}</span>
-        </div>
-        <div className="flex items-center justify-between">
-          <span className="text-text-tertiary">CPQL</span>
-          <span className="text-text-primary font-medium">{totalQualified > 0 ? formatINRDetail(cpql) : "—"}</span>
-        </div>
-      </div>
     </div>
   );
 }
@@ -3869,7 +4216,10 @@ function ChartRow({ label, value, sub, widthPct }: {
           className="h-full rounded-full"
           style={{
             width: `${Math.max(widthPct, 1.5).toFixed(2)}%`,
-            backgroundColor: "rgba(15, 23, 42, 0.78)",
+            // Solid near-black — shared with the funnel + dial-attempt
+            // widget on the outreach listing so both pages read the
+            // same. Gradient is reserved for the upload progress bar.
+            backgroundColor: "#111827",
           }}
         />
       </div>
@@ -3886,28 +4236,26 @@ function ChartRow({ label, value, sub, widthPct }: {
 }
 
 function PerformanceFunnelKpi({
-  leads, dialed, connected, interacted, qualified, rangeLabel,
+  dialed, connected, interacted, qualified, rangeLabel,
 }: {
   leads: number; dialed: number; connected: number; interacted: number; qualified: number;
   rangeLabel: string;
 }) {
   const pct = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 100) : 0);
+  // Funnel starts at Dialed — the upstream "Leads" count duplicates the
+  // Source filter pill in the page header, so we drop the redundant row.
   const stages = [
-    { key: "leads",      label: "Leads",      value: leads,      rate: null as number | null },
-    { key: "dialed",     label: "Dialed",     value: dialed,     rate: pct(dialed, leads) },
+    { key: "dialed",     label: "Dialed",     value: dialed,     rate: null as number | null },
     { key: "connected",  label: "Connected",  value: connected,  rate: pct(connected, dialed) },
     { key: "interacted", label: "Interacted", value: interacted, rate: pct(interacted, connected) },
-    { key: "qualified",  label: "Qualified",  value: qualified,  rate: pct(qualified, leads) },
+    { key: "qualified",  label: "Qualified",  value: qualified,  rate: pct(qualified, interacted) },
   ];
-  const topValue = Math.max(leads, 1);
+  const topValue = Math.max(dialed, 1);
   return (
     <div className="bg-white border border-border rounded-card px-4 py-3.5 min-h-[140px] flex flex-col">
-      <div className="flex items-center justify-between mb-2">
+      <div className="mb-2">
         <span className="text-[11px] font-medium text-text-tertiary uppercase tracking-[0.3px]">
           Performance funnel
-        </span>
-        <span className="text-[10.5px] text-text-tertiary tabular-nums">
-          {pct(qualified, leads)}% overall
         </span>
       </div>
       <div className="flex-1 flex flex-col justify-center space-y-1">
@@ -3925,7 +4273,78 @@ function PerformanceFunnelKpi({
   );
 }
 
-// ── 1. Lead coverage — single compact strip. Scales to any volume. ─────────
+// ── 1. First-dial coverage — compact pill with a tiny progress donut.
+//      Modelled on Linear's project-progress chip and Vercel's build-
+//      status badge: a self-contained capsule that puts a subtle visual
+//      cue (the donut) next to the numbers, instead of either a heavy
+//      page-width bar or a naked line of text. Carries the same data the
+//      old LeadCoverageBar did (called of total + remaining + est
+//      completion), explicitly framed as first-dial so it doesn't get
+//      confused with retry attempts. ─────────────────────────────────────
+
+function FirstDialProgressLine({
+  total,
+  called,
+  remaining,
+  dialsPerDay,
+}: {
+  total: number;
+  called: number;
+  remaining: number;
+  dialsPerDay: number;
+}) {
+  const pctCalled = total > 0 ? Math.min(100, Math.round((called / total) * 100)) : 0;
+  const etaDays = remaining > 0 && dialsPerDay > 0
+    ? Math.max(1, Math.ceil(remaining / dialsPerDay))
+    : null;
+  const etaLabel = etaDays !== null
+    ? new Date(Date.now() + etaDays * 24 * 60 * 60 * 1000)
+        .toLocaleDateString("en-IN", { day: "numeric", month: "short" })
+    : null;
+  // Donut geometry — r=6 → circumference = 2π·6 ≈ 37.7. Stroke-dasharray
+  // fills the arc proportional to pctCalled.
+  const C = 2 * Math.PI * 6;
+  const filled = (pctCalled / 100) * C;
+  return (
+    <div className="inline-flex items-center gap-2.5 text-[11.5px] text-text-tertiary pl-1.5 pr-3 py-1 bg-white border border-border-subtle rounded-full">
+      <svg viewBox="0 0 16 16" className="w-3.5 h-3.5 shrink-0" aria-hidden>
+          <circle cx="8" cy="8" r="6" fill="none" stroke="rgba(15, 23, 42, 0.08)" strokeWidth="2" />
+          <circle
+            cx="8"
+            cy="8"
+            r="6"
+            fill="none"
+            stroke="rgba(15, 23, 42, 0.55)"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeDasharray={`${filled.toFixed(2)} ${C.toFixed(2)}`}
+            transform="rotate(-90 8 8)"
+          />
+        </svg>
+        <span>
+          <span className="text-text-primary font-medium tabular-nums">{pctCalled}%</span>
+          {" first-dialled"}
+          <span className="text-text-tertiary"> · </span>
+          <span className="tabular-nums">{called.toLocaleString("en-IN")}</span>
+          {" of "}
+          <span className="tabular-nums">{total.toLocaleString("en-IN")}</span>
+        </span>
+        <span aria-hidden className="text-border">|</span>
+        <span>
+          <span className="tabular-nums">{Math.max(0, remaining).toLocaleString("en-IN")}</span>
+          {" awaiting"}
+        </span>
+      {etaLabel && (
+        <>
+          <span aria-hidden className="text-border">|</span>
+          <span>
+            Est. <span className="text-text-secondary tabular-nums">{etaLabel}</span>
+          </span>
+        </>
+      )}
+    </div>
+  );
+}
 
 function LeadCoverageBar({
   total,
@@ -3982,8 +4401,8 @@ function LeadCoverageBar({
         </div>
         <div className="relative w-full h-2 rounded-full overflow-hidden bg-surface-page">
           <div
-            className="absolute inset-y-0 left-0 bg-text-primary"
-            style={{ width: `${calledPct.toFixed(2)}%` }}
+            className="absolute inset-y-0 left-0"
+            style={{ width: `${calledPct.toFixed(2)}%`, backgroundColor: "rgba(15, 23, 42, 0.32)" }}
           />
         </div>
       </div>
@@ -4013,6 +4432,397 @@ function LeadCoverageBar({
 // bar in the middle, value + percent on the right. Single muted accent
 // colour replaces the indigo→pink rainbow gradient.
 
+// ── v2 Metrics widgets ─────────────────────────────────────────────────
+// Render only when outreachLayout==="v2" and detailTab==="metrics". v1
+// keeps the original 4-up KPI grid via the components above.
+
+// First-dial coverage as a compact single-row line under the KPI grid.
+// Slim variant of the original LeadCoverageBar — drops the side stats
+// (Total leads, Est completion as its own cell) so the whole thing
+// reads as one line: inline labels on either end + black progress bar
+// in the middle. Marked as a brainstorm-later spot; staying close to
+// the original treatment intentionally.
+function FirstDialLine({
+  total,
+  called,
+  remaining,
+  dialsPerDay,
+}: {
+  total: number;
+  called: number;
+  remaining: number;
+  dialsPerDay: number;
+}) {
+  const safeRemaining = Math.max(0, remaining);
+  const calledPct = total > 0 ? (called / total) * 100 : 0;
+  const etaDays = safeRemaining > 0 && dialsPerDay > 0
+    ? Math.max(1, Math.ceil(safeRemaining / dialsPerDay))
+    : null;
+  const etaLabel = etaDays !== null
+    ? new Date(Date.now() + etaDays * 24 * 60 * 60 * 1000)
+        .toLocaleDateString("en-IN", { day: "numeric", month: "short" })
+    : null;
+  return (
+    <div className="bg-white border border-border rounded-card px-4 py-3 mb-4 flex items-center gap-4">
+      <span className="text-[11.5px] text-text-secondary whitespace-nowrap inline-flex items-center gap-1.5">
+        <span className="w-1.5 h-1.5 rounded-full bg-text-primary" />
+        Dialled
+        <span className="font-medium text-text-primary tabular-nums">{called.toLocaleString("en-IN")}</span>
+        <span className="text-text-tertiary tabular-nums">({Math.round(calledPct)}%)</span>
+      </span>
+      <div className="relative flex-1 h-2 rounded-full overflow-hidden bg-surface-page">
+        <div
+          className="absolute inset-y-0 left-0"
+          style={{
+            width: `${calledPct.toFixed(2)}%`,
+            // Same gradient as the funnel + dial-attempt + processing
+            // bars so every horizontal indicator on this page reads as
+            // one family.
+            backgroundImage: "linear-gradient(to right, #111827, #9CA3AF)",
+          }}
+        />
+      </div>
+      <span className="text-[11.5px] text-text-secondary whitespace-nowrap inline-flex items-center gap-1.5">
+        <span className="w-1.5 h-1.5 rounded-full bg-border" />
+        Awaiting
+        <span className="font-medium text-text-primary tabular-nums">{safeRemaining.toLocaleString("en-IN")}</span>
+      </span>
+      {etaLabel && (
+        <>
+          <span className="text-border">|</span>
+          <span className="text-[11.5px] text-text-tertiary whitespace-nowrap">
+            Est. <span className="text-text-secondary tabular-nums">{etaLabel}</span>
+          </span>
+        </>
+      )}
+    </div>
+  );
+}
+
+function SimpleKpi({
+  label,
+  value,
+  sub,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+}) {
+  return (
+    <div className="bg-white border border-border rounded-card px-4 py-3.5 min-h-[140px] flex flex-col justify-between">
+      <span className="text-[11px] font-medium text-text-tertiary uppercase tracking-[0.3px]">
+        {label}
+      </span>
+      <div>
+        <div className="text-[28px] font-semibold text-text-primary tabular-nums leading-tight">
+          {value}
+        </div>
+        {sub && (
+          <div className="text-[11px] text-text-tertiary mt-1">{sub}</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// 4-stat declarative breakdown of first-dial coverage. Labels are
+// explicit ("Total leads to call", "Already called", …) so the
+// relationships read at a glance. No donut, no bar.
+// First-dial coverage as a clean progress-bar widget. One hero number
+// + headline at the top, a horizontal split-bar (mint for dialled / sky
+// for remaining) underneath, and a single row of context chips below
+// (segment counts + ETA). One row, one bar, one story — proper progress-
+// bar metaphor without the heavy black fill it had earlier.
+function FirstDialCoverageWidget({
+  total,
+  called,
+  remaining,
+  dialsPerDay,
+}: {
+  total: number;
+  called: number;
+  remaining: number;
+  dialsPerDay: number;
+}) {
+  const pctCalled = total > 0 ? Math.min(100, Math.round((called / total) * 100)) : 0;
+  const pctRemaining = 100 - pctCalled;
+  const etaDays = remaining > 0 && dialsPerDay > 0
+    ? Math.max(1, Math.ceil(remaining / dialsPerDay))
+    : null;
+  const etaLabel = etaDays !== null
+    ? new Date(Date.now() + etaDays * 24 * 60 * 60 * 1000)
+        .toLocaleDateString("en-IN", { day: "numeric", month: "short" })
+    : null;
+
+  return (
+    <div className="bg-white border border-border rounded-card px-5 py-4">
+      {/* Eyebrow + headline. The eyebrow names the metric; the big line
+          below is the answer ("342 of 487 leads dialled") with the
+          percentage anchored to the right of the row. */}
+      <div className="flex items-center justify-between mb-1">
+        <span className="text-[11px] font-medium text-text-tertiary uppercase tracking-[0.3px]">
+          First-dial coverage
+        </span>
+        <span className="text-[10.5px] text-text-tertiary">first-time dial only</span>
+      </div>
+      <div className="flex items-baseline justify-between mb-3">
+        <div className="text-[15px] text-text-primary">
+          <span className="font-semibold tabular-nums">{called.toLocaleString("en-IN")}</span>
+          {" of "}
+          <span className="font-semibold tabular-nums">{total.toLocaleString("en-IN")}</span>
+          <span className="text-text-secondary"> leads dialled</span>
+        </div>
+        <div className="text-[22px] font-semibold text-text-primary tabular-nums leading-none">
+          {pctCalled}%
+        </div>
+      </div>
+
+      {/* Single split progress bar — mint for the dialled portion, sky
+          for what's left. Thin (10px) so it reads as a clean indicator
+          rather than a hero element. Title attribute gives the exact
+          breakdown for power-users on hover. */}
+      <div
+        className="flex w-full h-2.5 rounded-full overflow-hidden bg-surface-page"
+        title={`${called.toLocaleString("en-IN")} dialled (${pctCalled}%) · ${Math.max(0, remaining).toLocaleString("en-IN")} yet to call (${pctRemaining}%)`}
+        role="progressbar"
+        aria-valuenow={pctCalled}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label="First-dial coverage progress"
+      >
+        <div style={{ width: `${pctCalled}%`, backgroundColor: "#82C9A9" }} />
+        <div style={{ width: `${pctRemaining}%`, backgroundColor: "#C7DCF0" }} />
+      </div>
+
+      {/* Context strip — segment counts left of the divider, ETA right
+          of it. Dot markers colour-match the bar segments so the eye
+          can map each chip back to its piece of the bar. */}
+      <div className="flex items-center justify-between mt-3 text-[11.5px]">
+        <div className="flex items-center gap-4">
+          <span className="inline-flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: "#82C9A9" }} />
+            <span className="text-text-secondary">Dialled</span>
+            <span className="text-text-primary font-medium tabular-nums">
+              {called.toLocaleString("en-IN")}
+            </span>
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: "#C7DCF0" }} />
+            <span className="text-text-secondary">Yet to call</span>
+            <span className="text-text-primary font-medium tabular-nums">
+              {Math.max(0, remaining).toLocaleString("en-IN")}
+            </span>
+          </span>
+        </div>
+        {etaLabel && (
+          <span className="text-text-tertiary tabular-nums">
+            Est. completion <span className="text-text-secondary">{etaLabel}</span>
+            {etaDays !== null && <> · ~{etaDays} day{etaDays === 1 ? "" : "s"} at {dialsPerDay}/day</>}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Trapezoid funnel — each stage centred, width proportional to value,
+// stepped pastel mint so the cascade reads visually as well as
+// numerically. Per-step drop-off % on the right.
+function TrapezoidFunnel({
+  dialed, connected, interacted, qualified,
+}: {
+  dialed: number; connected: number; interacted: number; qualified: number;
+}) {
+  const pct = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 100) : 0);
+  const stages = [
+    { label: "Dialed",     value: dialed,     rate: null as number | null },
+    { label: "Connected",  value: connected,  rate: pct(connected, dialed) },
+    { label: "Interacted", value: interacted, rate: pct(interacted, connected) },
+    { label: "Qualified",  value: qualified,  rate: pct(qualified, interacted) },
+  ];
+  const top = Math.max(dialed, 1);
+  const PASTEL = ["#CDE8DD", "#B4DFCE", "#9CD5BD", "#82C9A9"];
+  return (
+    <div className="bg-white border border-border rounded-card px-5 py-4 h-full flex flex-col">
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-[11px] font-medium text-text-tertiary uppercase tracking-[0.3px]">
+          Performance funnel
+        </span>
+        <span className="text-[10.5px] text-text-tertiary tabular-nums">
+          {pct(qualified, dialed)}% Dialed → Qualified
+        </span>
+      </div>
+      <div className="flex-1 flex flex-col gap-1.5 justify-center">
+        {stages.map((s, i) => {
+          const widthPct = Math.max((s.value / top) * 100, 8);
+          return (
+            <div key={s.label} className="grid grid-cols-[80px_minmax(0,1fr)_88px] items-center gap-3">
+              <span className="text-[11px] text-text-secondary truncate">{s.label}</span>
+              <div className="flex justify-center">
+                <div
+                  className="h-7 rounded-[3px] flex items-center justify-center text-[11px] font-medium tabular-nums text-text-primary"
+                  style={{ width: `${widthPct.toFixed(2)}%`, backgroundColor: PASTEL[i] }}
+                >
+                  {s.value.toLocaleString("en-IN")}
+                </div>
+              </div>
+              <span className="inline-flex items-baseline gap-1 justify-end tabular-nums text-[11px] text-text-tertiary">
+                {s.rate !== null ? `${s.rate}% step` : "—"}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// Donut pie for outcome distribution. Slice keys match FilterTab IDs so
+// the slices stay in sync with the Leads-tab pills. Hover lights up a
+// slice (bumps strokeWidth + dims siblings) and the donut's centre
+// switches to the focused value+label. Legend rows mirror the hover.
+function StatusPie({ counts }: { counts: Record<string, number> }) {
+  const PALETTE: Array<{ key: string; label: string; color: string }> = [
+    { key: "qualified",    label: "Qualified",    color: "#A7E1C9" },
+    { key: "disqualified", label: "Disqualified", color: "#F6BFBF" },
+    { key: "follow_up",    label: "Follow-up",    color: "#FCD9A8" },
+    { key: "rnr",          label: "RnR",          color: "#D5C5E2" },
+    { key: "yet_to_dial",  label: "Yet to dial",  color: "#C7DCF0" },
+  ];
+  const slices = PALETTE
+    .map((p) => ({ ...p, value: counts[p.key] ?? 0 }))
+    .filter((s) => s.value > 0);
+  const total = slices.reduce((s, x) => s + x.value, 0);
+  const R = 34;
+  const C = 2 * Math.PI * R;
+  const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+  const focused = hoverIdx !== null ? slices[hoverIdx] : null;
+  let offset = 0;
+  return (
+    <div className="bg-white border border-border rounded-card px-5 py-4 h-full flex flex-col">
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-[11px] font-medium text-text-tertiary uppercase tracking-[0.3px]">
+          Leads by status
+        </span>
+        <span className="text-[10.5px] text-text-tertiary tabular-nums">
+          {total.toLocaleString("en-IN")} leads
+        </span>
+      </div>
+      <div className="flex-1 flex items-center gap-5">
+        <div className="relative w-[120px] h-[120px] shrink-0">
+          <svg viewBox="0 0 100 100" className="w-full h-full">
+            <circle cx="50" cy="50" r={R} fill="none" stroke="rgba(15, 23, 42, 0.06)" strokeWidth="14" />
+            {total > 0 && slices.map((s, i) => {
+              const segLen = (s.value / total) * C;
+              const dasharray = `${segLen.toFixed(2)} ${(C - segLen).toFixed(2)}`;
+              const dashoffset = (-offset).toFixed(2);
+              offset += segLen;
+              const isActive = hoverIdx === i;
+              const isDimmed = hoverIdx !== null && hoverIdx !== i;
+              return (
+                <circle
+                  key={s.key}
+                  cx="50" cy="50" r={R}
+                  fill="none"
+                  stroke={s.color}
+                  strokeWidth={isActive ? 17 : 14}
+                  strokeOpacity={isDimmed ? 0.25 : 1}
+                  strokeDasharray={dasharray}
+                  strokeDashoffset={dashoffset}
+                  transform="rotate(-90 50 50)"
+                  onMouseEnter={() => setHoverIdx(i)}
+                  onMouseLeave={() => setHoverIdx(null)}
+                  className="cursor-default transition-[stroke-width,stroke-opacity] duration-150"
+                  style={{ pointerEvents: "stroke" }}
+                />
+              );
+            })}
+          </svg>
+          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center px-2">
+            <div className="text-[18px] font-semibold text-text-primary tabular-nums leading-none">
+              {focused ? focused.value.toLocaleString("en-IN") : total.toLocaleString("en-IN")}
+            </div>
+            <div className="text-[9.5px] text-text-tertiary uppercase tracking-[0.4px] mt-1 truncate max-w-[90px]">
+              {focused ? focused.label : "Total"}
+            </div>
+          </div>
+        </div>
+        <ul className="flex-1 min-w-0 space-y-0.5">
+          {slices.length === 0 ? (
+            <li className="text-[11.5px] text-text-tertiary">No qualified outcomes yet.</li>
+          ) : slices.map((s, i) => {
+            const pctOf = total > 0 ? Math.round((s.value / total) * 100) : 0;
+            const isActive = hoverIdx === i;
+            const isDimmed = hoverIdx !== null && hoverIdx !== i;
+            return (
+              <li
+                key={s.key}
+                onMouseEnter={() => setHoverIdx(i)}
+                onMouseLeave={() => setHoverIdx(null)}
+                className={`flex items-center gap-2 text-[11.5px] py-1 px-2 -mx-2 rounded-[5px] cursor-default transition-colors duration-150 ${
+                  isActive ? "bg-surface-secondary" : ""
+                } ${isDimmed ? "opacity-40" : "opacity-100"}`}
+              >
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
+                <span className={`truncate flex-1 ${isActive ? "text-text-primary font-medium" : "text-text-secondary"}`}>
+                  {s.label}
+                </span>
+                <span className="text-text-primary tabular-nums font-medium">{s.value.toLocaleString("en-IN")}</span>
+                <span className="text-text-tertiary tabular-nums w-[34px] text-right">{pctOf}%</span>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+// Wide dial-attempts bar chart. Bar heights are absolute pixels because
+// items-end collapses %-based parent heights to 0. Min 18px so a single-
+// digit bucket still shows a bar next to a 480-call one.
+function DialAttemptsBarWide({ attempts }: { attempts: number[] }) {
+  const dialedTotal = attempts.reduce((s, v) => s + v, 0);
+  const max = Math.max(...attempts, 1);
+  return (
+    <div className="bg-white border border-border rounded-card px-5 py-4">
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-[11px] font-medium text-text-tertiary uppercase tracking-[0.3px]">
+          Leads by dial attempt
+        </span>
+        <span className="text-[10.5px] text-text-tertiary tabular-nums">
+          {dialedTotal.toLocaleString("en-IN")} dialed across {attempts.length} attempt{attempts.length === 1 ? "" : "s"}
+        </span>
+      </div>
+      <div className="flex items-end gap-2 h-[160px]">
+        {attempts.map((value, i) => {
+          const heightPx = Math.round(Math.max((value / max) * 130, 18));
+          const pct = dialedTotal > 0 ? Math.round((value / dialedTotal) * 100) : 0;
+          return (
+            <div key={i} className="flex-1 flex flex-col items-center gap-1.5 min-w-0">
+              <span className="text-[10px] text-text-tertiary tabular-nums">
+                {value.toLocaleString("en-IN")}
+              </span>
+              <div
+                className="w-full rounded-t-[3px]"
+                style={{ height: `${heightPx}px`, backgroundColor: "#C7DCF0" }}
+                title={`${i + 1}× — ${value.toLocaleString("en-IN")} (${pct}%)`}
+              />
+            </div>
+          );
+        })}
+      </div>
+      <div className="flex gap-2 mt-2">
+        {attempts.map((_, i) => (
+          <div key={i} className="flex-1 text-center text-[10px] text-text-tertiary tabular-nums">
+            {i + 1}×
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function DialAttemptsWidget({
   attempts,
   rangeLabel,
@@ -4020,14 +4830,57 @@ function DialAttemptsWidget({
   attempts: number[];
   rangeLabel: string;
 }) {
-  const rows = attempts.map((value, i) => ({
-    key: `a-${i}`,
-    label: `${i + 1}×`,
-    value,
-  }));
   const dialedTotal = attempts.reduce((s, v) => s + v, 0);
-  const max = Math.max(...rows.map(b => b.value), 1);
+  const max = Math.max(...attempts, 1);
   const pctOf = (v: number) => (dialedTotal > 0 ? Math.round((v / dialedTotal) * 100) : 0);
+
+  // Layout is bucket-count aware. ≤5 attempts → keep the labelled row
+  // chart (each row carries label · bar · count · %). 6+ attempts (heavy
+  // retry policies — Adani-style 10+ × dials) → switch to vertical
+  // columns so the widget stays the same height as its three siblings in
+  // the KPI grid instead of stretching the row to twice their height.
+  const useColumns = attempts.length > 5;
+
+  if (useColumns) {
+    return (
+      <div className="bg-white border border-border rounded-card px-4 py-3.5 min-h-[140px] flex flex-col">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-[11px] font-medium text-text-tertiary uppercase tracking-[0.3px]">
+            Leads by dial attempt
+          </span>
+          <span className="text-[10.5px] text-text-tertiary tabular-nums">
+            {dialedTotal.toLocaleString()} dialed
+          </span>
+        </div>
+        <div className="flex-1 flex items-end gap-1 min-h-[68px]">
+          {attempts.map((value, i) => {
+            const heightPct = (value / max) * 100;
+            const pct = pctOf(value);
+            return (
+              <div
+                key={`a-${i}`}
+                className="flex-1 flex flex-col items-center gap-1 min-w-0"
+                title={`${i + 1}× — ${value.toLocaleString()} (${pct}%)`}
+              >
+                <div className="w-full flex flex-col justify-end h-[60px]">
+                  <div
+                    className="w-full rounded-t-[2px]"
+                    style={{
+                      height: `${Math.max(heightPct, 4)}%`,
+                      backgroundColor: "rgba(15, 23, 42, 0.32)",
+                    }}
+                  />
+                </div>
+                <span className="text-[9px] text-text-tertiary tabular-nums whitespace-nowrap leading-none">
+                  {i + 1}×
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-white border border-border rounded-card px-4 py-3.5 min-h-[140px] flex flex-col">
@@ -4040,13 +4893,13 @@ function DialAttemptsWidget({
         </span>
       </div>
       <div className="flex-1 flex flex-col justify-center space-y-1">
-        {rows.map((r) => (
+        {attempts.map((value, i) => (
           <ChartRow
-            key={r.key}
-            label={r.label}
-            value={r.value}
-            sub={`${pctOf(r.value)}%`}
-            widthPct={(r.value / max) * 100}
+            key={`a-${i}`}
+            label={`${i + 1}×`}
+            value={value}
+            sub={`${pctOf(value)}%`}
+            widthPct={(value / max) * 100}
           />
         ))}
       </div>

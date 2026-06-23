@@ -305,7 +305,9 @@ function Section({
   icon: Icon,
   children,
 }: {
-  eyebrow: string;
+  // Eyebrow optional — only render when explicitly passed. Some sections
+  // are clear enough from the title + subtitle alone.
+  eyebrow?: string;
   title: string;
   subtitle?: string;
   icon?: React.ElementType;
@@ -313,12 +315,14 @@ function Section({
 }) {
   return (
     <section className="px-7 py-7 border-b border-border-subtle last:border-b-0">
-      <div className="flex items-center gap-1.5 mb-1.5">
-        {Icon && <Icon size={12} strokeWidth={1.75} className="text-accent" />}
-        <span className="text-[11px] font-medium text-text-tertiary uppercase tracking-[0.6px]">
-          {eyebrow}
-        </span>
-      </div>
+      {eyebrow && (
+        <div className="flex items-center gap-1.5 mb-1.5">
+          {Icon && <Icon size={12} strokeWidth={1.75} className="text-accent" />}
+          <span className="text-[11px] font-medium text-text-tertiary uppercase tracking-[0.6px]">
+            {eyebrow}
+          </span>
+        </div>
+      )}
       <h2 className="text-[16px] font-semibold text-text-primary leading-tight">{title}</h2>
       {subtitle && (
         <p className="text-[12.5px] text-text-secondary mt-1 leading-relaxed max-w-[560px]">
@@ -838,7 +842,7 @@ function CreateOutreachInner() {
           className="p-1 rounded-button text-text-secondary hover:bg-surface-secondary hover:text-text-primary transition-colors duration-150">
           <ArrowLeft size={16} strokeWidth={1.5} />
         </button>
-        <span className="text-meta text-text-secondary">Lead Generation › Outreach › Create</span>
+        <span className="text-meta text-text-secondary">Launch › Outreach › Create</span>
       </div>
 
       {/* Step indicator removed — the speedrun flow is a single screen,
@@ -883,10 +887,8 @@ function CreateOutreachInner() {
                       param locks the project chip — visible but not
                       editable from this flow. */}
                   <Section
-                    eyebrow="The basics"
                     title="What are we calling about?"
                     subtitle="Give your outreach a name, then pick the voice that'll be on the line."
-                    icon={Sparkles}
                   >
                     <div className="grid grid-cols-1 gap-y-4">
                       <Field label="Outreach name" required>
