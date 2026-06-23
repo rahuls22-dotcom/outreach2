@@ -1207,7 +1207,7 @@ function MemoryFileView({
 /** Thank-you screen · the canvas state after deploy finishes. Big
  *  celebratory Spot orb on black, gold-gradient headline, a short
  *  list of what just went live, and a CTA to head back to home. */
-function ThankYouScreen({ productName }: { productName: string }) {
+export function ThankYouScreen({ productName }: { productName: string }) {
   const router = useRouter();
   const { openMemory } = useMemoryPanel();
   const exitWorkflow = useSpotStore((s) => s.exitWorkflow);

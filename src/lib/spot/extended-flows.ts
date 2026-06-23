@@ -1852,3 +1852,12 @@ export const EXTENDED_TOOL_CALLS: Record<
     delayMs: 3400,
   },
 };
+
+// Local stubs so spot/store.ts compiles. Not committed.
+export function watchHandoffMessage(): string {
+  return "";
+}
+
+export function firstNudgeMessage(): string {
+  return "";
+}

@@ -245,6 +245,11 @@ ${sections}
  * Shared by new products (workflow-pane's launch-plan view) and existing
  * products (the plan.md file tab) so both read identically.
  */
+// Local stub so spot/store.ts compiles. Not committed.
+export function buildLaunchStrategyMd(productName: string): string {
+  return buildLaunchPlanMd(productName);
+}
+
 export function buildLaunchPlanMd(productName: string): string {
   return `# ${productName} · Plan
 
